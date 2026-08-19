@@ -477,6 +477,8 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
                 }
             },
             AuthMode::Chatgpt | AuthMode::ChatgptAuthTokens => {
+                // Keep this line stable for scripts that use `better-codex login status`
+                // as a lightweight authentication check.
                 eprintln!("Logged in using ChatGPT");
                 std::process::exit(0);
             }

@@ -16,7 +16,7 @@ use super::check_with_paths;
 fn disk_capacity_is_reported_without_loaded_configuration() {
     let check = check(/*config*/ None, Path::new("."));
 
-    for label in ["CODEX_HOME available: ", "worktree available: "] {
+    for label in ["BETTER_CODEX_HOME available: ", "worktree available: "] {
         assert!(
             check
                 .details
@@ -61,7 +61,7 @@ fn disk_capacity_thresholds_produce_complete_diagnostics() {
             "sufficient free disk space (6.0 GiB)",
         ),
     ] {
-        let issues = ["CODEX_HOME", "worktree"]
+        let issues = ["BETTER_CODEX_HOME", "worktree"]
             .into_iter()
             .filter(|_| status != "ok")
             .map(|label| {
@@ -88,7 +88,7 @@ fn disk_capacity_thresholds_produce_complete_diagnostics() {
                 "details": [
                     "warning threshold: 5.0 GiB",
                     "failure threshold: 1.0 GiB",
-                    format!("CODEX_HOME available: {measured}"),
+                    format!("BETTER_CODEX_HOME available: {measured}"),
                     format!("worktree available: {measured}"),
                 ],
                 "issues": issues,
@@ -106,7 +106,7 @@ fn disk_measurement_errors_produce_complete_warning_diagnostics() {
         Err(io::ErrorKind::PermissionDenied.into())
     });
 
-    let issues = ["CODEX_HOME", "worktree"]
+    let issues = ["BETTER_CODEX_HOME", "worktree"]
         .into_iter()
         .map(|label| {
             json!({
@@ -130,7 +130,7 @@ fn disk_measurement_errors_produce_complete_warning_diagnostics() {
             "details": [
                 "warning threshold: 5.0 GiB",
                 "failure threshold: 1.0 GiB",
-                "CODEX_HOME available: unavailable (PermissionDenied)",
+                "BETTER_CODEX_HOME available: unavailable (PermissionDenied)",
                 "worktree available: unavailable (PermissionDenied)",
             ],
             "issues": issues,

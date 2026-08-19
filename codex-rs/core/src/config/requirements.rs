@@ -6,9 +6,7 @@ use codex_config::types::ApprovalsReviewer;
 use codex_config::types::FeedbackConfigToml;
 use codex_features::FeatureToml;
 use codex_login::default_client::RESIDENCY_HEADER_NAME;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
-use std::path::Path;
 
 /// Applies managed requirements to regular config before final config construction.
 ///
@@ -126,35 +124,6 @@ fn apply_feedback_requirement(
     let configured = configured.get_or_insert_default();
     let conflict = replace_required_leaf(&mut configured.enabled, enabled);
     push_structured_requirement_override_warning("feedback", conflict, source, startup_warnings);
-}
-
-pub(super) fn push_sqlite_home_env_override_warning(
-    configured_sqlite_home: Option<&AbsolutePathBuf>,
-    sqlite_home_env: Option<&Path>,
-    requirement: Option<&Sourced<AbsolutePathBuf>>,
-    startup_warnings: &mut Vec<String>,
-) {
-    if configured_sqlite_home.is_some() {
-        return;
-    }
-    let Some(sqlite_home_env) = sqlite_home_env else {
-        return;
-    };
-    let Some(Sourced { value, source }) = requirement else {
-        return;
-    };
-    if sqlite_home_env == value.as_path() {
-        return;
-    }
-
-    tracing::warn!(
-        ?source,
-        ?value,
-        "`CODEX_SQLITE_HOME` is overridden by an exact requirement for sqlite_home"
-    );
-    startup_warnings.push(format!(
-        "Environment value for `$CODEX_SQLITE_HOME` is overridden by the required `sqlite_home` value {value:?} from {source}."
-    ));
 }
 
 /// Emits one source-aware warning when a structured requirement replaces one

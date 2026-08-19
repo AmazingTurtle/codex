@@ -1,6 +1,5 @@
 ---
 source: tui/src/bottom_pane/tests/actionable_banner_tests.rs
-assertion_line: 32
 expression: rendered
 ---
                                                                       

@@ -42,7 +42,7 @@ fn marketplace_list_row(marketplace_name: &str, root: &Path) -> String {
 
 fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
     let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
-    cmd.env("CODEX_HOME", codex_home);
+    cmd.env(codex_product_info::HOME_ENV, codex_home);
     cmd.env("HOME", codex_home);
     Ok(cmd)
 }
@@ -1234,7 +1234,7 @@ impl RemoteMarketplaceFixture {
     async fn run(&self, args: &[&str]) -> Result<Output> {
         Ok(Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
             .current_dir(self.home.path())
-            .env("CODEX_HOME", self.home.path())
+            .env(codex_product_info::HOME_ENV, self.home.path())
             .env("HOME", self.home.path())
             .env_remove("OPENAI_API_KEY")
             .env_remove("CODEX_API_KEY")

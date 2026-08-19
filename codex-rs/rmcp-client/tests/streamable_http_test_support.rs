@@ -353,7 +353,7 @@ pub(crate) async fn spawn_exec_server() -> anyhow::Result<ExecServerProcess> {
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .kill_on_drop(true)
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .spawn()?;
 
     let websocket_url = read_exec_server_listen_url(&mut child).await?;

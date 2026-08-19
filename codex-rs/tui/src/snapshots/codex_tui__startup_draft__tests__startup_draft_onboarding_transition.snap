@@ -6,7 +6,7 @@ before onboarding: hidden (0x0 viewport)
 ---
 after onboarding:
 
-  >_ OpenAI Codex (v<VERSION>)
+  >_ Better Codex (v<VERSION>)
      loading
 
 

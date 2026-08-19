@@ -74,7 +74,7 @@ assert p.recv(2) == b'ok'
     .unwrap();
     let output = Command::new(MACOS_PATH_TO_SEATBELT_EXECUTABLE)
         .args(args)
-        .env("CODEX_HOME", workspace.path())
+        .env("BETTER_CODEX_HOME", workspace.path())
         .output()
         .unwrap();
     assert_eq!(

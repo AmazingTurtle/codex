@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+codex-product-info = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
 dirs = { workspace = true }
 

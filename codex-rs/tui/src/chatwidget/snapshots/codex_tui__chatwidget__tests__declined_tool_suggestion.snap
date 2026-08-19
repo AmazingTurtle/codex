@@ -1,7 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/app_server.rs
-assertion_line: 572
-expression: popup
+expression: normalize_snapshot_paths(popup)
 ---
 › Ask Codex to do anything
 

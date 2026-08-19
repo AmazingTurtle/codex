@@ -121,7 +121,7 @@ async fn discovery_support_does_not_require_client_opt_in() -> anyhow::Result<()
     let helper_paths = common::exec_server::test_codex_helper_paths()?;
     let mut command = Command::new(helper_paths.codex_exe);
     command.args(["exec-server", "--listen", "ws://127.0.0.1:0"]);
-    command.env("CODEX_HOME", discovery_home);
+    command.env("BETTER_CODEX_HOME", discovery_home);
     command.env("HOME", &user_home);
     command.env("USERPROFILE", &user_home);
     command.env("RUST_LOG", "codex_exec_server=warn");

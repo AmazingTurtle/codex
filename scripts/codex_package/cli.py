@@ -17,7 +17,7 @@ from .targets import PackageInputs
 from .targets import default_target
 from .targets import resolve_input_path
 from .zsh import resolve_zsh_bin
-from .version import read_workspace_version
+from .version import read_product_version
 
 
 # Release pipelines run this builder with system Python, so avoid new dependencies.
@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--package-version",
         type=parse_package_version,
-        default=read_workspace_version(),
+        default=read_product_version(),
         help="Semantic version to record in codex-package.json.",
     )
     parser.add_argument(

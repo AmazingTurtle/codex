@@ -238,7 +238,7 @@ trust_level = "trusted"
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     anyhow::ensure!(
         Command::new(&program)
-            .env("CODEX_HOME", &home)
+            .env(codex_product_info::HOME_ENV, &home)
             .arg("--version")
             .output()?
             .status
@@ -246,7 +246,10 @@ trust_level = "trusted"
         "failed to prepare CLI test executable"
     );
     let mut env: HashMap<String, String> = std::env::vars().collect();
-    env.insert("CODEX_HOME".into(), home.display().to_string());
+    env.insert(
+        codex_product_info::HOME_ENV.into(),
+        home.display().to_string(),
+    );
     env.insert("CODEX_SQLITE_HOME".into(), home.display().to_string());
     env.insert("NO_PROXY".into(), "127.0.0.1,localhost".into());
     env.insert("no_proxy".into(), "127.0.0.1,localhost".into());

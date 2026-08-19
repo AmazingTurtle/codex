@@ -33,7 +33,7 @@ async fn foreground_update_respects_consent_and_reports_unconfirmed() -> anyhow:
         let mut command = tokio::process::Command::new(&codex);
         command
             .current_dir(home.path())
-            .env("CODEX_HOME", home.path())
+            .env("BETTER_CODEX_HOME", home.path())
             .env_remove(codex_app_server_daemon::telemetry::HANDOFF_ENV)
             .arg("app-server");
         if analytics_default_enabled {

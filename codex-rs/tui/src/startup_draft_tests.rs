@@ -193,12 +193,7 @@ fn terminal_app_ssh_fallback_renders_inline_startup() {
             "terminal_app_over_ssh={terminal_app_over_ssh}, owned={owned}\n{frame}"
         ));
     }
-    insta::assert_snapshot!(
-        "terminal_app_ssh_startup",
-        frames
-            .join("\n---\n")
-            .replace(crate::version::CODEX_CLI_VERSION, "<VERSION>")
-    );
+    insta::assert_snapshot!("terminal_app_ssh_startup", frames.join("\n---\n"));
 }
 
 #[tokio::test]
@@ -758,7 +753,10 @@ async fn startup_draft_waits_for_onboarding_before_accepting_input() {
                 codex_home.path(),
                 Ok(system_config_path),
                 || Ok(false),
-                |name| (name == "CODEX_HOME").then(|| codex_home.path().as_os_str().to_os_string()),
+                |name| {
+                    (name == "BETTER_CODEX_HOME")
+                        .then(|| codex_home.path().as_os_str().to_os_string())
+                },
             )
         {
             StartupDraftInitialScreen::Onboarding

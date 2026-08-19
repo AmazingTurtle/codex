@@ -20,7 +20,7 @@ pub fn allowed_symlinked_codex_home(
     }
 
     // Preserve a configured alias only when lexical normalization did not change its target.
-    let alias = std::env::var_os("CODEX_HOME")
+    let alias = std::env::var_os("BETTER_CODEX_HOME")
         .filter(|path| !path.is_empty())
         .and_then(|path| AbsolutePathBuf::from_absolute_path(path).ok())
         .filter(|path| path.canonicalize().ok().as_ref() == Some(codex_home));

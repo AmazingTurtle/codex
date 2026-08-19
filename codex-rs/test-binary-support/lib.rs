@@ -48,10 +48,10 @@ where
                 Ok(codex_home) => codex_home,
                 Err(error) => panic!("failed to create test CODEX_HOME: {error}"),
             };
-            let previous_codex_home = std::env::var_os("CODEX_HOME");
+            let previous_codex_home = std::env::var_os("BETTER_CODEX_HOME");
             // Safety: this runs from a test ctor before test threads begin.
             unsafe {
-                std::env::set_var("CODEX_HOME", codex_home.path());
+                std::env::set_var("BETTER_CODEX_HOME", codex_home.path());
             }
 
             let arg0 = match arg0_dispatch() {
@@ -60,10 +60,10 @@ where
             };
             match previous_codex_home.as_ref() {
                 Some(value) => unsafe {
-                    std::env::set_var("CODEX_HOME", value);
+                    std::env::set_var("BETTER_CODEX_HOME", value);
                 },
                 None => unsafe {
-                    std::env::remove_var("CODEX_HOME");
+                    std::env::remove_var("BETTER_CODEX_HOME");
                 },
             }
 

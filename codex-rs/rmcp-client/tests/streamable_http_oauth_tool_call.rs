@@ -72,7 +72,7 @@ async fn run_scenarios(scenarios: &[&str]) -> anyhow::Result<()> {
         let home = TempDir::new()?;
         let output = Command::new(std::env::current_exe()?)
             .args(["runtime_oauth_child", "--exact", "--ignored", "--nocapture"])
-            .env("CODEX_HOME", home.path())
+            .env("BETTER_CODEX_HOME", home.path())
             .env(SCENARIO_ENV, scenario)
             .output()
             .await?;

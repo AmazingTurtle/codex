@@ -52,7 +52,7 @@ async fn history_lookup_uses_server_provider_with_local_and_embedded_servers() -
                     "-c",
                     "model_provider=\"server-provider\"",
                 ])
-                .env("CODEX_HOME", home.path())
+                .env("BETTER_CODEX_HOME", home.path())
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::inherit())
