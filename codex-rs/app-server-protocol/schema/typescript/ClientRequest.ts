@@ -7,6 +7,11 @@ import type { GetConversationSummaryParams } from "./GetConversationSummaryParam
 import type { GitDiffToRemoteParams } from "./GitDiffToRemoteParams";
 import type { InitializeParams } from "./InitializeParams";
 import type { RequestId } from "./RequestId";
+import type { AccountListParams } from "./v2/AccountListParams";
+import type { AccountRateLimitsReadManyParams } from "./v2/AccountRateLimitsReadManyParams";
+import type { AccountReadManyParams } from "./v2/AccountReadManyParams";
+import type { AccountRemoveParams } from "./v2/AccountRemoveParams";
+import type { AccountSwitchParams } from "./v2/AccountSwitchParams";
 import type { AppsInstalledParams } from "./v2/AppsInstalledParams";
 import type { AppsListParams } from "./v2/AppsListParams";
 import type { AppsReadParams } from "./v2/AppsReadParams";

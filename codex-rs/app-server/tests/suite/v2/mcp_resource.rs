@@ -1010,11 +1010,14 @@ async fn resume_revalidates_persisted_thread_after_config_load(
                 (resumed.thread.git_info, resumed.thread.project_id),
                 (expected_git_info.clone(), expected_project_id.clone())
             );
+            // Better Codex selects the ChatGPT account before loading its scoped config, so
+            // each config resolution calls the thread config loader twice.
+            let loads_per_resolution = 2;
             if matches!(mutation, ResumeMutation::Unchanged) {
-                assert_eq!(resume_config_loads, 1);
+                assert_eq!(resume_config_loads, loads_per_resolution);
             } else {
                 assert!(
-                    resume_config_loads >= 2,
+                    resume_config_loads >= 2 * loads_per_resolution,
                     "changed persisted metadata must reload config"
                 );
             }

@@ -35,6 +35,7 @@ pub use codex_model_provider_info::RemoteCompactionSupport;
 pub use codex_protocol::account::ProviderAccount;
 pub use provider::ModelProvider;
 pub use provider::ModelProviderFuture;
+pub use provider::PinnedChatgptAccountUnavailable;
 pub use provider::ProviderAccountError;
 pub use provider::ProviderAccountResult;
 pub use provider::ProviderAccountState;

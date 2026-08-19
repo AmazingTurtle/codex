@@ -492,6 +492,7 @@ fn secrets_keyring_auth_storage_save_persists_and_removes_fallback_file() -> any
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
 
     storage.save(&auth)?;

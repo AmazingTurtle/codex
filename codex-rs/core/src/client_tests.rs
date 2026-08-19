@@ -3,6 +3,7 @@ use super::ModelClient;
 use super::NonIncrementalReason;
 use super::PendingUnauthorizedRetry;
 use super::Prompt;
+use super::ResponseRequestAttribution;
 use super::UnauthorizedRecoveryExecution;
 use super::X_CODEX_INSTALLATION_ID_HEADER;
 use super::X_CODEX_PARENT_THREAD_ID_HEADER;
@@ -26,15 +27,19 @@ use codex_history::HistoryInitialization;
 use codex_http_client::HttpClientFactory;
 use codex_http_client::OutboundProxyPolicy;
 use codex_login::AuthManager;
+use codex_login::ChatgptAccountBinding;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
+use codex_login::auth::BedrockApiKeyAuth;
 use codex_model_provider::BearerAuthProvider;
 use codex_model_provider::ModelProvider;
 use codex_model_provider::ModelProviderFuture;
 use codex_model_provider::ProviderAccountResult;
 use codex_model_provider::ProviderAuthRecoveryMessages;
 use codex_model_provider::ProviderUnauthorizedRecovery;
+use codex_model_provider::ResolvedResponsesProvider;
 use codex_model_provider::SharedModelProvider;
+use codex_model_provider::WorkspaceRoutingContext;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 use codex_model_provider_info::ModelProviderInfo;
@@ -138,6 +143,51 @@ fn test_model_client_with_thread_id(
         ),
         Vec::new(),
     )
+}
+
+#[tokio::test]
+async fn bedrock_endpoint_resolution_ignores_chatgpt_account_binding() {
+    let region = "eu-central-1";
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
+            api_key: "bedrock-api-key".to_string(),
+            region: region.to_string(),
+        }));
+    let client = ModelClient::new(
+        Some(auth_manager),
+        AgentIdentityAuthPolicy::JwtOnly,
+        ThreadId::new(),
+        ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
+        SessionSource::Exec,
+        "test_originator".to_string(),
+        /*model_verbosity*/ None,
+        /*content_item_kinds_enabled*/ true,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*concurrent_reasoning_summaries_enabled*/ false,
+        /*output_token_replay_enabled*/ false,
+        /*attestation_provider*/ None,
+        HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+        codex_model_provider::WorkspaceRoutingContext::new(
+            "https://chatgpt.com/backend-api".into(),
+        ),
+        Vec::new(),
+    )
+    .with_chatgpt_account_binding(Some(ChatgptAccountBinding {
+        account_id: "retained-chatgpt-account".to_string(),
+        manual_switch_revision: 0,
+    }));
+
+    let setup = client
+        .current_client_setup(ClientRouting::ConfiguredProvider)
+        .await
+        .expect("Bedrock client setup should resolve");
+
+    assert_eq!(
+        setup.api_provider.base_url,
+        format!("https://bedrock-mantle.{region}.api.aws/openai/v1")
+    );
 }
 
 fn test_model_provider() -> SharedModelProvider {
@@ -298,6 +348,19 @@ impl ModelProvider for SetupRefreshProvider {
                 }
             }
             self.inner.api_provider().await
+        })
+    }
+
+    fn responses_api_provider_for_auth<'a>(
+        &'a self,
+        routing_context: &'a WorkspaceRoutingContext,
+        auth: Option<&'a CodexAuth>,
+    ) -> ModelProviderFuture<'a, codex_protocol::error::Result<ResolvedResponsesProvider>> {
+        Box::pin(async move {
+            self.api_provider().await?;
+            self.inner
+                .responses_api_provider_for_auth(routing_context, auth)
+                .await
         })
     }
 
@@ -2217,6 +2280,7 @@ async fn intercepted_output_reaches_trace_and_websocket_bookkeeping() -> anyhow:
         attempt,
         test_model_provider(),
         vec![Box::new(ReplaceOutput)],
+        ResponseRequestAttribution::default(),
     );
     let mut delivered = Vec::new();
     while let Some(event) = stream.next().await {

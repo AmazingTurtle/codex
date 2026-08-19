@@ -2081,6 +2081,7 @@ mod tests {
             personal_access_token: None,
             bedrock_api_key: None,
             bedrock_access_keys: None,
+            accounts: Vec::new(),
         }
     }
 

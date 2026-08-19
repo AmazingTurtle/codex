@@ -1,3 +1,7 @@
+#[path = "account_processor/stored_accounts.rs"]
+mod stored_accounts;
+
+use super::account_read_many::collect_account_reads;
 use super::bedrock_auth::BedrockProviderConfig;
 use super::bedrock_auth::clear_user_model_provider_if_bedrock;
 use super::bedrock_auth::configure_bedrock_provider;
@@ -111,6 +115,15 @@ pub(crate) struct AccountRequestProcessor {
     gateway_client: Arc<std::sync::Mutex<Option<Arc<codex_login::GatewayAuthManager>>>>,
     _gateway_notifications: Arc<tokio_util::task::AbortOnDropHandle<()>>,
     pub(super) enterprise_login: Arc<enterprise_login::EnterpriseLoginState>,
+    _account_change_task: Arc<AccountChangeTask>,
+}
+
+struct AccountChangeTask(tokio::task::JoinHandle<()>);
+
+impl Drop for AccountChangeTask {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 impl AccountRequestProcessor {
@@ -132,6 +145,42 @@ impl AccountRequestProcessor {
             Arc::clone(&thread_manager),
             config_manager.clone(),
         ));
+        let mut account_changes = auth_manager.active_account_change_receiver();
+        let task_auth_manager = Arc::clone(&auth_manager);
+        let task_thread_manager = Arc::clone(&thread_manager);
+        let task_outgoing = Arc::clone(&outgoing);
+        let task_config = Arc::clone(&config);
+        let task_config_manager = config_manager.clone();
+        let account_change_task = tokio::spawn(async move {
+            while account_changes.changed().await.is_ok() {
+                task_config_manager.replace_cloud_config_bundle_loader(
+                    Arc::clone(&task_auth_manager),
+                    task_config.chatgpt_base_url.clone(),
+                    task_config.http_client_factory(),
+                );
+                task_config_manager
+                    .sync_default_client_residency_requirement()
+                    .await;
+                Self::maybe_refresh_plugin_caches_for_current_config(
+                    &task_config_manager,
+                    &task_thread_manager,
+                    task_auth_manager.auth_cached(),
+                )
+                .await;
+                let auth = task_auth_manager.auth_cached();
+                task_outgoing
+                    .send_server_notification(ServerNotification::AccountUpdated(
+                        AccountUpdatedNotification {
+                            auth_mode: auth
+                                .as_ref()
+                                .map(CodexAuth::api_auth_mode)
+                                .map(auth_mode_to_api),
+                            plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
+                        },
+                    ))
+                    .await;
+            }
+        });
         let processor = Arc::new(Self {
             _gateway_notifications: Arc::new(gateway_notifications),
             auth_manager,
@@ -147,6 +196,7 @@ impl AccountRequestProcessor {
             workspace_routing_fetches: Arc::new(Mutex::new(HashMap::new())),
             workspace_routing_shutdown: CancellationToken::new(),
             enterprise_login,
+            _account_change_task: Arc::new(AccountChangeTask(account_change_task)),
         });
         let resolver: Arc<dyn codex_login::WorkspaceRoutingResolver> = processor.clone();
         processor
@@ -176,6 +226,32 @@ impl AccountRequestProcessor {
         self.logout_v2(request_id).await.map(|()| None)
     }
 
+    pub(crate) async fn account_list(
+        &self,
+        params: AccountListParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.account_list_response(params)
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn account_switch(
+        &self,
+        params: AccountSwitchParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.account_switch_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn account_remove(
+        &self,
+        params: AccountRemoveParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.account_remove_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn cancel_login_account(
         &self,
         params: CancelLoginAccountParams,
@@ -203,11 +279,38 @@ impl AccountRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn get_account_rate_limits_many(
+        &self,
+        params: AccountRateLimitsReadManyParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.get_account_rate_limits_many_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn get_account_token_usage(
         &self,
         params: Option<GetAccountTokenUsageParams>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.get_account_token_usage_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn get_account_token_usage_many(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.get_account_token_usage_many_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn get_account_models_many(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.get_account_models_many_response(params)
             .await
             .map(|response| Some(response.into()))
     }
@@ -253,6 +356,10 @@ impl AccountRequestProcessor {
             plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
         }
     }
+
+
+
+
 
     async fn load_latest_config(&self) -> Config {
         match self
@@ -1159,6 +1266,16 @@ impl AccountRequestProcessor {
             ));
         };
 
+        self.get_account_rate_limits_response_for_auth(&auth, http_client_factory, params)
+            .await
+    }
+
+    async fn get_account_rate_limits_response_for_auth(
+        &self,
+        auth: &CodexAuth,
+        http_client_factory: codex_http_client::HttpClientFactory,
+        params: GetAccountRateLimitsParams,
+    ) -> Result<GetAccountRateLimitsResponse, JSONRPCErrorError> {
         if !auth.uses_codex_backend() {
             return Err(invalid_request(
                 "chatgpt authentication required to read rate limits",
@@ -1167,7 +1284,7 @@ impl AccountRequestProcessor {
 
         let client = BackendClient::from_auth(
             self.config.chatgpt_base_url.clone(),
-            &auth,
+            auth,
             http_client_factory,
         );
 
@@ -1256,6 +1373,7 @@ impl AccountRequestProcessor {
         })
     }
 
+
     async fn get_account_token_usage_response(
         &self,
         params: Option<GetAccountTokenUsageParams>,
@@ -1276,6 +1394,16 @@ impl AccountRequestProcessor {
             ));
         };
 
+        self.get_account_token_usage_response_for_auth(&auth, http_client_factory, thread_id)
+            .await
+    }
+
+    async fn get_account_token_usage_response_for_auth(
+        &self,
+        auth: &CodexAuth,
+        http_client_factory: codex_http_client::HttpClientFactory,
+        thread_id: Option<ThreadId>,
+    ) -> Result<GetAccountTokenUsageResponse, JSONRPCErrorError> {
         if !auth.uses_codex_backend() {
             return Err(invalid_request(
                 "chatgpt authentication required to read token usage",
@@ -1284,7 +1412,7 @@ impl AccountRequestProcessor {
 
         let client = BackendClient::from_auth(
             self.config.chatgpt_base_url.clone(),
-            &auth,
+            auth,
             http_client_factory,
         );
         if let Some(thread_id) = thread_id {
@@ -1351,6 +1479,9 @@ impl AccountRequestProcessor {
         .map_err(|err| internal_error(format!("failed to fetch token usage profile: {err}")))?;
         Ok(Self::account_token_usage_response(profile))
     }
+
+
+
 
     async fn get_workspace_messages_response(
         &self,

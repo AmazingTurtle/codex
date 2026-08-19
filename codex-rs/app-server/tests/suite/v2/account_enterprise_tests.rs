@@ -172,12 +172,19 @@ async fn enterprise_login_attempt_lifecycle() -> Result<()> {
         // The app server and callback worker share only this child's mock keyring.
         let home = TempDir::new()?;
         let oauth_server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/oauth/revoke"))
-            .respond_with(ResponseTemplate::new(200))
-            .expect(1)
-            .mount(&oauth_server)
-            .await;
+        // Better Codex retains both workspace accounts; logout revokes each current grant.
+        for token in ["initial-refresh-token", "retried-account-refresh"] {
+            Mock::given(method("POST"))
+                .and(path("/oauth/revoke"))
+                .and(body_partial_json(json!({
+                    "token": token,
+                    "token_type_hint": "refresh_token",
+                })))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&oauth_server)
+                .await;
+        }
         let output = Command::new(std::env::current_exe()?)
             .args([
                 "--exact",
@@ -452,6 +459,7 @@ oauth = {{ client_id = "mcp-client", client_secret = "resource-secret", token_en
         home.path(),
         ChatGptAuthFixture::new("account-access")
             .login_owner_id("original-account-login")
+            .refresh_token("initial-refresh-token")
             .account_id(WORKSPACE_ID_INITIAL)
             .chatgpt_user_id("enterprise-user")
             .plan_type("business"),
@@ -574,6 +582,7 @@ oauth = {{ client_id = "mcp-client", client_secret = "resource-secret", token_en
         home.path(),
         ChatGptAuthFixture::new("account-access")
             .login_owner_id("original-account-login")
+            .refresh_token("replacement-refresh-token")
             .account_id(WORKSPACE_ID_REFRESHED)
             .chatgpt_user_id("enterprise-user")
             .plan_type("business"),

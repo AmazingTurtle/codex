@@ -212,10 +212,100 @@ impl ChatWidget {
         self.refresh_status_surfaces();
     }
 
+    pub(super) fn next_status_refresh_request(&mut self) -> Option<u64> {
+        let request_id = self.next_status_refresh_request_id;
+        self.next_status_refresh_request_id = request_id.checked_add(1)?;
+        Some(request_id)
+    }
+
+    /// Finalize the previous widget's cards and keep late results distinct from new requests.
+    pub(crate) fn inherit_status_refresh_sequence(&mut self, previous: &mut Self) {
+        self.next_status_refresh_request_id = self
+            .next_status_refresh_request_id
+            .max(previous.next_status_refresh_request_id);
+        previous.pending_selected_account_status_requests.clear();
+        for (_, handle) in previous.refreshing_status_outputs.drain(..) {
+            handle.finish_rate_limit_refresh(&[], Local::now());
+        }
+        for (_, handle) in previous.refreshing_all_account_status_outputs.drain(..) {
+            handle.fail_account_limits_refresh(
+                "status view changed while limits were loading".to_string(),
+            );
+        }
+    }
+
     pub(crate) fn add_status_output(
         &mut self,
         refreshing_rate_limits: bool,
         request_id: Option<u64>,
+    ) {
+        let model = self.current_model().to_string();
+        let (cell, handle) = self.new_status_output(refreshing_rate_limits);
+        if let Some(request_id) = request_id {
+            self.refreshing_status_outputs
+                .push((request_id, handle.clone()));
+        }
+        if self.thread_usage_is_available() {
+            handle.reserve_thread_usage_label_width();
+            handle.set_thread_usage(self.estimated_thread_usage().cloned());
+            self.add_to_history(cell);
+            self.request_thread_usage_for_status(handle.clone());
+        } else {
+            self.add_to_history(cell);
+        }
+        self.set_status_copy_targets(handle, model);
+    }
+
+    pub(crate) fn add_all_account_status_output(
+        &mut self,
+        request_id: u64,
+        refreshing_rate_limits: bool,
+    ) {
+        let model = self.current_model().to_string();
+        let (cell, handle) = self.new_status_output(refreshing_rate_limits);
+        handle.start_account_limits_refresh();
+        if refreshing_rate_limits {
+            self.refreshing_status_outputs
+                .push((request_id, handle.clone()));
+        }
+        self.refreshing_all_account_status_outputs
+            .push((request_id, handle.clone()));
+        if self.thread_usage_is_available() {
+            handle.reserve_thread_usage_label_width();
+            handle.set_thread_usage(self.estimated_thread_usage().cloned());
+            self.add_to_history(cell);
+            self.request_thread_usage_for_status(handle.clone());
+        } else {
+            self.add_to_history(cell);
+        }
+        self.set_status_copy_targets(handle, model);
+    }
+
+    fn set_status_copy_targets(&mut self, handle: StatusHistoryHandle, model: String) {
+        // Capture the displayed status inputs before later configuration or thread changes.
+        let mut fields = vec![
+            ("Model".to_string(), Arc::<str>::from(model)),
+            (
+                "Directory".to_string(),
+                Arc::from(self.config.cwd.display().to_string()),
+            ),
+        ];
+        if let Some(name) = self.thread_name.as_deref().filter(|name| !name.is_empty()) {
+            fields.push(("Thread name".to_string(), Arc::from(name)));
+        }
+        if let Some(thread_id) = self.thread_id {
+            fields.push(("Session ID".to_string(), Arc::from(thread_id.to_string())));
+        }
+        self.transcript.last_status_copy_targets =
+            Some(super::transcript::StatusCopySource { handle, fields });
+    }
+
+    fn new_status_output(
+        &self,
+        refreshing_rate_limits: bool,
+    ) -> (
+        crate::history_cell::CompositeHistoryCell,
+        StatusHistoryHandle,
     ) {
         let default_usage = TokenUsage::default();
         let token_info = self.token_info.as_ref();
@@ -246,7 +336,7 @@ impl ChatWidget {
             .collect();
         let agents_summary =
             crate::status::compose_agents_summary(&self.config, &self.instruction_source_paths);
-        let (cell, handle) = crate::status::new_status_output_with_rate_limits_handle(
+        crate::status::new_status_output_with_rate_limits_handle(
             &self.config,
             self.requires_openai_auth,
             self.thread_id
@@ -266,37 +356,7 @@ impl ChatWidget {
             reasoning_effort_override,
             agents_summary,
             refreshing_rate_limits,
-        );
-        if let Some(request_id) = request_id {
-            self.refreshing_status_outputs
-                .push((request_id, handle.clone()));
-        }
-        if self.thread_usage_is_available() {
-            handle.reserve_thread_usage_label_width();
-            handle.set_thread_usage(self.estimated_thread_usage().cloned());
-            self.add_to_history(cell);
-            self.request_thread_usage_for_status(handle.clone());
-        } else {
-            self.add_to_history(cell);
-        }
-        // Capture the displayed status inputs before later configuration or thread changes.
-        let mut copy_targets = vec![
-            ("Model".to_string(), Arc::<str>::from(model)),
-            (
-                "Directory".to_string(),
-                Arc::from(self.config.cwd.display().to_string()),
-            ),
-        ];
-        if let Some(name) = self.thread_name.as_deref().filter(|name| !name.is_empty()) {
-            copy_targets.push(("Thread name".to_string(), Arc::from(name)));
-        }
-        if let Some(thread_id) = self.thread_id {
-            copy_targets.push(("Session ID".to_string(), Arc::from(thread_id.to_string())));
-        }
-        self.transcript.last_status_copy_targets = Some(super::transcript::StatusCopySource {
-            handle,
-            fields: copy_targets,
-        });
+        )
     }
 
     pub(crate) fn finish_status_rate_limit_refresh(
@@ -333,6 +393,49 @@ impl ChatWidget {
             }
         }
         self.refreshing_status_outputs = remaining;
+        if updated_any {
+            self.request_redraw();
+        }
+    }
+
+    pub(crate) fn finish_all_account_status_refresh(
+        &mut self,
+        request_id: u64,
+        result: Result<AccountRateLimitsReadManyResponse, String>,
+    ) {
+        self.update_all_account_status_refresh(request_id, result, /*pending_accounts*/ 0);
+    }
+
+    pub(crate) fn update_all_account_status_refresh(
+        &mut self,
+        request_id: u64,
+        result: Result<AccountRateLimitsReadManyResponse, String>,
+        pending_accounts: usize,
+    ) {
+        let mut remaining = Vec::with_capacity(self.refreshing_all_account_status_outputs.len());
+        let mut updated_any = false;
+        for (pending_request_id, handle) in self.refreshing_all_account_status_outputs.drain(..) {
+            if pending_request_id == request_id {
+                updated_any = true;
+                match &result {
+                    Ok(response) => {
+                        handle.update_account_limits_refresh(
+                            response.clone(),
+                            pending_accounts,
+                            Local::now(),
+                            self.clock_format,
+                        );
+                    }
+                    Err(error) => handle.fail_account_limits_refresh(error.clone()),
+                }
+                if pending_accounts > 0 && result.is_ok() {
+                    remaining.push((pending_request_id, handle));
+                }
+            } else {
+                remaining.push((pending_request_id, handle));
+            }
+        }
+        self.refreshing_all_account_status_outputs = remaining;
         if updated_any {
             self.request_redraw();
         }

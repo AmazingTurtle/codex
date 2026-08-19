@@ -71,6 +71,25 @@ impl<C: BundleClient + 'static> CloudConfigBundleService<ChatGptSource<C>> {
         Self::from_source(
             ChatGptSource {
                 auth_manager,
+                chatgpt_account_id: None,
+                client,
+            },
+            codex_home,
+            timeout,
+        )
+    }
+
+    pub(crate) fn new_for_chatgpt_account(
+        auth_manager: Arc<AuthManager>,
+        chatgpt_account_id: String,
+        client: Arc<C>,
+        codex_home: PathBuf,
+        timeout: Duration,
+    ) -> Self {
+        Self::from_source(
+            ChatGptSource {
+                auth_manager,
+                chatgpt_account_id: Some(chatgpt_account_id),
                 client,
             },
             codex_home,

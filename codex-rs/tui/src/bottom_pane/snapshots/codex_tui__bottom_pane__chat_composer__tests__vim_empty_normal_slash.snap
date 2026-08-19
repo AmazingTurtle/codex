@@ -6,7 +6,7 @@ expression: terminal.backend()
 "                  use                                       "
 "  /presets        run or save reusable prompts and slash    "
 "                  commands                                  "
-"  /ide            include current selection, open files, and"
+"  /account        switch or manage ChatGPT accounts         "
 "                                                            "
 "› /                                                         "
 "                                                            "

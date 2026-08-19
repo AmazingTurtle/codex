@@ -3843,8 +3843,7 @@ async fn account_update_discards_stale_workspace_headline_results() {
 
     chat.update_account_state(
         Some(StatusAccountDisplay::ChatGpt {
-            email: Some("first@example.com".to_string()),
-            plan: None,
+            name: Some("first@example.com".to_string()),
         }),
         /*plan_type*/ None,
         /*has_chatgpt_account*/ true,
@@ -3854,8 +3853,7 @@ async fn account_update_discards_stale_workspace_headline_results() {
 
     chat.update_account_state(
         Some(StatusAccountDisplay::ChatGpt {
-            email: Some("second@example.com".to_string()),
-            plan: None,
+            name: Some("second@example.com".to_string()),
         }),
         /*plan_type*/ None,
         /*has_chatgpt_account*/ true,

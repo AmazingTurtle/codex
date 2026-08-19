@@ -752,14 +752,15 @@ mod tests {
 
     #[test]
     fn slash_completion_does_not_preserve_existing_draft_tail_for_other_commands() {
+        // Better Codex accepts `/status all`, so use a command without inline arguments.
         let mut composer = composer_with_draft_tail(
-            "/sta",
+            "/dif",
             "preserve this draft only for opted-in slash commands",
         );
 
         assert_eq!(press(&mut composer, KeyCode::Tab), InputResult::None);
-        assert_eq!(composer.draft.textarea.text(), "/status ");
-        assert_eq!(composer.draft.textarea.cursor(), "/status ".len());
+        assert_eq!(composer.draft.textarea.text(), "/diff ");
+        assert_eq!(composer.draft.textarea.cursor(), "/diff ".len());
     }
 
     #[test]

@@ -15,6 +15,7 @@ pub enum SlashCommand {
     Model,
     Presets,
     Daybreak,
+    Account,
     Ide,
     Permissions,
     Keymap,
@@ -135,6 +136,7 @@ impl SlashCommand {
             SlashCommand::Model => "choose what model and reasoning effort to use",
             SlashCommand::Presets => "run or save reusable prompts and slash commands",
             SlashCommand::Daybreak => "turn Daybreak on or off",
+            SlashCommand::Account => "switch or manage ChatGPT accounts",
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
@@ -177,6 +179,7 @@ impl SlashCommand {
                 | SlashCommand::Permissions
                 | SlashCommand::Title
                 | SlashCommand::Statusline
+                | SlashCommand::Account
                 | SlashCommand::Rename
                 | SlashCommand::New
                 | SlashCommand::Clear
@@ -191,6 +194,7 @@ impl SlashCommand {
                 | SlashCommand::Raw
                 | SlashCommand::Cd
                 | SlashCommand::Pwd
+                | SlashCommand::Status
                 | SlashCommand::Usage
                 | SlashCommand::Pets
                 | SlashCommand::Side
@@ -249,6 +253,7 @@ impl SlashCommand {
     pub fn available_during_task(self) -> bool {
         match self {
             SlashCommand::New
+            | SlashCommand::Account
             | SlashCommand::Delete
             | SlashCommand::Fork
             | SlashCommand::Worktree

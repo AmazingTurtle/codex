@@ -1,0 +1,19 @@
+---
+source: tui/src/chatwidget/tests/accounts.rs
+expression: normalize_snapshot_paths(rendered)
+---
+/status
+
+  >_ Better Codex (v0.999.0-better-codex)
+
+  Visit https://chatgpt.com/settings/usage for up-to-date
+  information on rate limits and credits
+
+  Model:               GPT-5.6-Sol (reasoning low, summaries auto)
+  Directory:           /tmp/project
+  Permissions:         Read Only (Ask for approval)
+  Agents.md:           <none>
+  Account:             account-without-email
+  Collaboration mode:  Default
+
+  Limits:              data not available yet

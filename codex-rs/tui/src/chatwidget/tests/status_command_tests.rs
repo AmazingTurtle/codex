@@ -18,6 +18,7 @@ async fn status_command_renders_immediately_and_refreshes_rate_limits_for_chatgp
         }
         other => panic!("expected status output before refresh request, got {other:?}"),
     };
+    pretty_assertions::assert_eq!(rendered.lines().next(), Some("/status"));
     assert!(
         !rendered.contains("refreshing limits"),
         "expected /status to avoid transient refresh text in terminal history, got: {rendered}"
@@ -29,6 +30,194 @@ async fn status_command_renders_immediately_and_refreshes_rate_limits_for_chatgp
         other => panic!("expected rate-limit refresh request, got {other:?}"),
     };
     pretty_assertions::assert_eq!(request_id, 0);
+    assert!(
+        rx.try_recv().is_err(),
+        "bare /status should only load active limits"
+    );
+}
+
+#[tokio::test]
+async fn status_all_renders_one_pending_card_and_requests_all_accounts() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    chat.dispatch_command_with_args(SlashCommand::Status, "all".to_string(), Vec::new());
+
+    let rendered = match rx.try_recv() {
+        Ok(AppEvent::InsertHistoryCell(cell)) => {
+            lines_to_single_string(&cell.display_lines(/*width*/ 100))
+        }
+        other => panic!("expected combined status card, got {other:?}"),
+    };
+    pretty_assertions::assert_eq!(rendered.lines().next(), Some("/status all"));
+    assert!(rendered.contains("Account Limits"));
+    assert!(rendered.contains("loading…"));
+    assert!(!rendered.contains("ChatGPT account status"));
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::RefreshRateLimits {
+            origin: RateLimitRefreshOrigin::StatusCommand { request_id: 0 }
+        })
+    );
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ShowChatgptAccountStatus {
+            request: ChatgptAccountStatusRequest::AllAccountsStatusCard { request_id: 0 }
+        })
+    );
+    pretty_assertions::assert_eq!(chat.refreshing_status_outputs.len(), 1);
+    pretty_assertions::assert_eq!(chat.refreshing_all_account_status_outputs.len(), 1);
+}
+
+#[tokio::test]
+async fn status_account_selector_keeps_compact_account_only_request() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.dispatch_command_with_args(
+        SlashCommand::Status,
+        "person@example.com".to_string(),
+        Vec::new(),
+    );
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ShowChatgptAccountStatus {
+            request: ChatgptAccountStatusRequest::SelectedAccount { request_id: 0, selector }
+        }) if selector == "person@example.com"
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn overlapping_status_all_requests_update_only_their_own_cards() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    chat.dispatch_command_with_args(SlashCommand::Status, "all".to_string(), Vec::new());
+    let first = match rx.try_recv() {
+        Ok(AppEvent::InsertHistoryCell(cell)) => cell,
+        other => panic!("expected first combined status card, got {other:?}"),
+    };
+    assert_matches!(rx.try_recv(), Ok(AppEvent::RefreshRateLimits { .. }));
+    assert_matches!(rx.try_recv(), Ok(AppEvent::ShowChatgptAccountStatus { .. }));
+
+    chat.dispatch_command_with_args(SlashCommand::Status, "all".to_string(), Vec::new());
+    let second = match rx.try_recv() {
+        Ok(AppEvent::InsertHistoryCell(cell)) => cell,
+        other => panic!("expected second combined status card, got {other:?}"),
+    };
+    assert_matches!(rx.try_recv(), Ok(AppEvent::RefreshRateLimits { .. }));
+    assert_matches!(rx.try_recv(), Ok(AppEvent::ShowChatgptAccountStatus { .. }));
+
+    chat.finish_all_account_status_refresh(
+        /*request_id*/ 0,
+        Ok(AccountRateLimitsReadManyResponse { data: Vec::new() }),
+    );
+    let first_rendered = lines_to_single_string(&first.display_lines(/*width*/ 100));
+    let second_rendered = lines_to_single_string(&second.display_lines(/*width*/ 100));
+    assert!(first_rendered.contains("no eligible managed ChatGPT accounts"));
+    pretty_assertions::assert_eq!(first_rendered.lines().next(), Some("/status all"));
+    assert!(second_rendered.contains("loading…"));
+    pretty_assertions::assert_eq!(chat.refreshing_all_account_status_outputs.len(), 1);
+
+    chat.finish_all_account_status_refresh(
+        /*request_id*/ 1,
+        Err("account service unavailable".to_string()),
+    );
+    let second_rendered = lines_to_single_string(&second.display_lines(/*width*/ 100));
+    assert!(second_rendered.contains("unavailable — account service unavailable"));
+    pretty_assertions::assert_eq!(second_rendered.lines().next(), Some("/status all"));
+    assert!(chat.refreshing_all_account_status_outputs.is_empty());
+}
+
+#[tokio::test]
+async fn account_change_cancels_status_all_progress_and_rejects_late_results() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+    chat.dispatch_command_with_args(SlashCommand::Status, "all".to_string(), Vec::new());
+    let card = match rx.try_recv() {
+        Ok(AppEvent::InsertHistoryCell(cell)) => cell,
+        other => panic!("expected status card, got {other:?}"),
+    };
+    chat.update_all_account_status_refresh(
+        /*request_id*/ 0,
+        Ok(AccountRateLimitsReadManyResponse { data: Vec::new() }),
+        /*pending_accounts*/ 1,
+    );
+    assert!(lines_to_single_string(&card.display_lines(/*width*/ 100)).contains("1 pending…"));
+    chat.update_account_state(
+        /*status_account_display*/ None, /*plan_type*/ None,
+        /*has_chatgpt_account*/ false, /*has_codex_backend_auth*/ false,
+    );
+    let canceled = lines_to_single_string(&card.display_lines(/*width*/ 100));
+    assert!(canceled.contains("account changed while limits were loading"));
+    chat.finish_all_account_status_refresh(
+        /*request_id*/ 0,
+        Ok(AccountRateLimitsReadManyResponse { data: Vec::new() }),
+    );
+    pretty_assertions::assert_eq!(
+        lines_to_single_string(&card.display_lines(/*width*/ 100)),
+        canceled
+    );
+    assert!(chat.refreshing_all_account_status_outputs.is_empty());
+}
+
+#[tokio::test]
+async fn status_refresh_sequence_stops_before_reusing_request_ids() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.next_status_refresh_request_id = u64::MAX;
+    chat.dispatch_command_with_args(SlashCommand::Status, "all".to_string(), Vec::new());
+    assert!(chat.refreshing_all_account_status_outputs.is_empty());
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, AppEvent::InsertHistoryCell(_)))
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, AppEvent::ShowChatgptAccountStatus { .. }))
+    );
+    let rendered = events
+        .iter()
+        .find_map(|event| match event {
+            AppEvent::InsertHistoryCell(cell) => {
+                Some(lines_to_single_string(&cell.display_lines(/*width*/ 100)))
+            }
+            _ => None,
+        })
+        .expect("visible request exhaustion error");
+    insta::assert_snapshot!(rendered, @"■ Restart Codex to request another status refresh.");
+    pretty_assertions::assert_eq!(chat.next_status_refresh_request_id, u64::MAX);
+}
+
+#[tokio::test]
+async fn account_change_rejects_late_selected_status_output() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.dispatch_command_with_args(
+        SlashCommand::Status,
+        "selected@example.com".to_string(),
+        Vec::new(),
+    );
+    assert!(matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ShowChatgptAccountStatus { .. })
+    ));
+    chat.update_account_state(
+        /*status_account_display*/ None, /*plan_type*/ None,
+        /*has_chatgpt_account*/ false, /*has_codex_backend_auth*/ false,
+    );
+    chat.finish_selected_account_status_refresh(
+        /*request_id*/ 0,
+        Err("obsolete selected account".to_string()),
+    );
+    assert!(chat.pending_selected_account_status_requests.is_empty());
+    assert!(
+        !std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::InsertHistoryCell(_)))
+    );
 }
 
 #[tokio::test]
@@ -160,7 +349,6 @@ async fn status_command_overlapping_refreshes_update_matching_cells_only() {
         }) => request_id,
         other => panic!("expected first refresh request, got {other:?}"),
     };
-
     chat.dispatch_command(SlashCommand::Status);
     let second_rendered = match rx.try_recv() {
         Ok(AppEvent::InsertHistoryCell(cell)) => {

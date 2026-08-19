@@ -178,8 +178,7 @@ async fn security_setup_fetch_with_default_features_uses_authenticated_codex_end
         assert_eq!(
             app.chat_widget.status_account_display(),
             Some(&StatusAccountDisplay::ChatGpt {
-                email: Some("user@example.com".into()),
-                plan: None,
+                name: Some("user@example.com".into()),
             })
         );
         app.handle_event(&mut tui, &mut server, event).await?;
