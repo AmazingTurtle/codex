@@ -38,7 +38,10 @@ pub fn is_known_safe_command(command: &[String]) -> bool {
     // introduce side effects ( "&&", "||", ";", and "|" ). If every
     // individual command in the script is itself a known‑safe command, then
     // the composite expression is considered safe.
-    if let Some(all_commands) = parse_shell_lc_plain_commands(&command)
+    if command
+        .first()
+        .is_some_and(|cmd0| is_trusted_safelist_executable_path(cmd0))
+        && let Some(all_commands) = parse_shell_lc_plain_commands(&command)
         && !all_commands.is_empty()
         && all_commands
             .iter()
@@ -69,7 +72,13 @@ fn is_safe_to_call_with_exec(command: &[String]) -> bool {
         return false;
     };
 
-    match executable_name_lookup_key(cmd0).as_deref() {
+    let executable_name = if is_trusted_safelist_executable_path(cmd0) {
+        executable_name_lookup_key(cmd0)
+    } else {
+        None
+    };
+
+    match executable_name.as_deref() {
         Some(cmd) if cfg!(target_os = "linux") && matches!(cmd, "numfmt" | "tac") => true,
 
         #[rustfmt::skip]
@@ -170,6 +179,24 @@ fn is_safe_to_call_with_exec(command: &[String]) -> bool {
         // ── anything else ─────────────────────────────────────────────────
         _ => false,
     }
+}
+
+#[cfg(not(windows))]
+fn is_trusted_safelist_executable_path(raw: &str) -> bool {
+    if !raw.contains('/') {
+        return true;
+    }
+
+    let path = std::path::Path::new(raw);
+    path.is_absolute()
+        && path.parent().is_some_and(|parent| {
+            parent == std::path::Path::new("/bin") || parent == std::path::Path::new("/usr/bin")
+        })
+}
+
+#[cfg(windows)]
+fn is_trusted_safelist_executable_path(_raw: &str) -> bool {
+    true
 }
 
 pub(crate) fn is_safe_git_command(command: &[String]) -> bool {
@@ -345,6 +372,7 @@ mod tests {
     #[test]
     fn known_safe_examples() {
         assert!(is_safe_to_call_with_exec(&vec_str(&["ls"])));
+        assert!(is_safe_to_call_with_exec(&vec_str(&["/bin/ls"])));
         assert!(is_safe_to_call_with_exec(&vec_str(&["git", "status"])));
         assert!(is_safe_to_call_with_exec(&vec_str(&["git", "branch"])));
         assert!(is_safe_to_call_with_exec(&vec_str(&[
@@ -374,6 +402,25 @@ mod tests {
             assert!(!is_safe_to_call_with_exec(&vec_str(&["numfmt", "1000"])));
             assert!(!is_safe_to_call_with_exec(&vec_str(&["tac", "Cargo.toml"])));
         }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn path_qualified_workspace_executables_are_not_safe() {
+        for command in [
+            vec_str(&["./ls"]),
+            vec_str(&["../bin/ls"]),
+            vec_str(&["/tmp/ls"]),
+            vec_str(&["./echo"]),
+            vec_str(&["./zsh", "-c", "ls"]),
+            vec_str(&["./bash", "-lc", "ls"]),
+            vec_str(&["/tmp/zsh", "-c", "ls"]),
+        ] {
+            assert!(!is_known_safe_command(&command), "{command:?}");
+        }
+
+        assert!(is_known_safe_command(&vec_str(&["/bin/ls"])));
+        assert!(is_known_safe_command(&vec_str(&["/bin/zsh", "-lc", "ls"])));
     }
 
     #[test]
