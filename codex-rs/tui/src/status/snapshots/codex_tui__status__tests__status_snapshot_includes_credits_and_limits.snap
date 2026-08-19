@@ -13,7 +13,7 @@ expression: sanitized
   Directory:       [[workspace]]
   Permissions:     Custom (workspace with network access, Ask for approval)
   Agents.md:       <none>
-  Account:         user@example.com (Pro 200)
+  Account:         user@example.com
 
   Context window:  100% left (2.2K used / 272K)
   5h limit:        [███████████░░░░░░░░░] 55% left (resets 09:25)

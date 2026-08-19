@@ -5,6 +5,7 @@ use anyhow::Result;
 use codex_config::CloudConfigBundleLoader;
 use codex_config::LoaderOverrides;
 use codex_config::test_support::CloudConfigBundleFixture;
+use codex_core::config::ConfigOverrides;
 use codex_http_client::NetworkPolicyDenied;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
@@ -277,6 +278,58 @@ async fn cloud_config_change_supersedes_load_even_when_network_rules_are_unchang
     assert_eq!(
         stale.get_ref().and_then(|error| error.downcast_ref()),
         Some(&NetworkPolicyDenied::Revoked)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn config_load_freezes_application_cloud_but_accepts_session_cloud() -> Result<()> {
+    let home = tempdir()?;
+    let calls = Arc::new(AtomicUsize::new(/*v*/ 0));
+    let loader = CloudConfigBundleLoader::from_getter({
+        let calls = Arc::clone(&calls);
+        move || {
+            let call = calls.fetch_add(/*val*/ 1, Ordering::SeqCst);
+            async move {
+                Ok(Some(
+                    CloudConfigBundleFixture::enterprise_config(format!("model = 'model-{call}'"))
+                        .into_bundle(),
+                ))
+            }
+        }
+    });
+    let manager = ConfigManager::new_for_tests(
+        home.path().to_path_buf(),
+        Vec::new(),
+        LoaderOverrides::without_managed_config_for_tests(),
+        loader,
+    );
+    let config = manager.load_latest_config(/*fallback_cwd*/ None).await?;
+    assert_eq!(
+        (config.model.as_deref(), calls.load(Ordering::SeqCst)),
+        (Some("model-0"), 1),
+    );
+
+    let session_cloud = CloudConfigBundleLoader::new(async {
+        Ok(Some(
+            CloudConfigBundleFixture::enterprise_config("model = 'session-model'").into_bundle(),
+        ))
+    });
+    let session_config = manager
+        .load_with_cli_overrides_and_cloud_config_bundle(
+            &[],
+            /*request_overrides*/ None,
+            ConfigOverrides::default(),
+            /*fallback_cwd*/ None,
+            session_cloud,
+        )
+        .await?;
+    assert_eq!(
+        (
+            session_config.model.as_deref(),
+            calls.load(Ordering::SeqCst)
+        ),
+        (Some("session-model"), 2),
     );
     Ok(())
 }

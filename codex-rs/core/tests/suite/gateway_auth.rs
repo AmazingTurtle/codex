@@ -207,6 +207,7 @@ delivery = { kind = "header", name = "x-gateway-auth" }
             agent_identity_policy: AgentIdentityAuthPolicy::JwtOnly,
             session_source: SessionSource::Cli,
             agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
+            chatgpt_account_id: None,
         })
         .await
         .err()

@@ -7,6 +7,7 @@
 
 mod apply_patch;
 mod apps;
+mod chatgpt_account_selection;
 mod client;
 mod client_common;
 mod model_request;

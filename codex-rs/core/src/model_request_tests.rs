@@ -33,6 +33,7 @@ async fn interceptors_forward_before_completion_in_order_and_cancel_upstream() {
                 rx_event,
                 interrupt: None,
                 consumer_dropped,
+                request_attribution: Default::default(),
             }
             .map(|event| {
                 event.map_err(|error| {

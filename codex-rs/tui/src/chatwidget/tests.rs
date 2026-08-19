@@ -226,6 +226,7 @@ fn next_goal_draft(
     }
 }
 
+mod accounts;
 mod app_server;
 mod approval_requests;
 #[path = "tests/backend_banners_tests.rs"]
@@ -301,6 +302,8 @@ mod terminal_title;
 #[path = "tests/tool_activity_tests.rs"]
 mod tool_activity_tests;
 mod usage;
+#[path = "tests/usage_picker_tests.rs"]
+mod usage_picker_tests;
 #[path = "tests/worktree_picker_tests.rs"]
 mod worktree_picker;
 
