@@ -254,7 +254,7 @@ pub fn ultimate_fallback_shell() -> DetectedShell {
 
 pub fn get_shell_by_model_provided_path(shell_path: &PathBuf) -> DetectedShell {
     detect_shell_type(shell_path)
-        .and_then(|shell_type| get_shell(shell_type, Some(shell_path)))
+        .and_then(|shell_type| get_shell(shell_type, /*path*/ None))
         .unwrap_or_else(ultimate_fallback_shell)
 }
 
@@ -364,5 +364,23 @@ mod tests {
             detect_shell_type(PathBuf::from("cmd.exe")),
             Some(ShellType::Cmd)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn model_provided_shell_path_does_not_select_repository_executable() {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("codex-shell-detect-test-{suffix}"));
+        std::fs::create_dir(&temp_dir).unwrap();
+        let repository_shell = temp_dir.join("bash");
+        std::fs::write(&repository_shell, "#!/bin/sh\nexit 0\n").unwrap();
+
+        let selected = get_shell_by_model_provided_path(&repository_shell);
+
+        std::fs::remove_dir_all(&temp_dir).unwrap();
+        assert_ne!(selected.shell_path, repository_shell);
     }
 }
