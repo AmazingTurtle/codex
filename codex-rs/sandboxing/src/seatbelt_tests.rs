@@ -885,6 +885,85 @@ fn normalize_path_for_sandbox_rejects_relative_paths() {
     assert_eq!(normalize_path_for_sandbox(Path::new("relative.sock")), None);
 }
 
+#[cfg(unix)]
+#[test]
+fn create_seatbelt_args_skips_symlinked_writable_roots() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = TempDir::new().expect("temp dir");
+    let regular_root = temp_dir.path().join("regular");
+    fs::create_dir(&regular_root).expect("create regular root");
+
+    let outside_root = temp_dir.path().join("outside");
+    fs::create_dir(&outside_root).expect("create outside root");
+    let symlinked_root = temp_dir.path().join("workspace");
+    symlink(&outside_root, &symlinked_root).expect("create symlinked root");
+
+    let real_parent = temp_dir.path().join("real-parent");
+    fs::create_dir(&real_parent).expect("create real parent");
+    let nested_root_target = real_parent.join("nested");
+    fs::create_dir(&nested_root_target).expect("create nested root target");
+    let symlinked_parent = temp_dir.path().join("link-parent");
+    symlink(&real_parent, &symlinked_parent).expect("create symlinked parent");
+    let nested_under_symlink = symlinked_parent.join("nested");
+
+    let file_system_policy = FileSystemSandboxPolicy::restricted(
+        [
+            regular_root.as_path(),
+            symlinked_root.as_path(),
+            nested_under_symlink.as_path(),
+        ]
+        .into_iter()
+        .map(|path| FileSystemSandboxEntry {
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute writable root")
+                .into(),
+            access: FileSystemAccessMode::Write,
+            missing_path_behavior: None,
+        })
+        .collect(),
+    );
+
+    let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
+        command: vec!["/bin/true".to_string()],
+        file_system_sandbox_policy: &file_system_policy,
+        network_sandbox_policy: NetworkSandboxPolicy::Restricted,
+        sandbox_policy_cwd: temp_dir.path(),
+        enforce_managed_network: false,
+        managed_network: None,
+        environment_id: None,
+        network: None,
+        extra_allow_unix_sockets: &[],
+    })
+    .unwrap();
+
+    let writable_definitions: Vec<String> = args
+        .iter()
+        .filter(|arg| arg.starts_with("-DWRITABLE_ROOT_"))
+        .cloned()
+        .collect();
+    assert_eq!(
+        writable_definitions,
+        vec![format!(
+            "-DWRITABLE_ROOT_0={}",
+            regular_root
+                .canonicalize()
+                .expect("canonicalize regular root")
+                .to_string_lossy()
+        )],
+    );
+
+    let outside_root = outside_root.to_string_lossy().into_owned();
+    let nested_root_target = nested_root_target.to_string_lossy().into_owned();
+    assert!(
+        !args
+            .iter()
+            .any(|arg| arg.contains(outside_root.as_str())
+                || arg.contains(nested_root_target.as_str())),
+        "symlink targets must not be granted writable Seatbelt roots: {args:#?}"
+    );
+}
+
 #[test]
 fn create_seatbelt_args_allows_all_unix_sockets_when_enabled() {
     let policy = dynamic_network_policy(

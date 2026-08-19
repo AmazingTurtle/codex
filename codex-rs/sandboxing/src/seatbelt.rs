@@ -415,6 +415,40 @@ fn build_seatbelt_access_policy(
     }
 }
 
+fn seatbelt_access_root_for_writable_root(
+    file_system_sandbox_policy: &FileSystemSandboxPolicy,
+    writable_root: WritableRoot,
+    cwd: &Path,
+) -> Option<SeatbeltAccessRoot> {
+    let root_path = writable_root.root.as_path();
+    if has_nested_symlink_component(root_path) {
+        warn!(
+            root = %root_path.display(),
+            "skipping symlinked writable root for Seatbelt sandbox"
+        );
+        return None;
+    }
+
+    Some(SeatbeltAccessRoot {
+        protected_metadata_names: protected_metadata_names_for_writable_root(
+            file_system_sandbox_policy,
+            &writable_root,
+            cwd,
+        ),
+        root: writable_root.root,
+        excluded_subpaths: writable_root.read_only_subpaths,
+    })
+}
+
+fn has_nested_symlink_component(path: &Path) -> bool {
+    path.ancestors().any(|ancestor| {
+        let Ok(metadata) = std::fs::symlink_metadata(ancestor) else {
+            return false;
+        };
+        metadata.file_type().is_symlink() && ancestor.parent().and_then(Path::parent).is_some()
+    })
+}
+
 fn seatbelt_protected_metadata_name_regex(root: &AbsolutePathBuf, name: &str) -> String {
     let mut root = root.to_string_lossy().to_string();
     while root.len() > 1 && root.ends_with('/') {
@@ -679,14 +713,12 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
                 file_system_sandbox_policy
                     .get_writable_roots_with_cwd(sandbox_policy_cwd)
                     .into_iter()
-                    .map(|root| SeatbeltAccessRoot {
-                        protected_metadata_names: protected_metadata_names_for_writable_root(
+                    .filter_map(|root| {
+                        seatbelt_access_root_for_writable_root(
                             file_system_sandbox_policy,
-                            &root,
+                            root,
                             sandbox_policy_cwd,
-                        ),
-                        root: root.root,
-                        excluded_subpaths: root.read_only_subpaths,
+                        )
                     })
                     .collect(),
             )
