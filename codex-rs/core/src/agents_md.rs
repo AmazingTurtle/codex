@@ -160,7 +160,8 @@ async fn read_agents_md(
 }
 
 /// Discovers AGENTS.md files from the project root to the current working
-/// directory, inclusive. Symlinks are allowed.
+/// directory, inclusive. Symlinks are allowed only when they resolve inside
+/// the discovered project root, or inside the cwd when there is no project root.
 async fn agents_md_paths(
     config: &Config,
     cwd: &PathUri,
@@ -191,12 +192,12 @@ async fn agents_md_paths(
         /*sandbox*/ None,
     )
     .await?;
-    let search_dirs = if let Some(root) = project_root {
+    let search_dirs = if let Some(root) = &project_root {
         let mut dirs = Vec::new();
         let mut cursor = dir.clone();
         loop {
             dirs.push(cursor.clone());
-            if cursor == root {
+            if &cursor == root {
                 break;
             }
             let Some(parent) = cursor.parent() else {
@@ -209,9 +210,14 @@ async fn agents_md_paths(
     } else {
         vec![dir]
     };
+    let instruction_root = project_root.as_ref().unwrap_or(cwd);
+    let canonical_instruction_root = fs
+        .canonicalize(instruction_root, /*sandbox*/ None)
+        .await?;
 
     let candidate_filenames = candidate_filenames(config);
     let candidate_filenames = &candidate_filenames;
+    let canonical_instruction_root = &canonical_instruction_root;
     let mut results = futures::stream::iter(search_dirs)
         .map(|directory| async move {
             for name in candidate_filenames {
@@ -219,7 +225,28 @@ async fn agents_md_paths(
                     .join(name)
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
                 match fs.get_metadata(&candidate, /*sandbox*/ None).await {
-                    Ok(metadata) if metadata.is_file => return Ok(Some(candidate)),
+                    Ok(metadata) if metadata.is_file => {
+                        let resolved = match fs.canonicalize(&candidate, /*sandbox*/ None).await {
+                            Ok(resolved) => resolved,
+                            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                            Err(err) => return Err(err),
+                        };
+                        if !resolved.starts_with(canonical_instruction_root) {
+                            tracing::warn!(
+                                path = %candidate,
+                                resolved_path = %resolved,
+                                root = %canonical_instruction_root,
+                                "ignoring AGENTS.md outside project root"
+                            );
+                            continue;
+                        }
+                        let read_path = if metadata.is_symlink {
+                            resolved
+                        } else {
+                            candidate
+                        };
+                        return Ok(Some(read_path));
+                    }
                     Ok(_) => {}
                     Err(err) if err.kind() == io::ErrorKind::NotFound => {}
                     Err(err) => return Err(err),

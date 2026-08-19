@@ -77,10 +77,10 @@ impl Default for MetadataCallCounts {
 impl FailingFileSystem {
     async fn canonicalize(
         &self,
-        _path: &PathUri,
-        _sandbox: Option<&FileSystemSandboxContext>,
+        path: &PathUri,
+        sandbox: Option<&FileSystemSandboxContext>,
     ) -> io::Result<PathUri> {
-        unreachable!("canonicalize should not be called")
+        LOCAL_FS.canonicalize(path, sandbox).await
     }
 
     async fn read_file(
@@ -1595,6 +1595,63 @@ async fn agents_md_special_file_is_ignored() {
 
     let discovery = agents_md_paths(&cfg).await.expect("discover paths");
     assert_eq!(discovery, Vec::<PathUri>::new());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn agents_md_symlink_outside_project_is_ignored() {
+    let state = tempfile::tempdir().expect("tempdir");
+    let repo = TempDir::new_in(state.path()).expect("repo tempdir");
+    fs::write(repo.path().join(".git"), "").unwrap();
+    let outside = state.path().join("outside-instructions.md");
+    fs::write(&outside, "outside doc").unwrap();
+    std::os::unix::fs::symlink(&outside, repo.path().join("AGENTS.md")).unwrap();
+
+    let cfg = make_config(&repo, /*limit*/ 4096, /*instructions*/ None).await;
+
+    let res = get_user_instructions(&cfg).await;
+    assert_eq!(res, None);
+
+    let discovery = agents_md_paths(&cfg).await.expect("discover paths");
+    assert_eq!(discovery, Vec::<PathUri>::new());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn agents_md_under_symlinked_directory_outside_project_is_ignored() {
+    let state = tempfile::tempdir().expect("tempdir");
+    let repo = TempDir::new_in(state.path()).expect("repo tempdir");
+    fs::write(repo.path().join(".git"), "").unwrap();
+    let outside = state.path().join("outside");
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("AGENTS.md"), "outside doc").unwrap();
+    std::os::unix::fs::symlink(&outside, repo.path().join("nested")).unwrap();
+
+    let mut cfg = make_config(&repo, /*limit*/ 4096, /*instructions*/ None).await;
+    cfg.cwd = repo.path().join("nested").abs();
+
+    let res = get_user_instructions(&cfg).await;
+    assert_eq!(res, None);
+
+    let discovery = agents_md_paths(&cfg).await.expect("discover paths");
+    assert_eq!(discovery, Vec::<PathUri>::new());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn agents_md_symlink_inside_project_is_loaded() {
+    let repo = tempfile::tempdir().expect("tempdir");
+    fs::write(repo.path().join(".git"), "").unwrap();
+    let target = repo.path().join("INSTRUCTIONS.md");
+    fs::write(&target, "inside doc").unwrap();
+    std::os::unix::fs::symlink(&target, repo.path().join("AGENTS.md")).unwrap();
+
+    let cfg = make_config(&repo, /*limit*/ 4096, /*instructions*/ None).await;
+
+    let res = get_user_instructions(&cfg)
+        .await
+        .expect("inside symlink should load");
+    assert_eq!(res, "inside doc");
 }
 
 #[tokio::test]
