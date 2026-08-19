@@ -17,8 +17,6 @@ use codex_api::HostedFileUploadContext;
 use codex_api::OPENAI_FILE_UPLOAD_LIMIT_BYTES;
 use codex_api::upload_openai_file;
 use codex_login::CodexAuth;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
 use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
@@ -168,21 +166,9 @@ async fn build_uploaded_argument_value(
             .await
             .as_ref(),
     );
-    let file_system_policy = effective_file_system_sandbox_policy(
-        &turn_environment
-            .permission_profile()
-            .file_system_sandbox_policy(),
-        additional_permissions.as_ref(),
-    );
-    let requires_sandbox = !file_system_policy.has_full_disk_read_access()
-        || file_system_policy
-            .entries
-            .iter()
-            .any(|entry| entry.access == FileSystemAccessMode::Deny);
-    let sandbox = requires_sandbox.then(|| {
-        turn_context.file_system_sandbox_context(additional_permissions, turn_environment)
-    });
-    if sandbox.is_some() {
+    let sandbox = turn_context
+        .file_system_sandbox_context(additional_permissions, turn_environment);
+    if sandbox.should_run_in_sandbox() {
         let environment_info = turn_environment
             .environment
             .info()
@@ -195,14 +181,38 @@ async fn build_uploaded_argument_value(
         }
     }
     let fs = turn_environment.environment.get_filesystem();
+    let canonical_path = fs
+        .canonicalize(&path_uri, Some(&sandbox))
+        .await
+        .map_err(|error| contextualize_error(error.to_string()))?;
+    let mut allowed_roots = Vec::with_capacity(turn_environment.workspace_roots().len() + 1);
+    allowed_roots.push(turn_environment.cwd().clone());
+    allowed_roots.extend(turn_environment.workspace_roots().iter().cloned());
+    let mut is_in_allowed_root = false;
+    for root in allowed_roots {
+        let canonical_root = fs
+            .canonicalize(&root, Some(&sandbox))
+            .await
+            .map_err(|error| contextualize_error(error.to_string()))?;
+        if canonical_path.starts_with(&canonical_root) {
+            is_in_allowed_root = true;
+            break;
+        }
+    }
+    if !is_in_allowed_root {
+        return Err(contextualize_error(format!(
+            "path `{}` resolves outside the active workspace",
+            path_uri.inferred_native_path_string()
+        )));
+    }
     let metadata = fs
-        .get_metadata(&path_uri, sandbox.as_ref())
+        .get_metadata(&canonical_path, Some(&sandbox))
         .await
         .map_err(|error| contextualize_error(error.to_string()))?;
     if !metadata.is_file {
         return Err(contextualize_error(format!(
             "path `{}` is not a file",
-            path_uri.inferred_native_path_string()
+            canonical_path.inferred_native_path_string()
         )));
     }
     if metadata.size > OPENAI_FILE_UPLOAD_LIMIT_BYTES {
@@ -214,7 +224,7 @@ async fn build_uploaded_argument_value(
         )));
     }
     let contents = fs
-        .read_file_stream(&path_uri, sandbox.as_ref())
+        .read_file_stream(&canonical_path, Some(&sandbox))
         .await
         .map_err(|error| contextualize_error(error.to_string()))?;
     let file_name = path_uri
@@ -451,6 +461,55 @@ mod tests {
 
         assert!(error.contains("is too large"));
         assert!(error.contains(&(OPENAI_FILE_UPLOAD_LIMIT_BYTES + 1).to_string()));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn build_uploaded_argument_value_rejects_symlink_outside_workspace_before_upload() {
+        use std::os::unix::fs::symlink;
+        use wiremock::MockServer;
+
+        let server = MockServer::start().await;
+        let (session, mut turn_context) = make_session_and_context().await;
+        let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+        let dir = tempdir().expect("temp dir");
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir(&workspace).expect("create workspace");
+        let outside_file = dir.path().join("outside.txt");
+        tokio::fs::write(&outside_file, b"private")
+            .await
+            .expect("write outside file");
+        symlink(&outside_file, workspace.join("outside-link.txt")).expect("create symlink");
+        set_primary_environment_cwd(&mut turn_context, &workspace);
+
+        let mut config = (*turn_context.config).clone();
+        config.chatgpt_base_url = format!("{}/backend-api", server.uri());
+        turn_context.config = Arc::new(config);
+        let step_context = StepContext::for_test(Arc::new(turn_context));
+
+        let error = build_uploaded_argument_value(
+            &session,
+            &step_context,
+            Some(&auth),
+            FileArgumentLocation {
+                field_name: "file",
+                index: None,
+            },
+            &[],
+            "outside-link.txt",
+            /*hosted_upload*/ None,
+        )
+        .await
+        .expect_err("outside symlink target should be rejected");
+
+        assert!(error.contains("resolves outside the active workspace"));
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("mock server should expose received requests")
+                .is_empty()
+        );
     }
 
     #[tokio::test]
