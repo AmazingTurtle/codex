@@ -203,6 +203,7 @@ impl ChatWidget {
         self.invalidate_permission_discovery();
         self.invalidate_connector_scope();
         self.clear_pending_rate_limit_reset_requests();
+        self.clear_pending_token_activity_refreshes();
         self.clear_backend_banner();
         self.luna_reserve_notice_account_id = None;
         self.automatic_model_switch_state = backend_banners::AutomaticModelSwitchState::default();
@@ -220,7 +221,14 @@ impl ChatWidget {
         for (_, handle) in self.refreshing_status_outputs.drain(..) {
             handle.finish_rate_limit_refresh(&[], now);
         }
-        if had_refreshing_status_outputs {
+        let had_refreshing_all_account_status_outputs =
+            !self.refreshing_all_account_status_outputs.is_empty();
+        for (_, handle) in self.refreshing_all_account_status_outputs.drain(..) {
+            handle.fail_account_limits_refresh(
+                "account changed while limits were loading".to_string(),
+            );
+        }
+        if had_refreshing_status_outputs || had_refreshing_all_account_status_outputs {
             self.request_redraw();
         }
         self.status_line_workspace_headline = None;

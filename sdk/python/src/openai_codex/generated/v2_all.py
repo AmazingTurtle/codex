@@ -43,10 +43,79 @@ class AmazonBedrockAccount(BaseModel):
     ] = False
 
 
+class AccountListParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    cursor: str | None = None
+    limit: Annotated[int | None, Field(ge=0)] = None
+
+
+class AccountRateLimitsReadManyParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_ids: Annotated[
+        list[str] | None,
+        Field(
+            alias="accountIds",
+            description="Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+        ),
+    ] = None
+    exclude_reset_credit_details: Annotated[
+        bool | None,
+        Field(
+            alias="excludeResetCreditDetails",
+            description="Skip reset-credit details for lightweight background polling.",
+        ),
+    ] = None
+    supports_luna_reserve: Annotated[
+        bool | None,
+        Field(
+            alias="supportsLunaReserve",
+            description="Whether the requesting client supports automatic Luna Reserve fallback.",
+        ),
+    ] = None
+
+
+class AccountReadManyParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_ids: Annotated[
+        list[str] | None,
+        Field(
+            alias="accountIds",
+            description="Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+        ),
+    ] = None
+
+
+class AccountRemoveParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_id: Annotated[str, Field(alias="accountId")]
+
+
+class AccountRemoveResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    active_account_id: Annotated[str | None, Field(alias="activeAccountId")] = None
+
+
 class AccountRoutingOverride(Enum):
     no_constraint = "NO_CONSTRAINT"
     us = "us"
     us_cr = "us_cr"
+
+
+class AccountSwitchParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_id: Annotated[str, Field(alias="accountId")]
 
 
 class AccountTokenUsageDailyBucket(BaseModel):
@@ -1092,6 +1161,13 @@ class ConsumeAccountRateLimitResetCreditParams(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
     )
+    account_id: Annotated[
+        str | None,
+        Field(
+            alias="accountId",
+            description="Stored ChatGPT account to redeem for. When omitted, uses the active account.",
+        ),
+    ] = None
     credit_id: Annotated[
         str | None,
         Field(
@@ -6621,6 +6697,16 @@ class AccountLoginCompletedNotification(BaseModel):
     success: bool
 
 
+class AccountTokenUsageSnapshot(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    daily_usage_buckets: Annotated[
+        list[AccountTokenUsageDailyBucket] | None, Field(alias="dailyUsageBuckets")
+    ] = None
+    summary: AccountTokenUsageSummary
+
+
 class AccountUpdatedNotification(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -6755,6 +6841,17 @@ class CancelLoginAccountResponse(BaseModel):
         populate_by_name=True,
     )
     status: CancelLoginAccountStatus
+
+
+class ChatgptAccountSummary(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_id: Annotated[str, Field(alias="accountId")]
+    email: str | None = None
+    is_active: Annotated[bool, Field(alias="isActive")]
+    is_eligible: Annotated[bool, Field(alias="isEligible")]
+    plan_type: Annotated[PlanType, Field(alias="planType")]
 
 
 class InitializeRequest(BaseModel):
@@ -7461,6 +7558,33 @@ class AccountLogoutRequest(BaseModel):
     params: None = None
 
 
+class AccountListRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[Literal["account/list"], Field(title="Account/listRequestMethod")]
+    params: AccountListParams
+
+
+class AccountSwitchRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[Literal["account/switch"], Field(title="Account/switchRequestMethod")]
+    params: AccountSwitchParams
+
+
+class AccountRemoveRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[Literal["account/remove"], Field(title="Account/removeRequestMethod")]
+    params: AccountRemoveParams
+
+
 class AccountRateLimitsReadRequest(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -7470,6 +7594,18 @@ class AccountRateLimitsReadRequest(BaseModel):
         Literal["account/rateLimits/read"], Field(title="Account/rateLimits/readRequestMethod")
     ]
     params: GetAccountRateLimitsParams | None = None
+
+
+class AccountRateLimitsReadManyRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["account/rateLimits/readMany"],
+        Field(title="Account/rateLimits/readManyRequestMethod"),
+    ]
+    params: AccountRateLimitsReadManyParams
 
 
 class AccountRateLimitResetCreditConsumeRequest(BaseModel):
@@ -7491,6 +7627,28 @@ class AccountUsageReadRequest(BaseModel):
     id: RequestId
     method: Annotated[Literal["account/usage/read"], Field(title="Account/usage/readRequestMethod")]
     params: GetAccountTokenUsageParams | None = None
+
+
+class AccountUsageReadManyRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["account/usage/readMany"], Field(title="Account/usage/readManyRequestMethod")
+    ]
+    params: AccountReadManyParams
+
+
+class AccountModelsReadManyRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["account/models/readMany"], Field(title="Account/models/readManyRequestMethod")
+    ]
+    params: AccountReadManyParams
 
 
 class AccountWorkspaceMessagesReadRequest(BaseModel):
@@ -10377,11 +10535,64 @@ class WorkspaceMessage(BaseModel):
     message_type: Annotated[WorkspaceMessageType, Field(alias="messageType")]
 
 
+class AccountListResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    data: list[ChatgptAccountSummary]
+    next_cursor: Annotated[str | None, Field(alias="nextCursor")] = None
+
+
+class AccountModelsReadResult(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account: ChatgptAccountSummary
+    error: str | None = None
+    models: list[Model] | None = None
+
+
+class AccountRateLimitsSnapshot(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    ordinary_usage_allowed: Annotated[
+        bool | None,
+        Field(
+            alias="ordinaryUsageAllowed",
+            description="Backend permission for ordinary included usage, validated against this account. Null means unavailable; clients must not infer recovery from percentages or reset times.",
+        ),
+    ] = None
+    rate_limit_reset_credits: Annotated[
+        RateLimitResetCreditsSummary | None, Field(alias="rateLimitResetCredits")
+    ] = None
+    rate_limits: Annotated[RateLimitSnapshot, Field(alias="rateLimits")]
+    rate_limits_by_limit_id: Annotated[
+        dict[str, Any] | None, Field(alias="rateLimitsByLimitId")
+    ] = None
+
+
 class AccountRateLimitsUpdatedNotification(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
     )
     rate_limits: Annotated[RateLimitSnapshot, Field(alias="rateLimits")]
+
+
+class AccountSwitchResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account: ChatgptAccountSummary
+
+
+class AccountUsageReadResult(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account: ChatgptAccountSummary
+    error: str | None = None
+    usage: AccountTokenUsageSnapshot | None = None
 
 
 class AppInfo(BaseModel):
@@ -11537,6 +11748,29 @@ class TurnsPage(BaseModel):
     next_cursor: Annotated[str | None, Field(alias="nextCursor")] = None
 
 
+class AccountModelsReadManyResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    data: list[AccountModelsReadResult]
+
+
+class AccountRateLimitsReadResult(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account: ChatgptAccountSummary
+    error: str | None = None
+    rate_limits: Annotated[AccountRateLimitsSnapshot | None, Field(alias="rateLimits")] = None
+
+
+class AccountUsageReadManyResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    data: list[AccountUsageReadResult]
+
+
 class AdditionalFileSystemPermissions(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -12407,6 +12641,13 @@ class TurnStartParams(BaseModel):
     ] = None
 
 
+class AccountRateLimitsReadManyResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    data: list[AccountRateLimitsReadResult]
+
+
 class TurnStartRequest(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -12526,9 +12767,15 @@ class ClientRequest(
         | AccountLoginStartRequest
         | AccountLoginCancelRequest
         | AccountLogoutRequest
+        | AccountListRequest
+        | AccountSwitchRequest
+        | AccountRemoveRequest
         | AccountRateLimitsReadRequest
+        | AccountRateLimitsReadManyRequest
         | AccountRateLimitResetCreditConsumeRequest
         | AccountUsageReadRequest
+        | AccountUsageReadManyRequest
+        | AccountModelsReadManyRequest
         | AccountWorkspaceMessagesReadRequest
         | AccountSendAddCreditsNudgeEmailRequest
         | FeedbackUploadRequest
@@ -12636,9 +12883,15 @@ class ClientRequest(
         | AccountLoginStartRequest
         | AccountLoginCancelRequest
         | AccountLogoutRequest
+        | AccountListRequest
+        | AccountSwitchRequest
+        | AccountRemoveRequest
         | AccountRateLimitsReadRequest
+        | AccountRateLimitsReadManyRequest
         | AccountRateLimitResetCreditConsumeRequest
         | AccountUsageReadRequest
+        | AccountUsageReadManyRequest
+        | AccountModelsReadManyRequest
         | AccountWorkspaceMessagesReadRequest
         | AccountSendAddCreditsNudgeEmailRequest
         | FeedbackUploadRequest

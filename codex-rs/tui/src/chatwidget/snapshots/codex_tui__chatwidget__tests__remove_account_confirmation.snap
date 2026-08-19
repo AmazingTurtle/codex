@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/accounts.rs
+expression: "render_bottom_popup(&chat, 100)"
+---
+  Remove pro@example.com?
+  This revokes the login and removes its stored credentials.
+
+
+› 1. Keep account
+  2. Remove account
+
+  enter select · esc back

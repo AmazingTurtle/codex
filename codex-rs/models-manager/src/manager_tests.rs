@@ -616,6 +616,7 @@ c2ln",
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     std::fs::create_dir_all(codex_home).expect("codex home should be created");
     std::fs::write(

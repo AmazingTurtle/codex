@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/accounts.rs
+expression: "render_bottom_popup(&chat, 100)"
+---
+  Remove a ChatGPT account
+
+  Search accounts
+
+› pro@example.com   account-pro
+  free@example.com  account-free
+
+  enter select · esc back

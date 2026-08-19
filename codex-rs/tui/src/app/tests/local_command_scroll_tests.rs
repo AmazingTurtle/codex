@@ -428,7 +428,7 @@ async fn dynamic_service_tier_command_returns_to_latest() -> Result<()> {
 }
 
 #[tokio::test]
-async fn usage_picker_opens_analytics_without_moving_the_background_transcript() -> Result<()> {
+async fn usage_command_opens_analytics_without_moving_the_background_transcript() -> Result<()> {
     let (mut app, mut events, _op_rx) = make_test_app_with_channels().await;
     set_chatgpt_auth(&mut app.chat_widget);
     let startup_request = app.chat_widget.start_rate_limit_reset_startup_check();
@@ -446,19 +446,16 @@ async fn usage_picker_opens_analytics_without_moving_the_background_transcript()
     hold_older_history(&mut app, &mut tui);
     while events.try_recv().is_ok() {}
 
-    submit_local_command(&mut app, "/usage");
+    submit_local_command(&mut app, "/usage daily");
     let follow = events.try_recv().expect("usage command follow event");
     assert_matches!(&follow, AppEvent::FollowTranscript);
     app.handle_event(&mut tui, &mut server, follow).await?;
-    assert!(render_bottom_popup(&app.chat_widget, /*width*/ 80).contains("View analytics"));
-    while events.try_recv().is_ok() {}
+    assert!(!app.chat_widget.has_active_view());
     app.transcript_view
         .jump_to_entry(&app.transcript_cells, /*index*/ 0);
 
-    app.chat_widget
-        .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    let open = events.try_recv().expect("usage picker action");
-    assert_matches!(&open, AppEvent::OpenAnalytics { view: None });
+    let open = events.try_recv().expect("usage command action");
+    assert_matches!(&open, AppEvent::OpenAnalytics { view: Some(_) });
     let held = transcript_buffer(&mut app);
     app.handle_event(&mut tui, &mut server, open).await?;
     assert!(matches!(app.overlay.as_ref(), Some(Overlay::Analytics(_))));

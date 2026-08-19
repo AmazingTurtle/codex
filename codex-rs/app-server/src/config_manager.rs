@@ -62,6 +62,11 @@ pub(crate) struct ApplicationPolicyLoad {
     snapshot: Arc<ApplicationPolicySnapshot>,
 }
 
+enum ConfigCloudSource {
+    Application,
+    Session(CloudConfigBundleLoader),
+}
+
 #[derive(PartialEq, Eq)]
 struct ApplicationPolicySnapshot {
     revision: codex_http_client::NetworkPolicyRevision,
@@ -430,10 +435,53 @@ impl ConfigManager {
         &self,
         cli_overrides: &[(String, TomlValue)],
         request_overrides: Option<HashMap<String, serde_json::Value>>,
-        mut typesafe_overrides: ConfigOverrides,
+        typesafe_overrides: ConfigOverrides,
         fallback_cwd: Option<PathBuf>,
     ) -> std::io::Result<Config> {
+        self.load_with_cloud_config_source(
+            cli_overrides,
+            request_overrides,
+            typesafe_overrides,
+            fallback_cwd,
+            ConfigCloudSource::Application,
+        )
+        .await
+    }
+
+    #[instrument(level = "trace", skip_all)]
+    pub(crate) async fn load_with_cli_overrides_and_cloud_config_bundle(
+        &self,
+        cli_overrides: &[(String, TomlValue)],
+        request_overrides: Option<HashMap<String, serde_json::Value>>,
+        typesafe_overrides: ConfigOverrides,
+        fallback_cwd: Option<PathBuf>,
+        cloud_config_bundle: CloudConfigBundleLoader,
+    ) -> std::io::Result<Config> {
+        self.load_with_cloud_config_source(
+            cli_overrides,
+            request_overrides,
+            typesafe_overrides,
+            fallback_cwd,
+            ConfigCloudSource::Session(cloud_config_bundle),
+        )
+        .await
+    }
+
+    async fn load_with_cloud_config_source(
+        &self,
+        cli_overrides: &[(String, TomlValue)],
+        request_overrides: Option<HashMap<String, serde_json::Value>>,
+        mut typesafe_overrides: ConfigOverrides,
+        fallback_cwd: Option<PathBuf>,
+        cloud_source: ConfigCloudSource,
+    ) -> std::io::Result<Config> {
         let policy_load = self.refresh_application_network_policy().await?;
+        // Ordinary config uses the snapshot checked by application policy. A session may
+        // select another stored account's config while retaining the application's egress policy.
+        let cloud_config_bundle = match cloud_source {
+            ConfigCloudSource::Application => policy_load.cloud_config.clone(),
+            ConfigCloudSource::Session(loader) => loader,
+        };
         let mut request_overrides = request_overrides.unwrap_or_default();
         if let Some(value) = request_overrides.remove("bypass_hook_trust") {
             typesafe_overrides.bypass_hook_trust = Some(value.as_bool().ok_or_else(|| {
@@ -459,7 +507,7 @@ impl ConfigManager {
             .strict_config(self.strict_config)
             .harness_overrides(typesafe_overrides)
             .fallback_cwd(fallback_cwd)
-            .cloud_config_bundle(policy_load.cloud_config.clone())
+            .cloud_config_bundle(cloud_config_bundle)
             .thread_config_loader(Arc::clone(&self.thread_config_loader))
             .build()
             .await;
