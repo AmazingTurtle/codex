@@ -415,6 +415,57 @@ fn build_seatbelt_access_policy(
     }
 }
 
+fn build_seatbelt_denied_ancestor_unlink_policy(
+    roots: &[SeatbeltAccessRoot],
+) -> (String, Vec<(String, PathBuf)>) {
+    let mut policy_components = Vec::new();
+    let mut params = Vec::new();
+
+    for (root_index, access_root) in roots.iter().enumerate() {
+        let root = normalize_path_for_sandbox(access_root.root.as_path())
+            .unwrap_or_else(|| access_root.root.clone());
+        let mut ancestors = BTreeMap::new();
+        for excluded_subpath in &access_root.excluded_subpaths {
+            let excluded_subpath = normalize_path_for_sandbox(excluded_subpath.as_path())
+                .unwrap_or_else(|| excluded_subpath.clone());
+            let mut ancestor = excluded_subpath.as_path().parent();
+            while let Some(path) = ancestor {
+                if path == root.as_path() {
+                    break;
+                }
+                if !path.starts_with(root.as_path()) {
+                    break;
+                }
+                if let Some(path) = normalize_path_for_sandbox(path) {
+                    ancestors
+                        .entry(path.to_string_lossy().to_string())
+                        .or_insert(path);
+                }
+                ancestor = path.parent();
+            }
+        }
+
+        for (ancestor_index, ancestor) in ancestors.into_values().enumerate() {
+            let ancestor_param =
+                format!("WRITABLE_ROOT_{root_index}_DENIED_ANCESTOR_{ancestor_index}");
+            params.push((ancestor_param.clone(), ancestor.into_path_buf()));
+            policy_components.push(format!("(literal (param \"{ancestor_param}\"))"));
+        }
+    }
+
+    if policy_components.is_empty() {
+        (String::new(), Vec::new())
+    } else {
+        (
+            format!(
+                "(deny file-write-unlink\n{}\n)",
+                policy_components.join(" ")
+            ),
+            params,
+        )
+    }
+}
+
 fn seatbelt_protected_metadata_name_regex(root: &AbsolutePathBuf, name: &str) -> String {
     let mut root = root.to_string_lossy().to_string();
     while root.len() > 1 && root.ends_with('/') {
@@ -653,6 +704,32 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
 
     let unreadable_roots =
         file_system_sandbox_policy.get_unreadable_roots_with_cwd(sandbox_policy_cwd);
+    let write_roots = if file_system_sandbox_policy.has_full_disk_write_access() {
+        if unreadable_roots.is_empty() {
+            Vec::new()
+        } else {
+            vec![SeatbeltAccessRoot {
+                root: root_absolute_path(),
+                excluded_subpaths: unreadable_roots.clone(),
+                protected_metadata_names: Vec::new(),
+            }]
+        }
+    } else {
+        file_system_sandbox_policy
+            .get_writable_roots_with_cwd(sandbox_policy_cwd)
+            .into_iter()
+            .map(|root| SeatbeltAccessRoot {
+                protected_metadata_names: protected_metadata_names_for_writable_root(
+                    file_system_sandbox_policy,
+                    &root,
+                    sandbox_policy_cwd,
+                ),
+                root: root.root,
+                excluded_subpaths: root.read_only_subpaths,
+            })
+            .collect()
+    };
+
     let (file_write_policy, file_write_dir_params) =
         if file_system_sandbox_policy.has_full_disk_write_access() {
             if unreadable_roots.is_empty() {
@@ -665,32 +742,14 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
                 build_seatbelt_access_policy(
                     "file-write*",
                     "WRITABLE_ROOT",
-                    vec![SeatbeltAccessRoot {
-                        root: root_absolute_path(),
-                        excluded_subpaths: unreadable_roots.clone(),
-                        protected_metadata_names: Vec::new(),
-                    }],
+                    write_roots.clone(),
                 )
             }
         } else {
-            build_seatbelt_access_policy(
-                "file-write*",
-                "WRITABLE_ROOT",
-                file_system_sandbox_policy
-                    .get_writable_roots_with_cwd(sandbox_policy_cwd)
-                    .into_iter()
-                    .map(|root| SeatbeltAccessRoot {
-                        protected_metadata_names: protected_metadata_names_for_writable_root(
-                            file_system_sandbox_policy,
-                            &root,
-                            sandbox_policy_cwd,
-                        ),
-                        root: root.root,
-                        excluded_subpaths: root.read_only_subpaths,
-                    })
-                    .collect(),
-            )
+            build_seatbelt_access_policy("file-write*", "WRITABLE_ROOT", write_roots.clone())
         };
+    let (denied_ancestor_unlink_policy, denied_ancestor_unlink_params) =
+        build_seatbelt_denied_ancestor_unlink_policy(&write_roots);
 
     let (file_read_policy, file_read_dir_params) =
         if file_system_sandbox_policy.has_full_disk_read_access() {
@@ -758,6 +817,7 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
         MACOS_SEATBELT_BASE_POLICY.to_string(),
         file_read_policy,
         file_write_policy,
+        denied_ancestor_unlink_policy,
         deny_read_policy,
         network_policy,
     ];
@@ -773,6 +833,7 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
     let dir_params = [
         file_read_dir_params,
         file_write_dir_params,
+        denied_ancestor_unlink_params,
         unix_socket_dir_params(&proxy),
     ]
     .concat();

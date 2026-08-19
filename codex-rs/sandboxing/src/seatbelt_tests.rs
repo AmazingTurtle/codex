@@ -333,6 +333,7 @@ fn explicit_unreadable_paths_are_excluded_from_full_disk_read_and_write_access()
             "-DWRITABLE_ROOT_0=/".to_string(),
             "-DWRITABLE_ROOT_0_EXCLUDED_0=/.codex".to_string(),
             format!("-DWRITABLE_ROOT_0_EXCLUDED_1={}", unreadable_root.display()),
+            "-DWRITABLE_ROOT_0_DENIED_ANCESTOR_0=/tmp".to_string(),
         ],
         "unexpected write carveout parameters in args: {args:#?}"
     );
@@ -422,6 +423,57 @@ fn explicit_unreadable_paths_are_excluded_from_readable_roots() {
             |arg| arg == &format!("-DREADABLE_ROOT_0_EXCLUDED_0={}", unreadable_root.display())
         ),
         "expected read carveout parameter in args: {args:#?}"
+    );
+}
+
+#[test]
+fn unreadable_paths_deny_unlink_on_writable_ancestors() {
+    let root = absolute_path("/tmp/codex-writable");
+    let unreadable = absolute_path("/tmp/codex-writable/.ssh/id_rsa");
+    let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry {
+            path: root.clone().into(),
+            access: FileSystemAccessMode::Write,
+            missing_path_behavior: None,
+        },
+        FileSystemSandboxEntry {
+            path: unreadable.into(),
+            access: FileSystemAccessMode::Deny,
+            missing_path_behavior: None,
+        },
+    ]);
+
+    let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
+        command: vec!["/bin/true".to_string()],
+        file_system_sandbox_policy: &file_system_policy,
+        network_sandbox_policy: NetworkSandboxPolicy::Restricted,
+        sandbox_policy_cwd: Path::new("/"),
+        enforce_managed_network: false,
+        managed_network: None,
+        environment_id: None,
+        network: None,
+        extra_allow_unix_sockets: &[],
+    })
+    .unwrap();
+
+    let policy = seatbelt_policy_arg(&args);
+    assert!(
+        policy.contains(
+            "(deny file-write-unlink\n(literal (param \"WRITABLE_ROOT_0_DENIED_ANCESTOR_0\"))\n)"
+        ),
+        "expected ancestor unlink deny in policy:\n{policy}"
+    );
+    assert!(
+        args.iter().any(
+            |arg| arg == "-DWRITABLE_ROOT_0_DENIED_ANCESTOR_0=/tmp/codex-writable/.ssh"
+        ),
+        "expected denied ancestor parameter in args: {args:#?}"
+    );
+    assert!(
+        !args
+            .iter()
+            .any(|arg| arg == "-DWRITABLE_ROOT_0_DENIED_ANCESTOR_1=/tmp/codex-writable"),
+        "writable root itself should not be denied as a rename source: {args:#?}"
     );
 }
 
