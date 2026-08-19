@@ -69,7 +69,7 @@ fn is_safe_to_call_with_exec(command: &[String]) -> bool {
         return false;
     };
 
-    match executable_name_lookup_key(cmd0).as_deref() {
+    match executable_name_for_safe_lookup(cmd0).as_deref() {
         Some(cmd) if cfg!(target_os = "linux") && matches!(cmd, "numfmt" | "tac") => true,
 
         #[rustfmt::skip]
@@ -172,7 +172,24 @@ fn is_safe_to_call_with_exec(command: &[String]) -> bool {
     }
 }
 
+fn executable_name_for_safe_lookup(raw: &str) -> Option<String> {
+    if raw.contains('/') || raw.contains('\\') {
+        return None;
+    }
+
+    executable_name_lookup_key(raw)
+}
+
 pub(crate) fn is_safe_git_command(command: &[String]) -> bool {
+    if command
+        .first()
+        .and_then(|cmd| executable_name_for_safe_lookup(cmd))
+        .as_deref()
+        != Some("git")
+    {
+        return false;
+    }
+
     let Some((subcommand_idx, subcommand)) =
         find_git_subcommand(command, &["status", "log", "diff", "show", "branch"])
     else {
@@ -374,6 +391,24 @@ mod tests {
             assert!(!is_safe_to_call_with_exec(&vec_str(&["numfmt", "1000"])));
             assert!(!is_safe_to_call_with_exec(&vec_str(&["tac", "Cargo.toml"])));
         }
+    }
+
+    #[test]
+    fn path_qualified_allowlisted_executables_are_not_safe() {
+        for args in [
+            vec_str(&["./echo", "hello"]),
+            vec_str(&["subdir/echo", "hello"]),
+            vec_str(&["/bin/echo", "hello"]),
+            vec_str(&[r".\echo.exe", "hello"]),
+        ] {
+            assert!(
+                !is_safe_to_call_with_exec(&args),
+                "expected {args:?} to require approval because the executable is path-qualified",
+            );
+        }
+
+        assert!(is_safe_to_call_with_exec(&vec_str(&["echo", "hello"])));
+        assert!(!is_safe_git_command(&vec_str(&["./git", "status"])));
     }
 
     #[test]
@@ -636,12 +671,12 @@ mod tests {
     }
 
     #[test]
-    fn windows_git_full_path_is_safe() {
+    fn windows_git_full_path_requires_approval() {
         if !cfg!(windows) {
             return;
         }
 
-        assert!(is_known_safe_command(&vec_str(&[
+        assert!(!is_known_safe_command(&vec_str(&[
             r"C:\Program Files\Git\cmd\git.exe",
             "status",
         ])));
@@ -739,6 +774,16 @@ mod tests {
         assert!(
             !is_known_safe_command(&vec_str(&["bash", "-lc", "ls > out.txt"])),
             "> redirection should be rejected"
+        );
+
+        assert!(
+            !is_known_safe_command(&vec_str(&["bash", "-lc", "./echo hello"])),
+            "Path-qualified allowlisted commands should not be auto-approved through bash -lc"
+        );
+
+        assert!(
+            !is_known_safe_command(&vec_str(&["bash", "-lc", "/bin/echo hello"])),
+            "Absolute allowlisted commands should not be auto-approved through bash -lc"
         );
     }
 
