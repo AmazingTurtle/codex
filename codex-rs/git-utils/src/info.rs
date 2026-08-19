@@ -815,6 +815,31 @@ pub async fn resolve_root_git_project_for_trust(
     if worktrees_dir.as_path().file_name() != Some(OsStr::new("worktrees")) {
         return None;
     }
+    if !fs
+        .get_metadata(&PathUri::from_abs_path(&git_dir_path), /*sandbox*/ None)
+        .await
+        .ok()?
+        .is_directory
+    {
+        return None;
+    }
+    let worktree_backlink_path = git_dir_path.join("gitdir");
+    let worktree_backlink_s = fs
+        .read_file_text(
+            &PathUri::from_abs_path(&worktree_backlink_path),
+            /*sandbox*/ None,
+        )
+        .await
+        .ok()?;
+    let worktree_backlink_rel = worktree_backlink_s.trim();
+    if worktree_backlink_rel.is_empty() {
+        return None;
+    }
+    let worktree_backlink =
+        AbsolutePathBuf::resolve_path_against_base(worktree_backlink_rel, git_dir_path.as_path());
+    if worktree_backlink != dot_git {
+        return None;
+    }
 
     let common_dir = worktrees_dir.parent()?;
     common_dir.parent()
