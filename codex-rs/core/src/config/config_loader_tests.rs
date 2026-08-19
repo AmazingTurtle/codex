@@ -208,7 +208,7 @@ invalid = ["#,
 
     let user_layer = layers
         .get_active_user_layer()
-        .expect("expected a user layer even when CODEX_HOME/config.toml is ignored");
+        .expect("expected a user layer even when BETTER_CODEX_HOME/config.toml is ignored");
     assert_eq!(
         user_layer.config,
         TomlValue::Table(toml::map::Map::new()),
@@ -912,7 +912,7 @@ async fn returns_packaged_defaults_when_other_layers_are_missing() {
     .expect("load layers");
     let user_layer = layers
         .get_active_user_layer()
-        .expect("expected a user layer even when CODEX_HOME/config.toml does not exist");
+        .expect("expected a user layer even when BETTER_CODEX_HOME/config.toml does not exist");
     let expected_user_layer = ConfigLayerEntry::new(
         ConfigLayerSource::User {
             file: AbsolutePathBuf::resolve_path_against_base(CONFIG_TOML_FILE, tmp.path()),

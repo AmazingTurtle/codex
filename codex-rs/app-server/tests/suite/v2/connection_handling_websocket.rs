@@ -497,7 +497,7 @@ pub(super) async fn spawn_websocket_server_with_args(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .env("CODEX_HOME", codex_home)
+        .env("BETTER_CODEX_HOME", codex_home)
         .env("RUST_LOG", "warn");
     let mut process = cmd
         .kill_on_drop(true)
@@ -633,7 +633,7 @@ async fn run_websocket_server_to_completion_with_args(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .env("CODEX_HOME", codex_home)
+        .env("BETTER_CODEX_HOME", codex_home)
         .env("RUST_LOG", "warn");
     timeout(DEFAULT_READ_TIMEOUT, cmd.output())
         .await

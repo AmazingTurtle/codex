@@ -111,7 +111,7 @@ fn doctor_command(executable: &Path, cwd: &Path, codex_home: &Path) -> Command {
         .arg("doctor")
         .arg("--json")
         .current_dir(codex_home)
-        .env("CODEX_HOME", codex_home);
+        .env("BETTER_CODEX_HOME", codex_home);
     command
 }
 
@@ -216,7 +216,10 @@ mod tests {
         );
         assert_eq!(
             command.get_envs().collect::<Vec<_>>(),
-            [("CODEX_HOME".as_ref(), Some(codex_home.path().as_os_str()))]
+            [(
+                "BETTER_CODEX_HOME".as_ref(),
+                Some(codex_home.path().as_os_str())
+            )]
         );
     }
 

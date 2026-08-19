@@ -98,11 +98,11 @@ async fn sandbox_fetches_and_enforces_cloud_managed_permission_profile() -> Resu
         .mount(&server)
         .await;
 
-    let codex = codex_utils_cargo_bin::cargo_bin("codex")?;
+    let codex = codex_utils_cargo_bin::cargo_bin("better-codex")?;
     let chatgpt_base_url_override = format!("chatgpt_base_url=\"{chatgpt_base_url}\"");
     let output = Command::new(&codex)
         .current_dir(codex_home.path())
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env("NO_PROXY", "127.0.0.1,localhost")
         .env("no_proxy", "127.0.0.1,localhost")
         .env_remove("CODEX_ACCESS_TOKEN")
@@ -140,8 +140,8 @@ async fn sandbox_fetches_and_enforces_cloud_managed_permission_profile() -> Resu
     );
     if !nested_macos_sandbox_unavailable {
         assert!(
-            String::from_utf8(output.stdout)?.starts_with("codex"),
-            "expected the sandboxed Codex version command to run",
+            String::from_utf8(output.stdout)?.starts_with("better-codex"),
+            "expected the sandboxed Better Codex version command to run",
         );
     }
 

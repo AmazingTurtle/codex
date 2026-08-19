@@ -155,6 +155,7 @@ mod multi_agents;
 mod named_session_lookup;
 mod notifications;
 #[cfg(any(not(debug_assertions), test))]
+#[cfg(debug_assertions)]
 mod npm_registry;
 pub(crate) mod onboarding;
 mod oss_selection;
@@ -1218,7 +1219,7 @@ async fn run_ratatui_app(
                 resume_hint: None,
                 update_action: None,
                 exit_reason: ExitReason::Fatal(format!(
-                    "No saved session found with ID {id_str}. Run `codex {action}` without an ID to choose from existing sessions."
+                    "No saved session found with ID {id_str}. Run `better-codex {action}` without an ID to choose from existing sessions."
                 )),
             })
         };

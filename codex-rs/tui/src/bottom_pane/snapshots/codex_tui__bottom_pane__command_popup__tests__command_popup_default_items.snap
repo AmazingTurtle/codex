@@ -21,7 +21,7 @@ expression: commands
 /resume - resume a saved chat
 /fork - fork the current chat
 /app - continue this session in the Desktop app
-/init - create an AGENTS.md file with instructions for Codex
+/init - create an AGENTS.md file with instructions for Better Codex
 /compact - summarize conversation to prevent hitting the context limit
 /agent - switch the active agent thread
 /side - start a side conversation in an ephemeral fork
@@ -37,7 +37,7 @@ expression: commands
 /pets - choose or hide the terminal pet
 /mcp - list configured MCP tools; use /mcp verbose for details
 /logout - log out of Codex
-/exit - exit Codex
+/exit - exit Better Codex
 /feedback - send logs to maintainers
 /rollout - print the rollout file path
 /ps - list background terminals

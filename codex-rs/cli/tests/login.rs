@@ -24,8 +24,8 @@ use wiremock::matchers::method;
 use wiremock::matchers::path;
 
 fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
-    let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
-    cmd.env("CODEX_HOME", codex_home);
+    let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?);
+    cmd.env("BETTER_CODEX_HOME", codex_home);
     Ok(cmd)
 }
 
@@ -64,6 +64,35 @@ fn login_with_api_key_reads_stdin_and_writes_auth_json() -> Result<()> {
     assert!(auth.get("tokens").is_none());
     assert!(auth.get("agent_identity").is_none());
 
+    Ok(())
+}
+
+#[test]
+fn login_ignores_legacy_home_environment_variables() -> Result<()> {
+    let better_home = TempDir::new()?;
+    let legacy_home = TempDir::new()?;
+    let legacy_sqlite_home = TempDir::new()?;
+    write_file_auth_config(better_home.path())?;
+
+    codex_command(better_home.path())?
+        .env("CODEX_HOME", legacy_home.path())
+        .env("CODEX_SQLITE_HOME", legacy_sqlite_home.path())
+        .args([
+            "-c",
+            "forced_login_method=\"api\"",
+            "login",
+            "--with-api-key",
+        ])
+        .write_stdin("sk-isolated\n")
+        .assert()
+        .success();
+
+    assert_eq!(
+        read_auth_json(better_home.path())?["OPENAI_API_KEY"],
+        "sk-isolated"
+    );
+    assert!(!legacy_home.path().join("auth.json").exists());
+    assert!(legacy_sqlite_home.path().read_dir()?.next().is_none());
     Ok(())
 }
 

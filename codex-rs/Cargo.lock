@@ -2400,6 +2400,7 @@ dependencies = [
  "codex-home",
  "codex-http-client",
  "codex-install-context",
+ "codex-keyring-store",
  "codex-login",
  "codex-mcp",
  "codex-mcp-server",
@@ -2407,12 +2408,14 @@ dependencies = [
  "codex-model-provider",
  "codex-models-manager",
  "codex-plugin",
+ "codex-product-info",
  "codex-protocol",
  "codex-responses-api-proxy",
  "codex-rmcp-client",
  "codex-rollout",
  "codex-rollout-trace",
  "codex-sandboxing",
+ "codex-secrets",
  "codex-skills-extension",
  "codex-state",
  "codex-stdio-to-uds",
@@ -2422,9 +2425,11 @@ dependencies = [
  "codex-utils-absolute-path",
  "codex-utils-cargo-bin",
  "codex-utils-cli",
+ "codex-utils-home-dir",
  "codex-utils-path",
  "codex-windows-sandbox",
  "crossterm",
+ "dirs",
  "futures",
  "http 1.4.0",
  "insta",
@@ -3501,6 +3506,7 @@ dependencies = [
  "codex-keyring-store",
  "codex-model-provider-info",
  "codex-otel",
+ "codex-product-info",
  "codex-protocol",
  "codex-secrets",
  "codex-terminal-detection",
@@ -3885,6 +3891,10 @@ dependencies = [
  "libc",
  "pretty_assertions",
 ]
+
+[[package]]
+name = "codex-product-info"
+version = "0.148.0"
 
 [[package]]
 name = "codex-prompts"
@@ -4371,6 +4381,7 @@ dependencies = [
  "codex-models-manager",
  "codex-otel",
  "codex-plugin",
+ "codex-product-info",
  "codex-protocol",
  "codex-rollout",
  "codex-sandboxing",
@@ -4518,6 +4529,7 @@ name = "codex-utils-cli"
 version = "0.148.0"
 dependencies = [
  "clap",
+ "codex-product-info",
  "codex-protocol",
  "codex-shell-command",
  "pretty_assertions",
@@ -4537,6 +4549,7 @@ version = "0.148.0"
 name = "codex-utils-home-dir"
 version = "0.148.0"
 dependencies = [
+ "codex-product-info",
  "codex-utils-absolute-path",
  "dirs",
  "pretty_assertions",

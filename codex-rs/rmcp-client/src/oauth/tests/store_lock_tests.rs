@@ -162,7 +162,7 @@ fn store_lock_is_released_when_holder_process_exits() -> Result<()> {
         .arg("--exact")
         .arg(LOCK_HOLDER_CHILD_TEST)
         .arg("--ignored")
-        .env("CODEX_HOME", env.path())
+        .env("BETTER_CODEX_HOME", env.path())
         .env(LOCK_HOLDER_READY_PATH_ENV, &ready_file)
         .spawn()
         .context("spawn OAuth store lock holder test process")?;

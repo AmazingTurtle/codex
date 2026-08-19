@@ -2,11 +2,11 @@
 source: cli/src/doctor/output.rs
 expression: "render_human_report(&report, detailed_no_color_unicode_options())"
 ---
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    ⚠ terminal     narrow terminal
-   ✗ auth         token expired - Run `codex login`.
+   ✗ auth         token expired - Run `better-codex login`.
    ⚠ git          this worktree is not on a Windows Dev Drive - create a trusted Windows Dev Drive: https://learn.microsoft.com/en-us/windows/dev-drive/
 ─────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ Environment
   ✓ state        state paths inspectable
 
 Configuration
-  ✗ auth         token expired — Run `codex login`.
+  ✗ auth         token expired — Run `better-codex login`.
       OPENAI_API_KEY           present
 
 Updates

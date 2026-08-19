@@ -140,13 +140,13 @@ async fn assert_expired_token_refresh(with_headers_helper: bool) -> anyhow::Resu
     let codex_home = TempDir::new()?;
     let server_url = format!("{}/mcp", server.uri());
 
-    // Credential storage resolves CODEX_HOME from the process environment.
+    // Credential storage resolves BETTER_CODEX_HOME from the process environment.
     // Run the client half of the test in an ignored helper test so it can use
     // an isolated home without mutating the parent test runner's environment.
     let mut command = Command::new(std::env::current_exe()?);
     command
         .args(["oauth_startup_child", "--exact", "--ignored", "--nocapture"])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env(CHILD_SERVER_URL_ENV, server_url)
         .env("MCP_TEST_AMBIENT_SECRET", "must-not-reach-helper");
     if with_headers_helper {
@@ -184,7 +184,7 @@ async fn reports_auth_status_for_persisted_credentials() -> anyhow::Result<()> {
             "--ignored",
             "--nocapture",
         ])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .status()
         .await?;
 
@@ -216,7 +216,7 @@ async fn identifies_expired_unrefreshable_token_startup_error() -> anyhow::Resul
             "--ignored",
             "--nocapture",
         ])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env(CHILD_SERVER_URL_ENV, format!("{}/mcp", server.uri()))
         .status()
         .await?;

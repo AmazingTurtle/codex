@@ -74,7 +74,8 @@ pub(crate) use self::resolved_store::ResolvedOAuthTokens;
 pub(crate) use self::resolved_store::resolve_oauth_tokens_from_store_policy;
 use self::resolved_store::try_resolve_oauth_tokens_from_store_policy;
 
-const KEYRING_SERVICE: &str = "Codex MCP Credentials";
+const KEYRING_SERVICE: &str = "Better Codex MCP Credentials";
+const UPSTREAM_KEYRING_SERVICE: &str = "Codex MCP Credentials";
 const MCP_OAUTH_SECRET_PREFIX: &str = "MCP_OAUTH";
 const REFRESH_SKEW_MILLIS: u64 = 30_000;
 
@@ -345,6 +346,32 @@ fn load_oauth_tokens_from_direct_keyring<K: KeyringStore>(
         Ok(None) => Ok(None),
         Err(error) => Err(Error::new(error.into_error())),
     }
+}
+
+/// Copies one upstream Codex direct-keyring credential into Better Codex.
+///
+/// The upstream entry is intentionally left untouched.
+pub fn import_upstream_direct_keyring_oauth_tokens(server_name: &str, url: &str) -> Result<bool> {
+    let keyring_store = DefaultKeyringStore;
+    import_upstream_direct_keyring_oauth_tokens_with_store(&keyring_store, server_name, url)
+}
+
+fn import_upstream_direct_keyring_oauth_tokens_with_store<K: KeyringStore>(
+    keyring_store: &K,
+    server_name: &str,
+    url: &str,
+) -> Result<bool> {
+    let key = compute_store_key(server_name, url)?;
+    let Some(serialized) = keyring_store
+        .load(UPSTREAM_KEYRING_SERVICE, &key)
+        .map_err(|error| Error::new(error.into_error()))?
+    else {
+        return Ok(false);
+    };
+    let tokens: StoredOAuthTokens = serde_json::from_str(&serialized)
+        .context("failed to deserialize upstream Codex MCP OAuth tokens")?;
+    save_oauth_tokens_to_direct_keyring(keyring_store, server_name, &tokens)?;
+    Ok(true)
 }
 
 fn load_oauth_tokens_from_secrets_keyring<K: KeyringStore + Clone + 'static>(
@@ -1025,15 +1052,85 @@ fn sha_256_prefix(value: &Value) -> Result<String> {
 mod tests {
     use super::*;
     use anyhow::Result;
+    use codex_keyring_store::CredentialStoreError;
     use codex_keyring_store::tests::MockKeyringStore;
     use codex_secrets::compute_keyring_account;
     use keyring::Error as KeyringError;
     use pretty_assertions::assert_eq;
+    use std::collections::HashMap;
     use std::sync::Arc;
+    use std::sync::Mutex;
     #[path = "persistor_tests.rs"]
     mod persistor_tests;
 
     use super::test_support::TempCodexHome;
+
+    #[derive(Debug, Default)]
+    struct ServiceAwareKeyringStore {
+        values: Mutex<HashMap<(String, String), String>>,
+    }
+
+    impl KeyringStore for ServiceAwareKeyringStore {
+        fn load(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<Option<String>, CredentialStoreError> {
+            Ok(self
+                .values
+                .lock()
+                .expect("keyring values")
+                .get(&(service.to_string(), account.to_string()))
+                .cloned())
+        }
+
+        fn save(
+            &self,
+            service: &str,
+            account: &str,
+            value: &str,
+        ) -> std::result::Result<(), CredentialStoreError> {
+            self.values.lock().expect("keyring values").insert(
+                (service.to_string(), account.to_string()),
+                value.to_string(),
+            );
+            Ok(())
+        }
+
+        fn delete(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<bool, CredentialStoreError> {
+            Ok(self
+                .values
+                .lock()
+                .expect("keyring values")
+                .remove(&(service.to_string(), account.to_string()))
+                .is_some())
+        }
+    }
+
+    #[test]
+    fn imports_direct_keyring_tokens_without_removing_upstream_entry() -> Result<()> {
+        let keyring_store = ServiceAwareKeyringStore::default();
+        let tokens = sample_tokens();
+        let key = compute_store_key(&tokens.server_name, &tokens.url)?;
+        let serialized = serde_json::to_string(&tokens)?;
+        keyring_store.save(UPSTREAM_KEYRING_SERVICE, &key, &serialized)?;
+
+        assert!(import_upstream_direct_keyring_oauth_tokens_with_store(
+            &keyring_store,
+            &tokens.server_name,
+            &tokens.url,
+        )?);
+        assert_eq!(
+            keyring_store.load(UPSTREAM_KEYRING_SERVICE, &key)?,
+            Some(serialized.clone())
+        );
+        assert_eq!(keyring_store.load(KEYRING_SERVICE, &key)?, Some(serialized));
+        Ok(())
+    }
 
     #[test]
     fn stored_oauth_credentials_ignore_derived_expiration_and_track_token_changes() -> Result<()> {

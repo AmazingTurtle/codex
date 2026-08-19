@@ -126,7 +126,7 @@ impl MemoriesSettingsView {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Reset all memories?".bold()));
         header.push(Line::from(
-            "This clears local memory files and rollout summaries for the current Codex home."
+            "This clears local memory files and rollout summaries for the current Better Codex home."
                 .dim(),
         ));
         header

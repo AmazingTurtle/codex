@@ -504,7 +504,7 @@ fn startup_draft_bottom_pane(
             frame_requester,
             has_input_focus: true,
             enhanced_keys_supported,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Better Codex to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             skills: None,

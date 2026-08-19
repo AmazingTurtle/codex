@@ -58,6 +58,10 @@ impl Arg0PathEntryGuard {
 }
 
 pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
+    arg0_dispatch_with_path_aliases(/*create_path_aliases*/ true)
+}
+
+fn arg0_dispatch_with_path_aliases(create_path_aliases: bool) -> Option<Arg0PathEntryGuard> {
     // Determine if we were invoked via the special alias.
     let mut args = std::env::args_os();
     let argv0 = args.next().unwrap_or_default();
@@ -155,6 +159,10 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
     // before creating any threads/the Tokio runtime.
     load_dotenv();
 
+    if !create_path_aliases {
+        return None;
+    }
+
     let (path_entry_guard, updated_path_env_var) = prepare_path_env_var_with_aliases(
         InstallContext::current(),
         std::env::var_os("PATH"),
@@ -218,10 +226,29 @@ where
     F: FnOnce(Arg0DispatchPaths) -> Fut + Send + 'static,
     Fut: Future<Output = anyhow::Result<()>>,
 {
+    arg0_dispatch_or_else_inner(/*create_path_aliases*/ true, main_fn)
+}
+
+/// Runs an async entry point without creating temporary helper aliases in Codex home.
+///
+/// This is intended for commands that must operate on or replace Codex home itself.
+pub fn arg0_dispatch_or_else_without_path_aliases<F, Fut>(main_fn: F) -> anyhow::Result<()>
+where
+    F: FnOnce(Arg0DispatchPaths) -> Fut + Send + 'static,
+    Fut: Future<Output = anyhow::Result<()>>,
+{
+    arg0_dispatch_or_else_inner(/*create_path_aliases*/ false, main_fn)
+}
+
+fn arg0_dispatch_or_else_inner<F, Fut>(create_path_aliases: bool, main_fn: F) -> anyhow::Result<()>
+where
+    F: FnOnce(Arg0DispatchPaths) -> Fut + Send + 'static,
+    Fut: Future<Output = anyhow::Result<()>>,
+{
     // Retain the TempDir so it exists for the lifetime of the invocation of
     // this executable. Admittedly, we could invoke `keep()` on it, but it
     // would be nice to avoid leaving temporary directories behind, if possible.
-    let path_entry_guard = arg0_dispatch();
+    let path_entry_guard = arg0_dispatch_with_path_aliases(create_path_aliases);
     let current_exe = std::env::current_exe().ok();
 
     // Regular invocation. Run the async entry point on a thread with the same

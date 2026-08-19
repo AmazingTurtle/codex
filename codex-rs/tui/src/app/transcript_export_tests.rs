@@ -31,7 +31,7 @@ fn markdown_transcript_preserves_messages_and_formats_activity() {
         user(
             concat!(
                 "# Context from my IDE setup:\n\n## Active file: src/lib.rs\n\n",
-                "## My request for Codex:\nExplain \u{1b}[31m**the change**\u{1b}[0m"
+                "## My request for Better Codex:\nExplain \u{1b}[31m**the change**\u{1b}[0m"
             ),
             Vec::new(),
         ),

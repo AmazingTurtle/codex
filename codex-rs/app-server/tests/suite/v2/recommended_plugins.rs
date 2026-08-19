@@ -96,11 +96,9 @@ async fn recommended_plugins_after_external_login(
         ),
     )?;
 
-    let sqlite_home = codex_home.path().to_string_lossy();
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .without_managed_config()
-        .with_env_overrides(&[("CODEX_SQLITE_HOME", Some(sqlite_home.as_ref()))])
         .build()
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, app_server.initialize()).await??;

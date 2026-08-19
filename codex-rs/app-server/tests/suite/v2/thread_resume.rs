@@ -300,13 +300,17 @@ async fn assert_thread_resume_rejects_writer_owned_by_another_process(
     .await??;
 
     let secondary_sqlite_home = TempDir::new()?;
-    let secondary_sqlite_home_path = secondary_sqlite_home.path().to_string_lossy();
+    let config_path = codex_home.path().join("config.toml");
+    let config = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        format!(
+            "{config}\nsqlite_home = {}\n",
+            toml::Value::String(secondary_sqlite_home.path().display().to_string())
+        ),
+    )?;
     let mut secondary = TestAppServer::builder()
         .with_codex_home(codex_home.path())
-        .with_env_overrides(&[(
-            "CODEX_SQLITE_HOME",
-            Some(secondary_sqlite_home_path.as_ref()),
-        )])
         .build_initialized()
         .await?;
     let resume_id = secondary
@@ -1324,14 +1328,9 @@ async fn goal_first_live_thread_appears_in_state_db_thread_list() -> Result<()> 
         config.replace("personality = true\n", "personality = true\ngoals = true\n"),
     )?;
 
-    let sqlite_home = codex_home_path
-        .as_path()
-        .to_str()
-        .expect("test codex home should be utf-8");
     let mut mcp = TestAppServer::builder()
         .with_codex_home(&codex_home_path)
         .without_managed_config()
-        .with_env_overrides(&[("CODEX_SQLITE_HOME", Some(sqlite_home))])
         .build_initialized()
         .await?;
 

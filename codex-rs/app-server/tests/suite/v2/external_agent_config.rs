@@ -605,16 +605,11 @@ source = {:?}
 async fn external_agent_config_import_sends_completion_notification_for_sync_only_import()
 -> Result<()> {
     let codex_home = TempDir::new()?;
-    let sqlite_home = TempDir::new()?;
     let home_dir = codex_home.path().display().to_string();
-    let sqlite_home_dir = sqlite_home.path().display().to_string();
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .without_auto_env()
-        .with_env_overrides(&[
-            ("HOME", Some(home_dir.as_str())),
-            ("CODEX_SQLITE_HOME", Some(sqlite_home_dir.as_str())),
-        ])
+        .with_env_overrides(&[("HOME", Some(home_dir.as_str()))])
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
 
@@ -653,7 +648,7 @@ async fn external_agent_config_import_sends_completion_notification_for_sync_onl
     .await??;
     assert_eq!(completed.import_id, import_id);
     let state_db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::new_for_testing(sqlite_home.path().abs()),
+        codex_state::SqliteConfig::new_for_testing(codex_home.path().abs()),
         "mock_provider".into(),
     )
     .await?;
@@ -710,16 +705,11 @@ async fn external_agent_config_import_sends_completion_notification_for_sync_onl
 #[tokio::test]
 async fn external_agent_config_records_externally_completed_import_history() -> Result<()> {
     let codex_home = TempDir::new()?;
-    let sqlite_home = TempDir::new()?;
     let home_dir = codex_home.path().display().to_string();
-    let sqlite_home_dir = sqlite_home.path().display().to_string();
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .without_auto_env()
-        .with_env_overrides(&[
-            ("HOME", Some(home_dir.as_str())),
-            ("CODEX_SQLITE_HOME", Some(sqlite_home_dir.as_str())),
-        ])
+        .with_env_overrides(&[("HOME", Some(home_dir.as_str()))])
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
 

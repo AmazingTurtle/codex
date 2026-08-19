@@ -95,9 +95,6 @@ pub const PINNED_THREAD_SECTION_ID: &str = "01984de2-8f74-7c91-a3b2-5c5e937cf318
 /// User-facing name of the built-in pinned thread section.
 pub const PINNED_THREAD_SECTION_NAME: &str = "Pinned";
 
-/// Environment variable for overriding the SQLite state database home directory.
-pub const SQLITE_HOME_ENV: &str = "CODEX_SQLITE_HOME";
-
 /// Errors encountered during DB operations. Tags: [stage]
 pub const DB_ERROR_METRIC: &str = "codex.db.error";
 /// Metrics on backfill process. Tags: [status]

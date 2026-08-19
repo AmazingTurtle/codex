@@ -24,8 +24,8 @@ prefix_rule(
 "#,
     )?;
 
-    let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
+    let output = Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .args([
             "execpolicy",
             "check",
@@ -81,8 +81,8 @@ prefix_rule(
 "#,
     )?;
 
-    let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
+    let output = Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .args([
             "execpolicy",
             "check",

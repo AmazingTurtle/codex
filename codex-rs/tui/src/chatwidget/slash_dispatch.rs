@@ -183,7 +183,7 @@ impl ChatWidget {
                 self.bottom_pane.show_selection_view(SelectionViewParams {
                     title: Some("Archive this session?".to_string()),
                     subtitle: Some(
-                        "Are you sure? This will archive the current session and exit Codex"
+                        "Are you sure? This will archive the current session and exit Better Codex"
                             .to_string(),
                     ),
                     footer_hint: Some(standard_popup_hint_line()),

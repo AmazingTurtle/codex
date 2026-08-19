@@ -1,4 +1,4 @@
-//! Shared implementation for `codex archive`, `codex delete`, and `codex unarchive`.
+//! Shared implementation for `codex archive`, `codex delete`, and `better-codex unarchive`.
 //!
 //! The CLI commands are thin app-server clients: resolve a user-provided UUID or exact session
 //! name, then call the corresponding app-server RPC.
@@ -81,7 +81,7 @@ pub async fn run_session_archive_command(
     target: String,
     options: SessionArchiveCommandOptions,
 ) -> Result<String> {
-    let codex_home = find_codex_home().wrap_err("failed to find Codex home")?;
+    let codex_home = find_codex_home().wrap_err("failed to find Better Codex home")?;
     let mut app_server =
         start_app_server_for_archive_command(options, codex_home.to_path_buf()).await?;
     run_session_archive_action_with_app_server(
