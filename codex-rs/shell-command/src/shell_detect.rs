@@ -253,9 +253,27 @@ pub fn ultimate_fallback_shell() -> DetectedShell {
 }
 
 pub fn get_shell_by_model_provided_path(shell_path: &PathBuf) -> DetectedShell {
-    detect_shell_type(shell_path)
-        .and_then(|shell_type| get_shell(shell_type, Some(shell_path)))
-        .unwrap_or_else(ultimate_fallback_shell)
+    let Some(shell_type) = detect_shell_type(shell_path) else {
+        return ultimate_fallback_shell();
+    };
+    let Some(trusted_shell) = get_shell(shell_type, /*path*/ None) else {
+        return ultimate_fallback_shell();
+    };
+
+    if shell_path.components().count() == 1 {
+        return trusted_shell;
+    }
+
+    let requested_shell_path = shell_path.canonicalize();
+    let trusted_shell_path = trusted_shell.shell_path.canonicalize();
+    if let (Ok(requested_shell_path), Ok(trusted_shell_path)) =
+        (requested_shell_path, trusted_shell_path)
+        && requested_shell_path == trusted_shell_path
+    {
+        trusted_shell
+    } else {
+        ultimate_fallback_shell()
+    }
 }
 
 pub fn get_shell(shell_type: ShellType, path: Option<&PathBuf>) -> Option<DetectedShell> {
@@ -364,5 +382,46 @@ mod tests {
             detect_shell_type(PathBuf::from("cmd.exe")),
             Some(ShellType::Cmd)
         );
+    }
+
+    #[test]
+    fn model_provided_shell_name_selects_trusted_shell() {
+        assert_eq!(
+            get_shell_by_model_provided_path(&PathBuf::from("sh")),
+            get_shell(ShellType::Sh, /*path*/ None).unwrap()
+        );
+    }
+
+    #[test]
+    fn model_provided_shell_path_selects_trusted_shell_when_canonical_path_matches() {
+        let trusted_shell = get_shell(ShellType::Sh, /*path*/ None).unwrap();
+
+        assert_eq!(
+            get_shell_by_model_provided_path(&trusted_shell.shell_path),
+            trusted_shell
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn model_provided_lookalike_shell_path_is_not_selected() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = std::env::temp_dir().join(format!(
+            "codex-shell-detect-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&fixture).unwrap();
+        let lookalike_shell = fixture.join("sh");
+        std::fs::write(&lookalike_shell, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&lookalike_shell, std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+
+        assert_eq!(
+            get_shell_by_model_provided_path(&lookalike_shell),
+            ultimate_fallback_shell()
+        );
+
+        std::fs::remove_dir_all(&fixture).unwrap();
     }
 }
