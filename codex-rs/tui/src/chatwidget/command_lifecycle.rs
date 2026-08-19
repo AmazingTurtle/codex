@@ -297,13 +297,14 @@ impl ChatWidget {
         } else {
             self.flush_active_cell();
 
-            self.transcript.active_cell = Some(Box::new(new_active_exec_command(
+            self.transcript.active_cell = Some(Box::new(new_active_exec_command_with_display(
                 id,
                 command,
                 parsed_cmd,
                 source,
                 /*interaction_input*/ None,
                 self.local_settings.tui.animations && self.local_settings.tui.effects.progress,
+                self.local_settings.tui.tool_call_display,
             )));
             self.bump_active_cell_revision();
         }
@@ -418,6 +419,10 @@ impl ChatWidget {
 
         match end_target {
             ExecEndTarget::ActiveTracked => {
+                let has_active_hook = self
+                    .active_hook_cell
+                    .as_ref()
+                    .is_some_and(HookCell::has_visible_running_run);
                 if let Some(cell) = self
                     .transcript
                     .active_cell
@@ -426,7 +431,7 @@ impl ChatWidget {
                 {
                     let completed = cell.complete_call(&id, output, duration);
                     debug_assert!(completed, "active exec cell should contain {id}");
-                    if cell.should_flush() {
+                    if cell.should_flush() || (has_active_hook && !cell.is_active()) {
                         self.flush_active_cell();
                     } else {
                         self.bump_active_cell_revision();
@@ -435,13 +440,14 @@ impl ChatWidget {
                 }
             }
             ExecEndTarget::OrphanHistoryWhileActiveExec => {
-                let mut orphan = new_active_exec_command(
+                let mut orphan = new_active_exec_command_with_display(
                     id.clone(),
                     command,
                     parsed,
                     source,
                     /*interaction_input*/ None,
                     self.local_settings.tui.animations && self.local_settings.tui.effects.progress,
+                    self.local_settings.tui.tool_call_display,
                 );
                 let completed = orphan.complete_call(&id, output, duration);
                 debug_assert!(completed, "new orphan exec cell should contain {id}");
@@ -450,13 +456,14 @@ impl ChatWidget {
                 self.request_redraw();
             }
             ExecEndTarget::NewCell => {
-                let mut cell = new_active_exec_command(
+                let mut cell = new_active_exec_command_with_display(
                     id.clone(),
                     command,
                     parsed,
                     source,
                     /*interaction_input*/ None,
                     self.local_settings.tui.animations && self.local_settings.tui.effects.progress,
+                    self.local_settings.tui.tool_call_display,
                 );
                 let completed = cell.complete_call(&id, output, duration);
                 debug_assert!(completed, "new exec cell should contain {id}");

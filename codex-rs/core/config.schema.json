@@ -4065,6 +4065,25 @@
       },
       "type": "object"
     },
+    "ToolCallDisplay": {
+      "description": "Controls how tool calls are presented in normal TUI history.",
+      "oneOf": [
+        {
+          "description": "Show the complete invocation and result for each tool call.",
+          "enum": [
+            "individual"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Group related tool activity into compact summaries.",
+          "enum": [
+            "summary"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "ToolExposureSurface": {
       "description": "A model-facing surface on which a tool can be exposed.",
       "oneOf": [
@@ -4578,6 +4597,15 @@
           "default": null,
           "description": "Syntax highlighting theme name (kebab-case).\n\nWhen set, overrides automatic light/dark theme detection. Use `/theme` in the TUI or see `$BETTER_CODEX_HOME/themes` for custom themes.",
           "type": "string"
+        },
+        "tool_call_display": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ToolCallDisplay"
+            }
+          ],
+          "default": "individual",
+          "description": "Controls how tool calls are rendered in normal conversation history. Defaults to `individual`."
         },
         "vim_mode_default": {
           "default": false,

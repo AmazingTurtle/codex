@@ -63,6 +63,7 @@ use codex_config::types::ResumeCwdMode;
 use codex_config::types::SandboxWorkspaceWrite;
 use codex_config::types::SessionPickerViewMode;
 use codex_config::types::SkillsConfig;
+use codex_config::types::ToolCallDisplay;
 use codex_config::types::ToolSuggestDisabledTool;
 use codex_config::types::ToolSuggestDiscoverableType;
 use codex_config::types::Tui;
@@ -1264,6 +1265,7 @@ fn config_toml_deserializes_model_availability_nux() {
             question_esc_back: true,
             raw_output_mode: false,
             fullscreen_transcript: false,
+            tool_call_display: ToolCallDisplay::Individual,
             alternate_screen: AltScreenMode::default(),
             status_line: None,
             status_line_use_colors: true,
@@ -1397,6 +1399,58 @@ async fn tui_auto_recap_defaults_and_cli_overrides() -> anyhow::Result<()> {
         );
     }
     Ok(())
+}
+
+#[test]
+fn tui_tool_call_display_defaults_to_individual() {
+    let parsed: ConfigToml = toml::from_str("[tui]").expect("deserialize empty [tui] table");
+
+    assert_eq!(
+        parsed
+            .tui
+            .expect("config should include tui section")
+            .tool_call_display,
+        ToolCallDisplay::Individual
+    );
+}
+
+#[tokio::test]
+async fn runtime_config_uses_tui_tool_call_display() {
+    let cfg_toml: ConfigToml = toml::from_str(
+        r#"
+        [tui]
+        tool_call_display = "summary"
+        "#,
+    )
+    .expect("deserialize tool_call_display=summary");
+    let cfg = Config::load_from_base_config_with_overrides(
+        cfg_toml,
+        ConfigOverrides::default(),
+        tempdir().expect("tempdir").abs(),
+    )
+    .await
+    .expect("load config");
+
+    assert_eq!(cfg.tui_tool_call_display, ToolCallDisplay::Summary);
+}
+
+#[test]
+fn tui_tool_call_display_accepts_legacy_code_mode_alias() {
+    let parsed: ConfigToml = toml::from_str(
+        r#"
+        [tui]
+        code_mode_tool_call_display = "summary"
+        "#,
+    )
+    .expect("deserialize legacy code_mode_tool_call_display=summary");
+
+    assert_eq!(
+        parsed
+            .tui
+            .expect("config should include tui section")
+            .tool_call_display,
+        ToolCallDisplay::Summary
+    );
 }
 
 #[test]
@@ -4393,6 +4447,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
             question_esc_back: true,
             raw_output_mode: false,
             fullscreen_transcript: false,
+            tool_call_display: ToolCallDisplay::Individual,
             alternate_screen: AltScreenMode::Auto,
             status_line: None,
             status_line_use_colors: true,

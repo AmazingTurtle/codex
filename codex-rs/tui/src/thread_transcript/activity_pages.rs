@@ -58,7 +58,13 @@ pub(crate) fn fold_trailing_activity_details(
         group.group.details = retained;
         Some(Arc::new(group))
     } else {
-        let mut group = super::exploration_groups::completed_group(items)?;
+        let mut group = super::exploration_groups::completed_group(
+            items,
+            older
+                .as_any()
+                .downcast_ref::<ExecCell>()?
+                .tool_call_display(),
+        )?;
         group.group.details = retained;
         Some(Arc::new(group))
     }

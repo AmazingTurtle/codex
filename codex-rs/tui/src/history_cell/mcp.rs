@@ -29,6 +29,7 @@ use crate::terminal_hyperlinks::remap_source_wrapped_line;
 use crate::text_formatting::format_json_compact;
 use crate::tool_output::ToolOutputPreview;
 use codex_app_server_protocol::McpServerConnectionStatus;
+use codex_config::types::ToolCallDisplay;
 use result::McpContentBlock;
 use result::McpResultKind;
 use result::McpToolResult;
@@ -55,6 +56,7 @@ pub(crate) struct McpToolCallCell {
     duration: Option<Duration>,
     result: Option<Result<McpToolResult, String>>,
     animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
 }
 
 #[derive(Debug, Clone)]
@@ -89,6 +91,7 @@ impl McpToolCallCell {
         call_id: String,
         invocation: McpInvocation,
         animations_enabled: bool,
+        tool_call_display: ToolCallDisplay,
     ) -> Self {
         Self {
             call_id,
@@ -97,6 +100,7 @@ impl McpToolCallCell {
             duration: None,
             result: None,
             animations_enabled,
+            tool_call_display,
         }
     }
 
@@ -150,7 +154,9 @@ impl McpToolCallCell {
         let mut lines: Vec<HyperlinkLine> = Vec::new();
         let status = self.success();
         let node_repl = self.result_kind() == McpResultKind::NodeRepl;
-        let compact = node_repl && mode == McpToolCallRenderMode::Display;
+        let compact = node_repl
+            && mode == McpToolCallRenderMode::Display
+            && self.tool_call_display == ToolCallDisplay::Summary;
         let bullet = match status {
             Some(true) => "•".green().bold(),
             Some(false) => "•".red().bold(),
@@ -430,12 +436,27 @@ fn mcp_header_line(line: Line<'static>) -> HyperlinkLine {
     line
 }
 
+#[cfg(test)]
 pub(crate) fn new_active_mcp_tool_call(
     call_id: String,
     invocation: McpInvocation,
     animations_enabled: bool,
 ) -> McpToolCallCell {
-    McpToolCallCell::new(call_id, invocation, animations_enabled)
+    new_active_mcp_tool_call_with_display(
+        call_id,
+        invocation,
+        animations_enabled,
+        ToolCallDisplay::default(),
+    )
+}
+
+pub(crate) fn new_active_mcp_tool_call_with_display(
+    call_id: String,
+    invocation: McpInvocation,
+    animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
+) -> McpToolCallCell {
+    McpToolCallCell::new(call_id, invocation, animations_enabled, tool_call_display)
 }
 /// Render a summary of configured MCP servers from the current `Config`.
 pub(crate) fn empty_mcp_output() -> WebHyperlinkHistoryCell {

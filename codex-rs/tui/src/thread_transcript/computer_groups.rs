@@ -9,7 +9,12 @@ use codex_app_server_protocol::Turn;
 use std::sync::Arc;
 
 pub(super) fn append(group: &mut ComputerActivityCell, call: McpHistory) {
-    let cell = McpToolCallCell::new(call.id, call.invocation, /*animations_enabled*/ false);
+    let cell = McpToolCallCell::new(
+        call.id,
+        call.invocation,
+        /*animations_enabled*/ false,
+        Default::default(),
+    );
     group.complete(cell, call.duration, call.result);
 }
 

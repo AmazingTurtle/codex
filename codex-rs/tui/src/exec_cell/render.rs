@@ -28,6 +28,7 @@ use crate::wrapping::RtOptions;
 use crate::wrapping::adaptive_wrap_line_with_source;
 use codex_ansi_escape::ansi_escape_line;
 use codex_app_server_protocol::CommandExecutionSource as ExecCommandSource;
+use codex_config::types::ToolCallDisplay;
 use codex_protocol::parse_command::ParsedCommand;
 use codex_shell_command::bash::extract_bash_command;
 use itertools::Itertools;
@@ -55,6 +56,7 @@ struct CommandDisplay {
     hidden_details: bool,
 }
 
+#[cfg(test)]
 pub(crate) fn new_active_exec_command(
     call_id: String,
     command: Vec<String>,
@@ -63,7 +65,27 @@ pub(crate) fn new_active_exec_command(
     interaction_input: Option<String>,
     animations_enabled: bool,
 ) -> ExecCell {
-    ExecCell::new(
+    new_active_exec_command_with_display(
+        call_id,
+        command,
+        parsed,
+        source,
+        interaction_input,
+        animations_enabled,
+        ToolCallDisplay::default(),
+    )
+}
+
+pub(crate) fn new_active_exec_command_with_display(
+    call_id: String,
+    command: Vec<String>,
+    parsed: Vec<ParsedCommand>,
+    source: ExecCommandSource,
+    interaction_input: Option<String>,
+    animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
+) -> ExecCell {
+    ExecCell::new_with_display(
         ExecCall {
             call_id,
             command,
@@ -75,6 +97,7 @@ pub(crate) fn new_active_exec_command(
             interaction_input,
         },
         animations_enabled,
+        tool_call_display,
     )
 }
 
@@ -270,10 +293,29 @@ impl HistoryCell for ExecCell {
     }
 
     fn display_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
-        if self.is_exploring_cell() {
-            self.exploring_display_lines(width)
-        } else {
-            self.command_display_lines(width)
+        match self.tool_call_display() {
+            ToolCallDisplay::Individual => self
+                .group
+                .calls
+                .iter()
+                .flat_map(|call| self.command_call_display_lines(width, call).lines)
+                .collect(),
+            ToolCallDisplay::Summary
+                if self.group.calls.len() > 1
+                    && (!self.is_exploring_cell()
+                        || (!self.is_active()
+                            && self.group.calls.iter().all(|call| {
+                                call.output
+                                    .as_ref()
+                                    .is_some_and(|output| output.exit_code == 0)
+                            }))) =>
+            {
+                self.compact_group_display_lines(width)
+            }
+            ToolCallDisplay::Summary if self.is_exploring_cell() => {
+                self.exploring_display_lines(width)
+            }
+            ToolCallDisplay::Summary => self.command_display_lines(width),
         }
     }
 
@@ -299,6 +341,43 @@ impl HistoryCell for ExecCell {
 }
 
 impl ExecCell {
+    fn compact_group_display_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        let completed_commands = self
+            .group
+            .calls
+            .iter()
+            .take_while(|call| {
+                matches!(
+                    call.source,
+                    ExecCommandSource::Agent | ExecCommandSource::UnifiedExecStartup
+                ) && call.duration.is_some()
+                    && call
+                        .output
+                        .as_ref()
+                        .is_some_and(|output| output.exit_code == 0)
+            })
+            .count();
+        let mut lines = Vec::new();
+        if completed_commands > 0 {
+            let noun = if completed_commands == 1 {
+                "command"
+            } else {
+                "commands"
+            };
+            lines.push(HyperlinkLine::from(Line::from(vec![
+                "•".green().bold(),
+                " ".into(),
+                format!("Ran {completed_commands} {noun}").bold(),
+                " · ".dim(),
+                TRANSCRIPT_HINT.dim(),
+            ])));
+        }
+        for call in &self.group.calls[completed_commands..] {
+            lines.extend(self.command_call_display_lines(width, call).lines);
+        }
+        lines
+    }
+
     fn output_ellipsis_text(omitted: usize) -> String {
         let noun = if omitted == 1 { "line" } else { "lines" };
         format!("… +{omitted} {noun} ({TRANSCRIPT_HINT})")
@@ -453,6 +532,10 @@ impl ExecCell {
         let [call] = &self.group.calls.as_slice() else {
             panic!("Expected exactly one call in a command display cell");
         };
+        self.command_call_display_lines(width, call)
+    }
+
+    fn command_call_display_lines(&self, width: u16, call: &ExecCall) -> CommandDisplay {
         let layout = EXEC_DISPLAY_LAYOUT;
         let success = call
             .duration
@@ -465,7 +548,7 @@ impl ExecCell {
         let is_interaction = call.is_unified_exec_interaction();
         let title = if is_interaction {
             ""
-        } else if self.is_active() {
+        } else if call.duration.is_none() {
             "Running"
         } else if call.is_user_shell_command() {
             "You ran"
@@ -1110,13 +1193,14 @@ mod tests {
             r"Get-Content C:\skills\demo\SKILL.md".to_string(),
         ];
         let parsed = codex_shell_command::parse_command::parse_command(&command);
-        let cell = new_active_exec_command(
+        let cell = new_active_exec_command_with_display(
             "call-id".to_string(),
             command,
             parsed,
             ExecCommandSource::Agent,
             /*interaction_input*/ None,
             /*animations_enabled*/ false,
+            ToolCallDisplay::Summary,
         );
         let rendered = cell
             .display_lines(/*width*/ 80)
@@ -1253,7 +1337,11 @@ mod tests {
             interaction_input: None,
         };
 
-        let cell = ExecCell::new(call, /*animations_enabled*/ false);
+        let cell = ExecCell::new_with_display(
+            call,
+            /*animations_enabled*/ false,
+            ToolCallDisplay::Summary,
+        );
         let rendered: Vec<String> = cell
             .display_lines(/*width*/ 36)
             .iter()

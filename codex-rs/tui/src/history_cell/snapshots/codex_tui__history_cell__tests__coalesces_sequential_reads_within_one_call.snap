@@ -1,8 +1,6 @@
 ---
-source: tui/src/history_cell.rs
+source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
-• Explored
-  └ Search shimmer_spans
-    Read shimmer.rs
-    Read status_indicator_widget.rs
+• Ran echo
+  └ (no output)

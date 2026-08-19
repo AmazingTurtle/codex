@@ -14,8 +14,11 @@ use std::time::Instant;
 use super::live_output::LiveCommandOutput;
 use crate::history_cell::ActivityGroup;
 use codex_app_server_protocol::CommandExecutionSource as ExecCommandSource;
+use codex_config::types::ToolCallDisplay;
 use codex_protocol::parse_command::ParsedCommand;
 use itertools::Either;
+
+const MAX_GROUPED_COMMANDS: usize = 32;
 
 #[derive(Debug, Default)]
 pub(crate) struct CommandOutput {
@@ -79,13 +82,24 @@ pub(crate) struct ExecCall {
 pub(crate) struct ExecCell {
     pub(crate) group: ActivityGroup<ExecCall>,
     animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
 }
 
 impl ExecCell {
+    #[cfg(test)]
     pub(crate) fn new(call: ExecCall, animations_enabled: bool) -> Self {
+        Self::new_with_display(call, animations_enabled, ToolCallDisplay::default())
+    }
+
+    pub(crate) fn new_with_display(
+        call: ExecCall,
+        animations_enabled: bool,
+        tool_call_display: ToolCallDisplay,
+    ) -> Self {
         Self {
             group: ActivityGroup::new(vec![call]),
             animations_enabled,
+            tool_call_display,
         }
     }
 
@@ -107,7 +121,21 @@ impl ExecCell {
             duration: None,
             interaction_input,
         };
-        if self.is_exploring_cell() && Self::is_exploring_call(&call) {
+        let continues_exploration = Self::is_exploring_call(&call) && self.is_exploring_cell();
+        let continues_compact_group = self.tool_call_display == ToolCallDisplay::Summary
+            && !self.is_exploring_cell()
+            && !Self::is_exploring_call(&call)
+            && Self::is_groupable_source(call.source)
+            && self.group.calls.len() < MAX_GROUPED_COMMANDS
+            && self.group.calls.iter().all(|existing| {
+                Self::is_groupable_source(existing.source)
+                    && existing.duration.is_some()
+                    && existing
+                        .output
+                        .as_ref()
+                        .is_some_and(|output| output.exit_code == 0)
+            });
+        if continues_exploration || continues_compact_group {
             self.group.calls.push(call);
             true
         } else {
@@ -161,6 +189,24 @@ impl ExecCell {
     }
 
     pub(crate) fn should_flush(&self) -> bool {
+        if !self.is_exploring_cell() && self.group.calls.len() >= MAX_GROUPED_COMMANDS {
+            return !self.is_active();
+        }
+
+        if self.tool_call_display == ToolCallDisplay::Summary
+            && !self.is_exploring_cell()
+            && self.group.calls.iter().all(|call| {
+                Self::is_groupable_source(call.source)
+                    && call.duration.is_some()
+                    && call
+                        .output
+                        .as_ref()
+                        .is_some_and(|output| output.exit_code == 0)
+            })
+        {
+            return false;
+        }
+
         // Exploration stays open for adjacent calls, including after a failed read/list/search.
         !self.is_exploring_cell() && self.group.calls.iter().all(|c| c.duration.is_some())
     }
@@ -205,6 +251,10 @@ impl ExecCell {
         self.animations_enabled = false;
     }
 
+    pub(crate) fn tool_call_display(&self) -> ToolCallDisplay {
+        self.tool_call_display
+    }
+
     pub(crate) fn iter_calls(&self) -> impl Iterator<Item = &ExecCall> {
         self.group.calls.iter()
     }
@@ -241,6 +291,13 @@ impl ExecCell {
                         | ParsedCommand::Search { .. }
                 )
             })
+    }
+
+    fn is_groupable_source(source: ExecCommandSource) -> bool {
+        matches!(
+            source,
+            ExecCommandSource::Agent | ExecCommandSource::UnifiedExecStartup
+        )
     }
 }
 

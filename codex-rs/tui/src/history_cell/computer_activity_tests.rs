@@ -12,6 +12,7 @@ fn call(id: &str, title: &str) -> McpToolCallCell {
             arguments: Some(json!({"title": title, "code": "await cua.getState()"})),
         },
         /*animations_enabled*/ false,
+        Default::default(),
     )
 }
 

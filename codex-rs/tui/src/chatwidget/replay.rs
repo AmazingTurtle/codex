@@ -386,7 +386,31 @@ impl ChatWidget {
                     codex_app_server_protocol::CommandExecutionStatus::Completed
                     | codex_app_server_protocol::CommandExecutionStatus::Failed,
                 ..
-            } if from_replay => self.handle_command_execution_completed_now(item),
+            } if from_replay => {
+                if matches!(
+                    &item,
+                    ThreadItem::CommandExecution {
+                        status: codex_app_server_protocol::CommandExecutionStatus::Failed,
+                        ..
+                    }
+                ) {
+                    self.flush_completed_tool_activity();
+                }
+                if !self.transcript.active_cell.as_ref().is_some_and(|cell| {
+                    cell.as_any()
+                        .downcast_ref::<ExecCell>()
+                        .is_some_and(ExecCell::is_active)
+                        || cell.as_any().is::<McpToolCallCell>()
+                }) {
+                    self.handle_command_execution_started_now(item.clone());
+                }
+                self.handle_command_execution_completed_now(item);
+                if self.local_settings.tui.tool_call_display
+                    == codex_config::types::ToolCallDisplay::Individual
+                {
+                    self.flush_completed_tool_activity();
+                }
+            }
             item @ ThreadItem::CommandExecution { .. } => self.on_command_execution_completed(item),
             ThreadItem::FileChange {
                 status: codex_app_server_protocol::PatchApplyStatus::InProgress,

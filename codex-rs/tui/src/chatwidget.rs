@@ -293,7 +293,7 @@ use crate::clipboard_paste::paste_image_to_temp_png;
 use crate::collaboration_modes;
 use crate::diff_render::display_path_for;
 use crate::exec_cell::ExecCell;
-use crate::exec_cell::new_active_exec_command;
+use crate::exec_cell::new_active_exec_command_with_display;
 use crate::exec_command::split_command_string;
 use crate::exec_command::strip_bash_lc_and_escape;
 use crate::get_git_diff::get_git_diff;
@@ -1231,6 +1231,9 @@ impl ChatWidget {
     pub(crate) fn pre_draw_tick(&mut self) {
         self.update_due_hook_visibility();
         self.schedule_hook_timer_if_needed();
+        if self.bottom_pane.has_active_view() {
+            self.flush_completed_tool_activity();
+        }
         self.bottom_pane.pre_draw_tick();
         self.flush_realtime_transcript_history();
         self.refresh_realtime_microphone_level();

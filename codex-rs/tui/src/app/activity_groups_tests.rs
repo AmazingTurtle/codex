@@ -5,6 +5,7 @@ use crate::app::test_support::make_test_app;
 use crate::thread_transcript::RawReasoningVisibility;
 use crate::thread_transcript::thread_items_to_transcript_cells;
 use codex_app_server_protocol::TurnItemsView;
+use codex_config::types::ToolCallDisplay;
 use pretty_assertions::assert_eq;
 
 #[derive(Clone, Copy, Debug)]
@@ -68,6 +69,8 @@ fn project(app: &App, items: &[ThreadItem]) -> Vec<Arc<dyn HistoryCell>> {
 async fn older_page_hydration_keeps_pending_computer_and_exploration_completion() {
     for kind in [ActivityKind::Computer, ActivityKind::Exploration] {
         let mut app = make_test_app().await;
+        app.config.tui_tool_call_display = ToolCallDisplay::Summary;
+        app.chat_widget.local_settings.tui.tool_call_display = ToolCallDisplay::Summary;
         match kind {
             ActivityKind::Computer => {
                 app.chat_widget.handle_mcp_tool_call_completed_now(call(
@@ -188,6 +191,8 @@ async fn every_page_split_folds_reasoning_before_answer_and_completion_boundarie
     for kind in [ActivityKind::Computer, ActivityKind::Exploration] {
         for answer in [None, Some("The answer")] {
             let mut app = make_test_app().await;
+            app.config.tui_tool_call_display = ToolCallDisplay::Summary;
+            app.chat_widget.local_settings.tui.tool_call_display = ToolCallDisplay::Summary;
             let mut items = vec![call("call", kind, "completed"), reasoning("detail")];
             if let Some(text) = answer {
                 items.push(ThreadItem::AgentMessage {
@@ -245,6 +250,8 @@ async fn every_page_split_folds_reasoning_before_answer_and_completion_boundarie
 #[tokio::test]
 async fn failed_exploration_retains_following_reasoning_at_every_page_split() {
     let mut app = make_test_app().await;
+    app.config.tui_tool_call_display = ToolCallDisplay::Summary;
+    app.chat_widget.local_settings.tui.tool_call_display = ToolCallDisplay::Summary;
     let mut failed = call("failed", ActivityKind::Exploration, "failed");
     if let ThreadItem::CommandExecution { exit_code, .. } = &mut failed {
         *exit_code = Some(1);

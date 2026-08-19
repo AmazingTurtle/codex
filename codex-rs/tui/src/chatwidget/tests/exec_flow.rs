@@ -1,5 +1,10 @@
 use super::*;
+use codex_config::types::ToolCallDisplay;
 use pretty_assertions::assert_eq;
+
+fn use_summary_tool_call_display(chat: &mut ChatWidget) {
+    chat.local_settings.tui.tool_call_display = ToolCallDisplay::Summary;
+}
 
 #[tokio::test]
 async fn external_writer_snapshot_freezes_active_command_and_mcp_rows() {
@@ -121,6 +126,7 @@ async fn replayed_completion_preserves_unrelated_running_command() {
 #[tokio::test]
 async fn failed_exploration_keeps_overlapping_commands_active_until_all_finish() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
     chat.on_task_started();
 
     let failed = begin_exec(&mut chat, "call-failed", "ls missing");
@@ -160,6 +166,7 @@ async fn failed_exploration_keeps_overlapping_commands_active_until_all_finish()
 #[tokio::test]
 async fn exploration_nonzero_exits_remain_visible_beside_successful_reads() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
     for (id, command, exit_code) in [
         ("read", "cat first.txt", 0),
         ("missing", "cat missing.txt", 1),
@@ -229,6 +236,7 @@ async fn adjacent_exploration_groups_across_reasoning_live_and_replayed() {
     let mut renders = Vec::new();
     for replay in [false, true] {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+        use_summary_tool_call_display(&mut chat);
         chat.on_task_started();
         for (id, script, exit_code) in [
             ("list", "ls missing", 1),
@@ -814,6 +822,7 @@ async fn exec_end_without_begin_uses_event_command() {
 #[tokio::test]
 async fn exec_end_without_begin_does_not_flush_unrelated_running_exploring_cell() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
     chat.on_task_started();
 
     begin_exec(&mut chat, "call-exploring", "cat /dev/null");
@@ -857,6 +866,7 @@ async fn exec_end_without_begin_does_not_flush_unrelated_running_exploring_cell(
 #[tokio::test]
 async fn exec_end_without_begin_flushes_completed_unrelated_exploring_cell() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
     chat.on_task_started();
 
     let begin_ls = begin_exec(&mut chat, "call-ls", "ls -la");
@@ -864,6 +874,7 @@ async fn exec_end_without_begin_flushes_completed_unrelated_exploring_cell() {
     assert!(drain_insert_history(&mut rx).is_empty());
     assert!(active_blob(&chat).contains("ls -la"));
 
+    chat.local_settings.tui.tool_call_display = ToolCallDisplay::Individual;
     let orphan = begin_unified_exec_startup(&mut chat, "call-after", "proc-1", "echo after");
     end_exec(&mut chat, orphan, "after\n", "", /*exit_code*/ 0);
 
@@ -896,6 +907,7 @@ async fn exec_end_without_begin_flushes_completed_unrelated_exploring_cell() {
 #[tokio::test]
 async fn overlapping_exploring_exec_end_is_not_misclassified_as_orphan() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
 
     let begin_ls = begin_exec(&mut chat, "call-ls", "ls -la");
     let begin_cat = begin_exec(&mut chat, "call-cat", "cat foo.txt");
@@ -961,6 +973,7 @@ async fn exec_history_shows_unified_exec_startup_commands() {
 #[tokio::test]
 async fn exec_history_shows_unified_exec_tool_calls() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
     chat.on_task_started();
 
     let begin = begin_exec_with_source(
@@ -978,6 +991,7 @@ async fn exec_history_shows_unified_exec_tool_calls() {
 #[tokio::test]
 async fn unified_exec_unknown_end_with_active_exploring_cell_snapshot() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
     chat.on_task_started();
 
     begin_exec(&mut chat, "call-exploring", "cat /dev/null");
@@ -1398,6 +1412,7 @@ async fn image_generation_call_adds_history_cell() {
 #[tokio::test]
 async fn exec_history_extends_previous_when_consecutive() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    use_summary_tool_call_display(&mut chat);
 
     // 1) Start "ls -la" (List)
     let begin_ls = begin_exec(&mut chat, "call-ls", "ls -la");
