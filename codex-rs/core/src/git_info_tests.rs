@@ -739,6 +739,11 @@ async fn resolve_root_git_project_for_trust_detects_worktree_pointer_without_git
         format!("gitdir: {}\n", worktree_git_dir.display()),
     )
     .unwrap();
+    std::fs::write(
+        worktree_git_dir.join("gitdir"),
+        format!("{}\n", worktree_root.join(".git").display()),
+    )
+    .unwrap();
 
     let expected = repo_root.abs();
     let worktree_root = worktree_root.abs();
@@ -778,6 +783,62 @@ async fn resolve_root_git_project_for_trust_non_worktrees_gitdir_returns_none() 
     let nested = proj.join("nested");
     assert!(
         resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &nested)
+            .await
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn resolve_root_git_project_for_trust_rejects_missing_worktree_metadata() {
+    let tmp = TempDir::new().expect("tempdir");
+    let trusted = tmp.path().join("trusted-repository");
+    let attacker = tmp.path().join("attacker-repository");
+    std::fs::create_dir_all(trusted.join(".git")).unwrap();
+    std::fs::create_dir_all(&attacker).unwrap();
+    std::fs::write(
+        attacker.join(".git"),
+        format!(
+            "gitdir: {}\n",
+            trusted.join(".git/worktrees/does-not-exist").display()
+        ),
+    )
+    .unwrap();
+
+    assert!(
+        resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &attacker.abs())
+            .await
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn resolve_root_git_project_for_trust_rejects_mismatched_worktree_backref() {
+    let tmp = TempDir::new().expect("tempdir");
+    let trusted = tmp.path().join("trusted-repository");
+    let attacker = tmp.path().join("attacker-repository");
+    let other = tmp.path().join("other-worktree");
+    let worktree_git_dir = trusted.join(".git/worktrees/feature-x");
+    std::fs::create_dir_all(&worktree_git_dir).unwrap();
+    std::fs::create_dir_all(&attacker).unwrap();
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        attacker.join(".git"),
+        format!("gitdir: {}\n", worktree_git_dir.display()),
+    )
+    .unwrap();
+    std::fs::write(
+        worktree_git_dir.join("gitdir"),
+        format!("{}\n", other.join(".git").display()),
+    )
+    .unwrap();
+    std::fs::write(
+        other.join(".git"),
+        format!("gitdir: {}\n", worktree_git_dir.display()),
+    )
+    .unwrap();
+
+    assert!(
+        resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &attacker.abs())
             .await
             .is_none()
     );

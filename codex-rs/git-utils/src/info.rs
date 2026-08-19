@@ -815,6 +815,39 @@ pub async fn resolve_root_git_project_for_trust(
     if worktrees_dir.as_path().file_name() != Some(OsStr::new("worktrees")) {
         return None;
     }
+    let git_dir_uri = PathUri::from_abs_path(&git_dir_path);
+    if !fs
+        .get_metadata(&git_dir_uri, /*sandbox*/ None)
+        .await
+        .ok()?
+        .is_directory
+    {
+        return None;
+    }
+
+    let worktree_gitdir = git_dir_path.join("gitdir");
+    let worktree_gitdir_uri = PathUri::from_abs_path(&worktree_gitdir);
+    let worktree_gitdir_s = fs
+        .read_file_text(&worktree_gitdir_uri, /*sandbox*/ None)
+        .await
+        .ok()?;
+    let worktree_gitdir_rel = worktree_gitdir_s.trim();
+    if worktree_gitdir_rel.is_empty() {
+        return None;
+    }
+    let worktree_dot_git =
+        AbsolutePathBuf::resolve_path_against_base(worktree_gitdir_rel, git_dir_path.as_path());
+    let canonical_worktree_dot_git = fs
+        .canonicalize(
+            &PathUri::from_abs_path(&worktree_dot_git),
+            /*sandbox*/ None,
+        )
+        .await
+        .ok()?;
+    let canonical_dot_git = fs.canonicalize(&dot_git_uri, /*sandbox*/ None).await.ok()?;
+    if canonical_worktree_dot_git != canonical_dot_git {
+        return None;
+    }
 
     let common_dir = worktrees_dir.parent()?;
     common_dir.parent()
