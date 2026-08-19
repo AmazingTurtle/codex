@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
-#[cfg(windows)]
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
@@ -34,6 +33,7 @@ use super::ConfiguredHandler;
 use super::MAX_CONCURRENT_ASYNC_HOOKS;
 use super::build_command;
 use super::run_command;
+use super::super::command_content::hook_command_content_digest;
 use crate::events::user_prompt_submit::UserPromptSubmitRequest;
 
 #[cfg(windows)]
@@ -65,6 +65,7 @@ async fn cmd_shell_runs_quoted_hook_command_path() {
             command: command.clone(),
             r#async: false,
             env: env.clone(),
+            content_digest: None,
         },
     };
     let shells = [
@@ -114,6 +115,7 @@ async fn fast_exiting_hook_preserves_stdout_when_stdin_is_not_consumed() {
             command: command.to_string(),
             r#async: false,
             env: env.clone(),
+            content_digest: None,
         },
     };
     let input_json = format!(r#"{{"padding":"{}"}}"#, "x".repeat(1024 * 1024));
@@ -124,6 +126,50 @@ async fn fast_exiting_hook_preserves_stdout_when_stdin_is_not_consumed() {
     assert_eq!(result.exit_code, Some(0), "stderr: {}", result.stderr);
     assert_eq!(result.stdout.trim(), "hook-ran");
     assert_eq!(result.error, None);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn command_hook_blocks_changed_script_target() {
+    let temp = tempdir().expect("create temp dir");
+    let source_path = AbsolutePathBuf::try_from(temp.path().join("hooks.json"))
+        .expect("absolute hook configuration path");
+    let script_path = temp.path().join("check.sh");
+    fs::write(&script_path, "#!/bin/sh\necho approved\n").expect("write approved script");
+    let command = "sh check.sh";
+    let env = HashMap::new();
+    let content_digest =
+        hook_command_content_digest(command, temp.path()).expect("script content digest");
+    let handler = ConfiguredHandler {
+        event_name: HookEventName::SessionStart,
+        matcher: None,
+        timeout_sec: 10,
+        status_message: None,
+        additional_context_limit: Default::default(),
+        source_path,
+        source: HookSource::User,
+        display_order: 0,
+        kind: ConfiguredHandlerKind::Command {
+            command: command.to_string(),
+            r#async: false,
+            env: env.clone(),
+            content_digest: Some(content_digest),
+        },
+    };
+    let (runtime, _result_receiver) = runtime();
+
+    let approved = run_command(&runtime, &handler, command, &env, "{}", temp.path()).await;
+    fs::write(&script_path, "#!/bin/sh\necho changed\n").expect("rewrite script");
+    let changed = run_command(&runtime, &handler, command, &env, "{}", temp.path()).await;
+
+    assert_eq!(approved.exit_code, Some(0), "stderr: {}", approved.stderr);
+    assert_eq!(approved.stdout.trim(), "approved");
+    assert_eq!(approved.error, None);
+    assert_eq!(changed.exit_code, None);
+    assert_eq!(
+        changed.error,
+        Some("hook command target changed since approval".to_string())
+    );
 }
 
 #[tokio::test]
@@ -152,6 +198,7 @@ async fn command_hook_does_not_expose_configured_noise_auth_token() {
             command: command.to_string(),
             r#async: false,
             env: env.clone(),
+            content_digest: None,
         },
     };
     let (runtime, _result_receiver) = runtime();
@@ -311,6 +358,7 @@ fn write_handler(temp: &TempDir, source: &str) -> ConfiguredHandler {
             command: format!("python3 {}", script_path.display()),
             r#async: true,
             env: HashMap::new(),
+            content_digest: None,
         },
     }
 }

@@ -1,3 +1,4 @@
+pub(crate) mod command_content;
 pub(crate) mod command_runner;
 pub(crate) mod discovery;
 pub(crate) mod dispatcher;
@@ -65,6 +66,7 @@ pub(crate) enum ConfiguredHandlerKind {
         command: String,
         env: HashMap<String, String>,
         r#async: bool,
+        content_digest: Option<command_content::HookCommandContentDigest>,
     },
     McpTool {
         server: String,

@@ -552,6 +552,7 @@ mod tests {
                 command: "echo hook".to_string(),
                 r#async: false,
                 env: std::collections::HashMap::new(),
+                content_digest: None,
             },
         }
     }

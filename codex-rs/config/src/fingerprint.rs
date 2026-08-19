@@ -45,8 +45,12 @@ pub fn version_for_toml(value: &TomlValue) -> String {
     let json = serde_json::to_value(value).unwrap_or(JsonValue::Null);
     let canonical = canonical_json(&json);
     let serialized = serde_json::to_vec(&canonical).unwrap_or_default();
+    version_for_bytes(&serialized)
+}
+
+pub fn version_for_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(serialized);
+    hasher.update(bytes);
     let hash = hasher.finalize();
     let hex = hash
         .iter()

@@ -94,6 +94,7 @@ fn permission_request_timeout_only_counts_synchronous_handlers() {
             command: command.to_string(),
             r#async: false,
             env: HashMap::new(),
+            content_digest: None,
         },
     };
     let asynchronous_handler = ConfiguredHandler {
@@ -102,6 +103,7 @@ fn permission_request_timeout_only_counts_synchronous_handlers() {
             command: command.to_string(),
             r#async: true,
             env: HashMap::new(),
+            content_digest: None,
         },
         ..synchronous_handler.clone()
     };
@@ -1124,6 +1126,7 @@ fn requirements_managed_hooks_load_when_managed_dir_is_missing() {
             command: "echo hi".to_string(),
             r#async: false,
             env: HashMap::new(),
+            content_digest: None,
         }
     );
     assert_eq!(
@@ -1916,6 +1919,7 @@ fn plugin_hook_sources_expand_plugin_placeholders() {
                     plugin_data_root.display().to_string(),
                 ),
             ]),
+            content_digest: None,
         }
     );
 }

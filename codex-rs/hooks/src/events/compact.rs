@@ -535,6 +535,7 @@ mod tests {
                 command: "python3 compact_hook.py".to_string(),
                 r#async: false,
                 env: std::collections::HashMap::new(),
+                content_digest: None,
             },
         }
     }

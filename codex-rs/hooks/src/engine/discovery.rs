@@ -25,6 +25,8 @@ use super::ConfiguredHandler;
 use super::ConfiguredHandlerKind;
 use super::HookListEntry;
 use super::HookListEntryHandler;
+use super::command_content::HookCommandContentDigest;
+use super::command_content::hook_command_content_digest;
 use crate::config_rules::hook_states_from_stack;
 use crate::events::common::matcher_pattern_for_event;
 use crate::events::common::validate_matcher_pattern;
@@ -564,12 +566,15 @@ fn append_matcher_groups(
                     let command = source.env.iter().fold(command, |command, (key, value)| {
                         command.replace(&format!("${{{key}}}"), value)
                     });
+                    let content_digest =
+                        hook_command_content_digest(&command, hook_command_base_path(&source));
                     NormalizedHandler {
                         config,
                         kind: ConfiguredHandlerKind::Command {
                             command,
                             env: source.env.clone(),
                             r#async: runs_async,
+                            content_digest,
                         },
                         timeout_sec,
                         status_message,
@@ -652,7 +657,20 @@ fn append_matcher_groups(
                 status_message,
                 additional_context_limit,
             } = normalized;
-            let current_hash = hook_hash(event_name, matcher, &group, config);
+            let current_hash = match &kind {
+                ConfiguredHandlerKind::Command { content_digest, .. } => {
+                    hook_hash_with_content_digest(
+                        event_name,
+                        matcher,
+                        &group,
+                        config,
+                        content_digest.as_ref(),
+                    )
+                }
+                ConfiguredHandlerKind::McpTool { .. } => {
+                    hook_hash(event_name, matcher, &group, config)
+                }
+            };
             let key = crate::hook_key(&source.key_source, event_name, group_index, handler_index);
             let state = source.hook_states.get(&key);
             let enabled = hook_enabled(source.is_managed, state);
@@ -743,10 +761,12 @@ fn normalize_command_hook(
 /// Hash a normalized, config-derived identity instead of source text so equivalent
 /// hooks from config TOML and hooks.json converge on the same trust identity.
 #[derive(Serialize)]
-struct NormalizedHookIdentity {
+struct NormalizedHookIdentity<'a> {
     event_name: &'static str,
     #[serde(flatten)]
     group: MatcherGroup,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_digest: Option<&'a HookCommandContentDigest>,
 }
 
 fn hook_hash(
@@ -755,17 +775,54 @@ fn hook_hash(
     group: &MatcherGroup,
     normalized_handler: HookHandlerConfig,
 ) -> String {
+    let content_digest = match &normalized_handler {
+        HookHandlerConfig::Command { command, .. } => {
+            hook_command_content_digest(command, Path::new("."))
+        }
+        HookHandlerConfig::McpTool { .. }
+        | HookHandlerConfig::Prompt {}
+        | HookHandlerConfig::Agent {} => None,
+    };
+    hook_hash_with_content_digest(
+        event_name,
+        matcher,
+        group,
+        normalized_handler,
+        content_digest.as_ref(),
+    )
+}
+
+fn hook_hash_with_content_digest(
+    event_name: codex_protocol::protocol::HookEventName,
+    matcher: Option<&str>,
+    group: &MatcherGroup,
+    normalized_handler: HookHandlerConfig,
+    content_digest: Option<&HookCommandContentDigest>,
+) -> String {
     let mut group = group.clone();
     group.matcher = matcher.map(ToOwned::to_owned);
     group.hooks = vec![normalized_handler];
     let identity = NormalizedHookIdentity {
         event_name: crate::hook_event_key_label(event_name),
         group,
+        content_digest,
     };
     let Ok(value) = TomlValue::try_from(identity) else {
         unreachable!("normalized hook identity should serialize to TOML");
     };
     version_for_toml(&value)
+}
+
+fn hook_command_base_path(source: &HookHandlerSource<'_>) -> &Path {
+    if matches!(&source.source, HookSource::Project)
+        && let Some(parent) = source.path.parent()
+        && parent.file_name().is_some_and(|name| name == ".codex")
+        && let Some(project_root) = parent.parent()
+    {
+        return project_root;
+    }
+
+    source.path.parent().unwrap_or_else(|| Path::new("."))
 }
 
 fn hook_trust_status(
@@ -1173,6 +1230,7 @@ mod tests {
                     command: "echo hello".to_string(),
                     r#async: false,
                     env: std::collections::HashMap::new(),
+                    content_digest: None,
                 },
             }]
         );
@@ -1212,6 +1270,7 @@ mod tests {
                     command: "echo hello".to_string(),
                     r#async: false,
                     env: std::collections::HashMap::new(),
+                    content_digest: None,
                 },
             }]
         );
@@ -1496,6 +1555,7 @@ mod tests {
                 .to_string(),
                 env: std::collections::HashMap::new(),
                 r#async: false,
+                content_digest: None,
             }
         );
     }

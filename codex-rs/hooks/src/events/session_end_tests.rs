@@ -72,6 +72,7 @@ fn handler(matcher: Option<&str>) -> ConfiguredHandler {
             command: "echo hook".to_string(),
             r#async: false,
             env: HashMap::new(),
+            content_digest: None,
         },
     }
 }

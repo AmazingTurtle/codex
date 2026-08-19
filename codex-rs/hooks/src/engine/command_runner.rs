@@ -26,6 +26,7 @@ use super::CommandShell;
 use super::ConfiguredHandler;
 use super::ConfiguredHandlerKind;
 use super::HandlerRunResult;
+use super::command_content::hook_command_content_digest;
 use super::dispatcher::ParsedHandler;
 use super::dispatcher::hook_event_name_label;
 use super::dispatcher::hook_execution_mode_label;
@@ -202,6 +203,22 @@ pub(crate) async fn run_command(
     let started_at = chrono::Utc::now().timestamp();
     let started = Instant::now();
 
+    if let Some(expected_digest) = command_content_digest(handler)
+        && hook_command_content_digest(command, cwd).as_ref() != Some(expected_digest)
+    {
+        return finish_command_run(
+            started_at,
+            started,
+            CommandRunCompletion {
+                exit_code: None,
+                stdout: String::new(),
+                stderr: String::new(),
+                error: Some("hook command target changed since approval".to_string()),
+                outcome: "content_digest_mismatch",
+            },
+        );
+    }
+
     let mut command = build_command(&runtime.shell, command, &runtime.environment, env);
     command
         .current_dir(cwd)
@@ -314,6 +331,15 @@ pub(crate) async fn run_command(
                 outcome: "timeout",
             },
         ),
+    }
+}
+
+fn command_content_digest(
+    handler: &ConfiguredHandler,
+) -> Option<&super::command_content::HookCommandContentDigest> {
+    match &handler.kind {
+        ConfiguredHandlerKind::Command { content_digest, .. } => content_digest.as_ref(),
+        ConfiguredHandlerKind::McpTool { .. } => None,
     }
 }
 
