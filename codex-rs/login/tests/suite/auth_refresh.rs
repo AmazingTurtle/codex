@@ -155,6 +155,7 @@ async fn refresh_token_honors_respect_system_proxy() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         codex_home.path(),
@@ -209,6 +210,7 @@ async fn refresh_token_succeeds_updates_storage() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -286,6 +288,7 @@ async fn refresh_token_refreshes_when_auth_is_unchanged() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -354,6 +357,7 @@ async fn auth_refreshes_when_access_token_is_near_expiry() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -407,6 +411,7 @@ async fn auth_skips_access_token_outside_refresh_window() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -446,6 +451,7 @@ async fn refresh_token_skips_refresh_when_auth_changed() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -459,6 +465,7 @@ async fn refresh_token_skips_refresh_when_auth_changed() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         ctx.codex_home.path(),
@@ -518,6 +525,7 @@ async fn refresh_token_errors_on_account_mismatch() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -532,6 +540,7 @@ async fn refresh_token_errors_on_account_mismatch() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         ctx.codex_home.path(),
@@ -539,6 +548,8 @@ async fn refresh_token_errors_on_account_mismatch() -> Result<()> {
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),
     )?;
+    let mut expected_disk_auth = disk_auth.clone();
+    expected_disk_auth.accounts = vec![initial_auth.clone()];
 
     let err = ctx
         .auth_manager
@@ -549,7 +560,7 @@ async fn refresh_token_errors_on_account_mismatch() -> Result<()> {
     assert_eq!(err.failed_reason(), Some(RefreshTokenFailedReason::Other));
 
     let stored = ctx.load_auth()?;
-    assert_eq!(stored, disk_auth);
+    assert_eq!(stored, expected_disk_auth);
 
     let requests = server.received_requests().await.unwrap_or_default();
     assert!(requests.is_empty(), "expected no refresh token requests");
@@ -595,6 +606,7 @@ async fn returns_fresh_tokens_as_is() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -646,6 +658,7 @@ async fn refreshes_token_when_access_token_is_expired() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -699,6 +712,7 @@ async fn auth_reloads_disk_auth_when_cached_auth_is_stale() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -713,6 +727,7 @@ async fn auth_reloads_disk_auth_when_cached_auth_is_stale() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         ctx.codex_home.path(),
@@ -769,6 +784,7 @@ async fn auth_reloads_disk_auth_without_calling_expired_refresh_token() -> Resul
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -783,6 +799,7 @@ async fn auth_reloads_disk_auth_without_calling_expired_refresh_token() -> Resul
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         ctx.codex_home.path(),
@@ -837,6 +854,7 @@ async fn refresh_token_returns_permanent_error_for_expired_refresh_token() -> Re
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -893,6 +911,7 @@ async fn refresh_token_does_not_retry_after_permanent_failure() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -963,6 +982,7 @@ async fn refresh_token_does_not_retry_after_bad_request_reused_failure() -> Resu
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1031,6 +1051,7 @@ async fn refresh_token_does_not_retry_after_standard_invalid_grant_failure() -> 
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1099,6 +1120,7 @@ async fn refresh_token_does_not_cache_other_bad_request_failure() -> Result<()> 
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1165,6 +1187,7 @@ async fn refresh_token_reloads_changed_auth_after_permanent_failure() -> Result<
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1190,6 +1213,7 @@ async fn refresh_token_reloads_changed_auth_after_permanent_failure() -> Result<
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         ctx.codex_home.path(),
@@ -1253,6 +1277,7 @@ async fn refresh_token_returns_transient_error_on_server_failure() -> Result<()>
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1309,6 +1334,7 @@ async fn unauthorized_recovery_reloads_then_refreshes_tokens() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1322,6 +1348,7 @@ async fn unauthorized_recovery_reloads_then_refreshes_tokens() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         ctx.codex_home.path(),
@@ -1410,6 +1437,7 @@ async fn unauthorized_recovery_errors_on_account_mismatch() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1424,6 +1452,7 @@ async fn unauthorized_recovery_errors_on_account_mismatch() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         ctx.codex_home.path(),
@@ -1431,6 +1460,8 @@ async fn unauthorized_recovery_errors_on_account_mismatch() -> Result<()> {
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),
     )?;
+    let mut expected_disk_auth = disk_auth.clone();
+    expected_disk_auth.accounts = vec![initial_auth.clone()];
 
     let cached_before = ctx
         .auth_manager
@@ -1452,7 +1483,7 @@ async fn unauthorized_recovery_errors_on_account_mismatch() -> Result<()> {
     assert_eq!(err.failed_reason(), Some(RefreshTokenFailedReason::Other));
 
     let stored = ctx.load_auth()?;
-    assert_eq!(stored, disk_auth);
+    assert_eq!(stored, expected_disk_auth);
 
     let requests = server.received_requests().await.unwrap_or_default();
     assert!(requests.is_empty(), "expected no refresh token requests");
@@ -1486,6 +1517,7 @@ async fn unauthorized_recovery_requires_chatgpt_auth() -> Result<()> {
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&auth).await?;
 

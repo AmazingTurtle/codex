@@ -13,6 +13,7 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
+    Account,
     Ide,
     Permissions,
     Keymap,
@@ -123,6 +124,7 @@ impl SlashCommand {
             SlashCommand::MemoryDrop => "DO NOT USE",
             SlashCommand::MemoryUpdate => "DO NOT USE",
             SlashCommand::Model => "choose what model and reasoning effort to use",
+            SlashCommand::Account => "switch or manage ChatGPT accounts",
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
@@ -164,6 +166,7 @@ impl SlashCommand {
         matches!(
             self,
             SlashCommand::Review
+                | SlashCommand::Account
                 | SlashCommand::Rename
                 | SlashCommand::New
                 | SlashCommand::Clear
@@ -177,6 +180,7 @@ impl SlashCommand {
                 | SlashCommand::Raw
                 | SlashCommand::Cd
                 | SlashCommand::Pwd
+                | SlashCommand::Status
                 | SlashCommand::Usage
                 | SlashCommand::Pets
                 | SlashCommand::Side
@@ -207,6 +211,7 @@ impl SlashCommand {
     pub fn available_during_task(self) -> bool {
         match self {
             SlashCommand::New
+            | SlashCommand::Account
             | SlashCommand::Archive
             | SlashCommand::Delete
             | SlashCommand::Fork
