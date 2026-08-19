@@ -35,8 +35,10 @@ use anyhow::anyhow;
 use codex_config::types::McpServerEnvVar;
 use codex_exec_server::ExecBackend;
 use codex_exec_server::ExecEnvPolicy;
+use codex_exec_server::FileSystemSandboxContext;
 use codex_exec_server::ExecParams;
 use codex_exec_server::ExecProcess;
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::config_types::ShellEnvironmentPolicyInherit;
 use codex_utils_path_uri::LegacyAppPathString;
 use codex_utils_path_uri::PathUri;
@@ -536,8 +538,8 @@ impl Drop for StdioServerProcessHandleInner {
 /// child process and transports raw stdin/stdout/stderr bytes, so it does not
 /// need to know about MCP methods such as `initialize` or `tools/list`.
 ///
-/// Windows executor-backed servers retain the executor's normal descendant
-/// lifetime. MCP-specific containment requires negotiated process ownership:
+/// The executor applies a workspace sandbox rooted at the server cwd. Windows
+/// executor-backed servers retain the executor's normal descendant lifetime:
 /// caller-controlled process IDs cannot safely select a destructive policy,
 /// and a wrapper may exit while its descendants continue serving requests.
 #[derive(Clone)]
@@ -587,6 +589,10 @@ impl ExecutorStdioServerLauncher {
         let cwd: PathUri = LegacyAppPathString::from_path(Path::new(&cwd))
             .try_into()
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+        let sandbox = FileSystemSandboxContext::from_permission_profile_with_cwd(
+            PermissionProfile::workspace_write(),
+            cwd.clone(),
+        );
         let program_name = program.to_string_lossy().into_owned();
         let envs = create_env_overlay_for_remote_mcp_server(env, &env_vars);
         let remote_env_vars = remote_mcp_env_var_names(&env_vars);
@@ -610,7 +616,7 @@ impl ExecutorStdioServerLauncher {
                 tty: false,
                 pipe_stdin: true,
                 arg0: None,
-                sandbox: None,
+                sandbox: Some(sandbox),
                 enforce_managed_network: false,
                 managed_network: None,
                 network_proxy: None,

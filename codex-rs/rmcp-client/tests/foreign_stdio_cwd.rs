@@ -4,8 +4,10 @@ use std::sync::Mutex;
 
 use codex_exec_server::ExecBackend;
 use codex_exec_server::ExecBackendFuture;
+use codex_exec_server::FileSystemSandboxContext;
 use codex_exec_server::ExecParams;
 use codex_exec_server::ExecServerError;
+use codex_protocol::models::PermissionProfile;
 use codex_rmcp_client::ExecutorStdioServerLauncher;
 use codex_rmcp_client::RmcpClient;
 use codex_utils_path_uri::PathUri;
@@ -45,6 +47,10 @@ async fn executor_stdio_forwards_foreign_absolute_cwd_as_path_uri() {
     let expected_cwd: PathUri = "file:///home/openai/share"
         .parse()
         .expect("expected cwd should be a path URI");
+    let expected_sandbox = FileSystemSandboxContext::from_permission_profile_with_cwd(
+        PermissionProfile::workspace_write(),
+        expected_cwd.clone(),
+    );
     let backend = Arc::new(RecordingExecBackend::default());
     let launcher = Arc::new(ExecutorStdioServerLauncher::new(backend.clone()));
 
@@ -64,4 +70,5 @@ async fn executor_stdio_forwards_foreign_absolute_cwd_as_path_uri() {
         .take()
         .expect("executor start request should be recorded");
     assert_eq!(params.cwd, expected_cwd);
+    assert_eq!(params.sandbox, Some(expected_sandbox));
 }
