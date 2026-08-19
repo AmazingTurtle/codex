@@ -51,6 +51,7 @@ use sha2::Sha256;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -997,15 +998,27 @@ fn write_fallback_file(store: &FallbackFile) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
 
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+
     let serialized = serde_json::to_string(store)?;
-    fs::write(&path, serialized)?;
+    let mut file = options.open(&path)?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let perms = fs::Permissions::from_mode(0o600);
-        fs::set_permissions(&path, perms)?;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
     }
+
+    file.set_len(0)?;
+    file.write_all(serialized.as_bytes())?;
+    file.flush()?;
 
     Ok(())
 }
