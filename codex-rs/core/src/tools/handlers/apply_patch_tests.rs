@@ -285,7 +285,7 @@ fn write_permissions_for_paths_skip_dirs_already_writable_under_workspace_root()
 }
 
 #[test]
-fn write_permissions_for_paths_keep_dirs_outside_workspace_root() {
+fn write_permissions_for_paths_keep_targets_outside_workspace_root() {
     let tmp = TempDir::new().expect("tmp");
     let cwd = tmp.path().join("workspace");
     let outside = tmp.path().join("outside");
@@ -301,14 +301,43 @@ fn write_permissions_for_paths_keep_dirs_outside_workspace_root() {
     );
 
     let permissions = write_permissions_for_paths(&[file_path], &sandbox_policy, &cwd_abs);
-    let expected_outside =
-        dunce::simplified(&outside.canonicalize().expect("canonicalize outside dir")).abs();
+    let expected_file_path = dunce::simplified(&file_path).abs();
 
     assert_eq!(
         permissions
             .and_then(|profile| profile.file_system)
             .and_then(|fs| fs.legacy_read_write_roots())
             .and_then(|roots| roots.write),
-        Some(vec![expected_outside])
+        Some(vec![expected_file_path])
+    );
+}
+
+#[test]
+fn write_permissions_for_paths_do_not_widen_tmp_target_to_root() {
+    let tmp = TempDir::new().expect("tmp");
+    let cwd = tmp.path().join("workspace");
+    let outside = tmp.path().join("outside");
+    std::fs::create_dir_all(&cwd).expect("create cwd");
+    std::fs::create_dir_all(&outside).expect("create outside dir");
+    let selected = AbsolutePathBuf::try_from(outside.join("marker.txt"))
+        .expect("outside file path should be absolute");
+    let slash_tmp = AbsolutePathBuf::from_absolute_path(std::path::Path::new("/tmp"))
+        .expect("/tmp should be absolute");
+    let cwd_abs = cwd.abs();
+    let sandbox_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ false,
+    );
+
+    let permissions =
+        write_permissions_for_paths(&[selected, slash_tmp], &sandbox_policy, &cwd_abs);
+
+    assert_eq!(
+        permissions
+            .and_then(|profile| profile.file_system)
+            .and_then(|fs| fs.legacy_read_write_roots())
+            .and_then(|roots| roots.write),
+        Some(vec![dunce::simplified(&outside.join("marker.txt")).abs()])
     );
 }

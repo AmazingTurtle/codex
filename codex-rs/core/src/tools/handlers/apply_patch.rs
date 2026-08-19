@@ -239,19 +239,13 @@ fn write_permissions_for_paths(
 ) -> Option<AdditionalPermissionProfile> {
     let write_paths = file_paths
         .iter()
-        .map(|path| {
-            path.parent()
-                .unwrap_or_else(|| path.clone())
-                .into_path_buf()
-        })
         .filter(|path| {
             !file_system_sandbox_policy.can_write_path_with_cwd(path.as_path(), cwd.as_path())
         })
+        .map(AbsolutePathBuf::clone)
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .map(AbsolutePathBuf::from_absolute_path)
-        .collect::<Result<Vec<_>, _>>()
-        .ok()?;
+        .collect::<Vec<_>>();
 
     let permissions = (!write_paths.is_empty()).then_some(AdditionalPermissionProfile {
         file_system: Some(FileSystemPermissions::from_read_write_roots(
