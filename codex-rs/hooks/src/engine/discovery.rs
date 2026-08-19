@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 
 use codex_config::CONFIG_TOML_FILE;
 use codex_config::ConfigLayerEntry;
@@ -20,6 +21,8 @@ use codex_plugin::PluginHookSource;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::Digest;
+use sha2::Sha256;
 
 use super::ConfiguredHandler;
 use super::ConfiguredHandlerKind;
@@ -74,6 +77,7 @@ struct NormalizedHandler {
     timeout_sec: u64,
     status_message: Option<String>,
     additional_context_limit: Option<usize>,
+    dependencies: Vec<CommandHookDependencyIdentity>,
 }
 
 #[derive(Clone, Copy)]
@@ -564,6 +568,8 @@ fn append_matcher_groups(
                     let command = source.env.iter().fold(command, |command, (key, value)| {
                         command.replace(&format!("${{{key}}}"), value)
                     });
+                    let dependencies =
+                        command_dependency_identities(&command, source.path.as_path());
                     NormalizedHandler {
                         config,
                         kind: ConfiguredHandlerKind::Command {
@@ -574,6 +580,7 @@ fn append_matcher_groups(
                         timeout_sec,
                         status_message,
                         additional_context_limit,
+                        dependencies,
                     }
                 }
                 HookHandlerConfig::McpTool {
@@ -621,6 +628,7 @@ fn append_matcher_groups(
                         timeout_sec,
                         status_message,
                         additional_context_limit: None,
+                        dependencies: Vec::new(),
                     }
                 }
                 HookHandlerConfig::Prompt {} => {
@@ -651,8 +659,9 @@ fn append_matcher_groups(
                 timeout_sec,
                 status_message,
                 additional_context_limit,
+                dependencies,
             } = normalized;
-            let current_hash = hook_hash(event_name, matcher, &group, config);
+            let current_hash = hook_hash(event_name, matcher, &group, config, dependencies);
             let key = crate::hook_key(&source.key_source, event_name, group_index, handler_index);
             let state = source.hook_states.get(&key);
             let enabled = hook_enabled(source.is_managed, state);
@@ -747,6 +756,17 @@ struct NormalizedHookIdentity {
     event_name: &'static str,
     #[serde(flatten)]
     group: MatcherGroup,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    command_dependencies: Vec<CommandHookDependencyIdentity>,
+}
+
+#[derive(Serialize)]
+struct CommandHookDependencyIdentity {
+    arg_index: usize,
+    requested_path: String,
+    resolved_path: Option<String>,
+    content_sha256: Option<String>,
+    read_error: Option<String>,
 }
 
 fn hook_hash(
@@ -754,6 +774,7 @@ fn hook_hash(
     matcher: Option<&str>,
     group: &MatcherGroup,
     normalized_handler: HookHandlerConfig,
+    command_dependencies: Vec<CommandHookDependencyIdentity>,
 ) -> String {
     let mut group = group.clone();
     group.matcher = matcher.map(ToOwned::to_owned);
@@ -761,11 +782,137 @@ fn hook_hash(
     let identity = NormalizedHookIdentity {
         event_name: crate::hook_event_key_label(event_name),
         group,
+        command_dependencies,
     };
     let Ok(value) = TomlValue::try_from(identity) else {
         unreachable!("normalized hook identity should serialize to TOML");
     };
     version_for_toml(&value)
+}
+
+fn command_dependency_identities(
+    command: &str,
+    hook_source_path: &Path,
+) -> Vec<CommandHookDependencyIdentity> {
+    let Some(words) = command_words(command) else {
+        return Vec::new();
+    };
+    let base = command_dependency_base(hook_source_path);
+    let mut seen = HashSet::new();
+    words
+        .iter()
+        .enumerate()
+        .filter_map(|(arg_index, word)| {
+            command_dependency_path(word, &base).and_then(|requested_path| {
+                let dedupe_key = requested_path.display().to_string();
+                seen.insert(dedupe_key)
+                    .then(|| command_dependency_identity(arg_index, requested_path))
+            })
+        })
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn command_words(command: &str) -> Option<Vec<String>> {
+    shlex::split(command)
+}
+
+#[cfg(windows)]
+fn command_words(command: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    for ch in command.chars() {
+        match ch {
+            '"' => in_quotes = !in_quotes,
+            ch if ch.is_whitespace() && !in_quotes => {
+                if !current.is_empty() {
+                    words.push(std::mem::take(&mut current));
+                }
+            }
+            ch => current.push(ch),
+        }
+    }
+    if in_quotes {
+        return None;
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    Some(words)
+}
+
+fn command_dependency_base(hook_source_path: &Path) -> PathBuf {
+    let Some(parent) = hook_source_path.parent() else {
+        return PathBuf::from(".");
+    };
+    if parent.file_name().is_some_and(|name| name == ".codex") {
+        parent
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| parent.to_path_buf())
+    } else {
+        parent.to_path_buf()
+    }
+}
+
+fn command_dependency_path(word: &str, base: &Path) -> Option<PathBuf> {
+    if word.starts_with('-') {
+        return None;
+    }
+    let path = Path::new(word);
+    if path.is_absolute() {
+        return Some(path.to_path_buf());
+    }
+    is_relative_command_dependency(word).then(|| base.join(path))
+}
+
+fn is_relative_command_dependency(word: &str) -> bool {
+    word.starts_with("./")
+        || word.starts_with("../")
+        || word.starts_with(".\\")
+        || word.starts_with("..\\")
+        || word.contains('/')
+        || word.contains('\\')
+}
+
+fn command_dependency_identity(
+    arg_index: usize,
+    requested_path: PathBuf,
+) -> CommandHookDependencyIdentity {
+    let requested_path_display = requested_path.display().to_string();
+    let resolved_path = fs::canonicalize(&requested_path)
+        .ok()
+        .map(|path| path.display().to_string());
+    match fs::read(&requested_path) {
+        Ok(contents) => CommandHookDependencyIdentity {
+            arg_index,
+            requested_path: requested_path_display,
+            resolved_path,
+            content_sha256: Some(sha256_hex(&contents)),
+            read_error: None,
+        },
+        Err(err) => {
+            let error_kind = err.kind();
+            CommandHookDependencyIdentity {
+                arg_index,
+                requested_path: requested_path_display,
+                resolved_path,
+                content_sha256: None,
+                read_error: Some(format!("{error_kind:?}")),
+            }
+        }
+    }
+}
+
+fn sha256_hex(contents: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(contents);
+    let digest = hasher.finalize();
+    digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 fn hook_trust_status(
@@ -859,6 +1006,7 @@ mod tests {
     use codex_config::MatcherGroup;
     use codex_config::TomlValue;
     use codex_protocol::protocol::HookTrustStatus;
+    use tempfile::tempdir;
 
     fn source_path() -> AbsolutePathBuf {
         test_path_buf("/tmp/hooks.json").abs()
@@ -1372,6 +1520,80 @@ mod tests {
         assert_eq!(hook_entries.len(), 1);
         assert_eq!(hook_entries[0].trust_status, HookTrustStatus::Untrusted);
         assert_eq!(hook_entries[0].enabled, false);
+    }
+
+    #[test]
+    fn changed_project_script_marks_trusted_command_hook_modified() {
+        let temp_dir = tempdir().expect("tempdir");
+        let codex_dir = temp_dir.path().join(".codex");
+        let hooks_dir = codex_dir.join("hooks");
+        std::fs::create_dir_all(&hooks_dir).expect("create hook dir");
+        let source_path =
+            AbsolutePathBuf::from_absolute_path(codex_dir.join("config.toml")).expect("abs path");
+        std::fs::write(source_path.as_path(), "").expect("write config");
+        let script_path = hooks_dir.join("session-start.mjs");
+        std::fs::write(&script_path, "console.log('reviewed');\n").expect("write script");
+        let command = "node .codex/hooks/session-start.mjs".to_string();
+        let group = MatcherGroup {
+            matcher: None,
+            hooks: vec![HookHandlerConfig::Command {
+                command,
+                command_windows: None,
+                timeout_sec: None,
+                r#async: false,
+                status_message: None,
+                additional_context_limit: None,
+            }],
+        };
+        let key = crate::hook_key(
+            &source_path.display().to_string(),
+            HookEventName::SessionStart,
+            /*group_index*/ 0,
+            /*handler_index*/ 0,
+        );
+        let discover =
+            |hook_states: &std::collections::HashMap<String, HookStateToml>| {
+                let mut handlers = Vec::new();
+                let mut entries = Vec::new();
+                let mut warnings = Vec::new();
+                let mut display_order = 0;
+                append_matcher_groups(
+                    &mut handlers,
+                    &mut entries,
+                    &mut warnings,
+                    &mut display_order,
+                    &mut unmanaged_hook_handler_source(
+                        &source_path,
+                        hook_states,
+                        /*bypass_hook_trust*/ false,
+                    ),
+                    HookEventName::SessionStart,
+                    vec![group.clone()],
+                );
+                assert_eq!(warnings, Vec::<String>::new());
+                (handlers, entries)
+            };
+
+        let (_, entries) = discover(&std::collections::HashMap::new());
+        assert_eq!(entries[0].trust_status, HookTrustStatus::Untrusted);
+        let trusted_hash = entries[0].current_hash.clone();
+        let hook_states = std::collections::HashMap::from([(
+            key,
+            HookStateToml {
+                enabled: Some(true),
+                trusted_hash: Some(trusted_hash),
+            },
+        )]);
+
+        let (handlers, entries) = discover(&hook_states);
+        assert_eq!(entries[0].trust_status, HookTrustStatus::Trusted);
+        assert_eq!(handlers.len(), 1);
+
+        std::fs::write(&script_path, "console.log('changed');\n").expect("change script");
+        let (handlers, entries) = discover(&hook_states);
+
+        assert_eq!(entries[0].trust_status, HookTrustStatus::Modified);
+        assert_eq!(handlers, Vec::<ConfiguredHandler>::new());
     }
 
     #[test]
