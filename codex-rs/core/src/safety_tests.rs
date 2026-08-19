@@ -64,6 +64,31 @@ fn test_writable_roots_constraint() {
 }
 
 #[test]
+#[cfg(unix)]
+fn mutable_symlink_patch_path_requires_approval() {
+    let tmp = TempDir::new().unwrap();
+    let workspace = tmp.path().join("workspace");
+    let reviewed = workspace.join("reviewed");
+    std::fs::create_dir_all(&reviewed).unwrap();
+    let alias = workspace.join("selected");
+    std::os::unix::fs::symlink(&reviewed, &alias).unwrap();
+    let target = alias.join("approved.txt").abs();
+    let action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&target), "reviewed".into());
+    let policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &action,
+        &policy,
+        &PathUri::from_abs_path(&workspace.abs()),
+    ));
+}
+
+#[test]
 fn external_sandbox_auto_approves_in_on_request() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().abs();

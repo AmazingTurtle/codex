@@ -66,6 +66,13 @@ fn wants_no_sandbox_approval_granular_respects_sandbox_flag() {
     );
 }
 
+#[test]
+fn sandbox_denials_do_not_retry_without_sandbox() {
+    let runtime = ApplyPatchRuntime::new();
+
+    assert!(!runtime.escalate_on_failure());
+}
+
 #[tokio::test]
 async fn approval_action_preserves_patch_path_uris() {
     let path = PathUri::parse("file:///C:/workspace/guardian-apply-patch-test.txt")

@@ -134,15 +134,14 @@ fn is_write_patch_constrained_to_writable_paths(
     let Ok(native_cwd) = cwd.to_abs_path() else {
         return false;
     };
-    // Normalize a path by removing `.` and resolving `..` without touching the
-    // filesystem (works even if the file does not exist).
+    // Normalize a path by removing `.` without touching the filesystem. Parent
+    // components are rejected because they can resolve differently when an
+    // earlier path component is a symlink.
     fn normalize(path: &Path) -> Option<PathBuf> {
         let mut out = PathBuf::new();
         for comp in path.components() {
             match comp {
-                Component::ParentDir => {
-                    out.pop();
-                }
+                Component::ParentDir => return None,
                 Component::CurDir => { /* skip */ }
                 other => out.push(other.as_os_str()),
             }
@@ -163,6 +162,20 @@ fn is_write_patch_constrained_to_writable_paths(
             Some(v) => v,
             None => return false,
         };
+        let mut ancestors = abs.ancestors().collect::<Vec<_>>();
+        ancestors.reverse();
+        if ancestors.into_iter().any(|ancestor| {
+            if ancestor.as_os_str().is_empty() {
+                return false;
+            }
+            match std::fs::symlink_metadata(ancestor) {
+                Ok(metadata) => metadata.file_type().is_symlink(),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                Err(_) => true,
+            }
+        }) {
+            return false;
+        }
 
         file_system_sandbox_policy.can_write_path_with_cwd(&abs, &native_cwd)
     };
