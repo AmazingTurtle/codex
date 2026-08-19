@@ -285,6 +285,156 @@ async fn responses_http_uses_local_backoff_despite_retry_after() -> Result<()> {
     Ok(())
 }
 
+/// Opaque bad requests are retried as stream failures because they do not contain actionable
+/// client-error details and have been observed to succeed unchanged on a subsequent request.
+#[tokio::test(flavor = "current_thread")]
+async fn responses_http_opaque_bad_request_retries_and_recovers() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let mut telemetry = RetryTelemetryCapture::install();
+    let server = responses::start_mock_server().await;
+    let response_mock = responses::mount_response_sequence(
+        &server,
+        vec![
+            ResponseTemplate::new(400)
+                .insert_header("cf-ray", "ray-id")
+                .insert_header("x-oai-request-id", "request-id")
+                .set_body_json(json!({ "detail": "Bad Request" })),
+            responses::sse_response(responses::sse(vec![
+                responses::ev_response_created("recovered"),
+                responses::ev_completed("recovered"),
+            ])),
+        ],
+    )
+    .await;
+    let test = test_codex()
+        .with_config(|config| {
+            config.model_provider.request_max_retries = Some(0);
+            config.model_provider.stream_max_retries = Some(1);
+            config.model_provider.supports_websockets = false;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+
+    submit_user_input(&test, "recover from the opaque bad request").await?;
+    let retry = telemetry.next_retry().await;
+    assert!((FIRST_RETRY_MIN_DELAY..FIRST_RETRY_MAX_DELAY).contains(&retry.delay));
+    assert_eq!(
+        retry,
+        RetryTelemetryEvent {
+            attempt: 1,
+            delay: retry.delay,
+            layer: "stream".into(),
+            operation: "sampling".into(),
+        }
+    );
+    wait_for_retry(&mut telemetry, &retry).await;
+
+    let EventMsg::StreamError(stream_error) = wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::StreamError(_))
+    })
+    .await
+    else {
+        unreachable!("predicate guarantees a stream error event");
+    };
+    assert_eq!(stream_error.message, "Reconnecting... 1/1");
+    wait_for_turn_completion(&test).await;
+
+    assert_eq!(response_mock.requests().len(), 2);
+    assert_eq!(
+        telemetry.events.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    );
+    Ok(())
+}
+
+/// Persistent opaque bad requests stop after the configured stream retry budget is exhausted.
+#[tokio::test(flavor = "current_thread")]
+async fn responses_http_opaque_bad_request_exhausts_stream_retries() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let mut telemetry = RetryTelemetryCapture::install();
+    let server = responses::start_mock_server().await;
+    let response_mock = responses::mount_response_sequence(
+        &server,
+        (0..3)
+            .map(|_| {
+                ResponseTemplate::new(400)
+                    .insert_header("cf-ray", "ray-id")
+                    .insert_header("x-oai-request-id", "request-id")
+                    .set_body_json(json!({ "detail": "Bad Request" }))
+            })
+            .collect(),
+    )
+    .await;
+    let test = test_codex()
+        .with_config(|config| {
+            config.model_provider.request_max_retries = Some(0);
+            config.model_provider.stream_max_retries = Some(2);
+            config.model_provider.supports_websockets = false;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+
+    submit_user_input(&test, "exhaust retries for the opaque bad request").await?;
+    let first_retry = telemetry.next_retry().await;
+    assert!((FIRST_RETRY_MIN_DELAY..FIRST_RETRY_MAX_DELAY).contains(&first_retry.delay));
+    assert_eq!(
+        first_retry,
+        RetryTelemetryEvent {
+            attempt: 1,
+            delay: first_retry.delay,
+            layer: "stream".into(),
+            operation: "sampling".into(),
+        }
+    );
+    wait_for_retry(&mut telemetry, &first_retry).await;
+    let second_retry = telemetry.next_retry().await;
+    assert!((SECOND_RETRY_MIN_DELAY..SECOND_RETRY_MAX_DELAY).contains(&second_retry.delay));
+    assert_eq!(
+        second_retry,
+        RetryTelemetryEvent {
+            attempt: 2,
+            delay: second_retry.delay,
+            layer: "stream".into(),
+            operation: "sampling".into(),
+        }
+    );
+    wait_for_retry(&mut telemetry, &second_retry).await;
+
+    let mut stream_error_messages = Vec::new();
+    let mut terminal_error = None;
+    loop {
+        match wait_for_event(&test.codex, |_| true).await {
+            EventMsg::StreamError(error) => stream_error_messages.push(error.message),
+            EventMsg::Error(error) => terminal_error = Some(error),
+            EventMsg::TurnComplete(event) => {
+                assert_eq!(
+                    event.error.and_then(|error| error.codex_error_info),
+                    Some(CodexErrorInfo::Other)
+                );
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    assert_eq!(
+        stream_error_messages,
+        vec!["Reconnecting... 1/2", "Reconnecting... 2/2"]
+    );
+    let terminal_error = terminal_error.expect("retry exhaustion should emit a terminal error");
+    assert_eq!(terminal_error.codex_error_info, Some(CodexErrorInfo::Other));
+    assert!(terminal_error.message.contains("400 Bad Request"));
+    assert!(terminal_error.message.contains("request-id"));
+    assert_eq!(response_mock.requests().len(), 3);
+    assert_eq!(
+        telemetry.events.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    );
+    Ok(())
+}
+
 /// Headerless HTTP overloads currently exhaust request retries before emitting one terminal error.
 #[tokio::test(flavor = "current_thread")]
 async fn responses_http_overload_without_retry_after_exhausts_request_retries() -> Result<()> {

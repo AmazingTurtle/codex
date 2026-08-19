@@ -199,6 +199,58 @@ fn map_api_error_keeps_unknown_400_errors_generic() {
         panic!("expected CodexErrorDetails::InvalidRequest, got {err:?}");
     };
     assert_eq!(message, &body);
+    assert!(!err.is_retryable());
+}
+
+#[test]
+fn map_api_error_retries_opaque_bad_request_and_preserves_diagnostics() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        OAI_REQUEST_ID_HEADER,
+        http::HeaderValue::from_static("request-id"),
+    );
+    headers.insert(CF_RAY_HEADER, http::HeaderValue::from_static("ray-id"));
+    let body = "{ \"detail\": \"Bad Request\" }".to_string();
+    let err = map_api_error(ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::BAD_REQUEST,
+        url: Some("http://example.com/v1/responses".to_string()),
+        headers: Some(headers),
+        body: Some(body.clone()),
+    }));
+
+    let CodexErrorDetails::UnexpectedStatus(unexpected) = err.details() else {
+        panic!("expected CodexErrorDetails::UnexpectedStatus, got {err:?}");
+    };
+    assert_eq!(unexpected.status, http::StatusCode::BAD_REQUEST);
+    assert_eq!(unexpected.body, body);
+    assert_eq!(
+        unexpected.url.as_deref(),
+        Some("http://example.com/v1/responses")
+    );
+    assert_eq!(unexpected.cf_ray.as_deref(), Some("ray-id"));
+    assert_eq!(unexpected.request_id.as_deref(), Some("request-id"));
+    assert!(err.is_retryable());
+}
+
+#[test]
+fn map_api_error_does_not_retry_enriched_bad_request_detail() {
+    let body = serde_json::json!({
+        "detail": "Bad Request",
+        "reason": "invalid input"
+    })
+    .to_string();
+    let err = map_api_error(ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::BAD_REQUEST,
+        url: Some("http://example.com/v1/responses".to_string()),
+        headers: None,
+        body: Some(body.clone()),
+    }));
+
+    let CodexErrorDetails::InvalidRequest(message) = err.details() else {
+        panic!("expected CodexErrorDetails::InvalidRequest, got {err:?}");
+    };
+    assert_eq!(message, &body);
+    assert!(!err.is_retryable());
 }
 
 #[test]

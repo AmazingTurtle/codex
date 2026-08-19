@@ -110,6 +110,14 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                         .contains("The image data you provided does not represent a valid image")
                     {
                         CodexErr::InvalidImageRequest()
+                    } else if serde_json::from_str::<Value>(&body_text).is_ok_and(|parsed| {
+                        parsed.as_object().is_some_and(|object| {
+                            object.len() == 1
+                                && object.get("detail").and_then(Value::as_str)
+                                    == Some("Bad Request")
+                        })
+                    }) {
+                        unexpected_status_error(status, url, headers, body_text)
                     } else {
                         CodexErr::InvalidRequest(body_text)
                     }
@@ -152,19 +160,7 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                         request_id: extract_request_tracking_id(headers.as_ref()),
                     })
                 } else {
-                    CodexErr::UnexpectedStatus(UnexpectedResponseError {
-                        status,
-                        user_message: api_error_user_message(status, &body_text),
-                        body: body_text,
-                        url,
-                        cf_ray: extract_header(headers.as_ref(), CF_RAY_HEADER),
-                        request_id: extract_request_id(headers.as_ref()),
-                        identity_authorization_error: extract_header(
-                            headers.as_ref(),
-                            X_OPENAI_AUTHORIZATION_ERROR_HEADER,
-                        ),
-                        identity_error_code: extract_x_error_json_code(headers.as_ref()),
-                    })
+                    unexpected_status_error(status, url, headers, body_text)
                 }
             }
             TransportError::RetryLimit => CodexErr::RetryLimit(RetryLimitReachedError {
@@ -213,6 +209,27 @@ fn api_error_user_message(status: http::StatusCode, body: &str) -> Option<String
     } else {
         None
     }
+}
+
+fn unexpected_status_error(
+    status: http::StatusCode,
+    url: Option<String>,
+    headers: Option<HeaderMap>,
+    body: String,
+) -> CodexErr {
+    CodexErr::UnexpectedStatus(UnexpectedResponseError {
+        status,
+        user_message: api_error_user_message(status, &body),
+        body,
+        url,
+        cf_ray: extract_header(headers.as_ref(), CF_RAY_HEADER),
+        request_id: extract_request_id(headers.as_ref()),
+        identity_authorization_error: extract_header(
+            headers.as_ref(),
+            X_OPENAI_AUTHORIZATION_ERROR_HEADER,
+        ),
+        identity_error_code: extract_x_error_json_code(headers.as_ref()),
+    })
 }
 
 fn extract_request_id(headers: Option<&HeaderMap>) -> Option<String> {
