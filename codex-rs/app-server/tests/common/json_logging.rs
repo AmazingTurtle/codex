@@ -86,7 +86,7 @@ pub fn app_server_json_shutdown_event(
     )?;
     let output = Command::new(codex_utils_cargo_bin::cargo_bin(binary)?)
         .stdin(Stdio::null())
-        .env("CODEX_HOME", codex_home)
+        .env("BETTER_CODEX_HOME", codex_home)
         .env(
             "CODEX_APP_SERVER_MANAGED_CONFIG_PATH",
             codex_home.join("managed_config.toml"),

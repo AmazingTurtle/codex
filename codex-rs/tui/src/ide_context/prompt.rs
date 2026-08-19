@@ -13,7 +13,7 @@ const MAX_OPEN_TABS_CHARS: usize = 20_000;
 // raw prompt before this marker, then transcript rendering strips back to the request after the last
 // marker. Keeping the same marker and stripping semantics lets threads created with IDE context in
 // one surface replay cleanly in the others.
-const PROMPT_REQUEST_BEGIN: &str = "## My request for Codex:";
+const PROMPT_REQUEST_BEGIN: &str = "## My request for Better Codex:";
 
 pub(crate) fn apply_ide_context_to_user_input(
     context: &IdeContext,
@@ -282,7 +282,7 @@ mod tests {
 
         assert!(apply_ide_context_to_user_input(&context, &mut items));
 
-        let expected_prefix = "# Context from my IDE setup:\n\n## Active file: src/lib.rs\n\n## My request for Codex:\n";
+        let expected_prefix = "# Context from my IDE setup:\n\n## Active file: src/lib.rs\n\n## My request for Better Codex:\n";
         let prefix_len = expected_prefix.len();
         assert_eq!(
             items,
@@ -307,8 +307,7 @@ mod tests {
 
     #[test]
     fn extract_prompt_request_returns_text_after_last_delimiter() {
-        let message =
-            "# Context\n## My request for Codex:\nFirst\n## My request for Codex:\n  Second\n";
+        let message = "# Context\n## My request for Better Codex:\nFirst\n## My request for Better Codex:\n  Second\n";
 
         assert_eq!(
             extract_prompt_request_with_offset(message),

@@ -64,7 +64,7 @@ impl McpProcess {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
-        cmd.env("CODEX_HOME", codex_home);
+        cmd.env("BETTER_CODEX_HOME", codex_home);
         cmd.env("RUST_LOG", "debug");
 
         for (k, v) in env_overrides {

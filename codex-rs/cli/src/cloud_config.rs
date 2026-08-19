@@ -19,7 +19,7 @@ pub(crate) async fn load_config(
     let cli_overrides = config_overrides
         .parse_overrides()
         .map_err(anyhow::Error::msg)?;
-    let codex_home = find_codex_home().context("failed to resolve CODEX_HOME")?;
+    let codex_home = find_codex_home().context("failed to resolve BETTER_CODEX_HOME")?;
     let cwd = AbsolutePathBuf::current_dir().context("failed to resolve current directory")?;
     let bootstrap_config = load_config_toml_with_layer_stack(
         codex_home.as_path(),

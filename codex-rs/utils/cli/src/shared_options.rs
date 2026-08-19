@@ -31,7 +31,7 @@ pub struct SharedCliOptions {
     #[arg(long = "local-provider")]
     pub oss_provider: Option<String>,
 
-    /// Layer $CODEX_HOME/<name>.config.toml on top of the base user config.
+    /// Layer $BETTER_CODEX_HOME/<name>.config.toml on top of the base user config.
     #[arg(long = "profile", short = 'p')]
     pub config_profile_v2: Option<ProfileV2Name>,
 

@@ -17,7 +17,7 @@ If you trust the repo and want fewer prompts, use a configuration or profile tha
 - enables network for the sandbox mode you plan to use
 - sets an approval policy that matches your risk tolerance
 
-Example `~/.codex/config.toml` pattern:
+Example `~/.better-codex/config.toml` pattern:
 
 ```toml
 approval_policy = "on-request"

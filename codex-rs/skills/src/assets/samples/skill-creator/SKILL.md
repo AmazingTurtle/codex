@@ -148,7 +148,7 @@ These examples illustrate options, not a required structure. Choose the organiza
 
 Adapt the work to the request. Creating a complex new skill may involve understanding realistic use cases, choosing supporting resources, initializing files, writing instructions, and validating the result. A narrow update to an existing skill may require only a focused edit and validation.
 
-Ask clarifying questions only when the missing information matters and cannot be reasonably inferred. Respect a user-specified location; otherwise create discoverable skills in `$CODEX_HOME/skills`, or `~/.codex/skills` when `CODEX_HOME` is unset.
+Ask clarifying questions only when the missing information matters and cannot be reasonably inferred. Respect a user-specified location; otherwise create discoverable skills in `$BETTER_CODEX_HOME/skills`, or `~/.better-codex/skills` when `BETTER_CODEX_HOME` is unset.
 
 Keep automatic skill selection enabled unless the user explicitly requests an explicit-only skill. When the intended invocation mode is genuinely unclear and matters to the requested workflow, ask whether the user wants normal automatic discovery or explicit-only invocation; otherwise preserve the default. Do not infer explicit-only invocation from sensitive operations or required approvals: keep the skill discoverable and require authorization immediately before the actual mutation. Preserve an existing skill's invocation policy unless the user asks to change it.
 
@@ -178,8 +178,8 @@ scripts/init_skill.py <skill-name> --path <output-directory> [--resources script
 For example:
 
 ```bash
-scripts/init_skill.py my-skill --path "${CODEX_HOME:-$HOME/.codex}/skills"
-scripts/init_skill.py my-skill --path "${CODEX_HOME:-$HOME/.codex}/skills" --resources references
+scripts/init_skill.py my-skill --path "${BETTER_CODEX_HOME:-$HOME/.better-codex}/skills"
+scripts/init_skill.py my-skill --path "${BETTER_CODEX_HOME:-$HOME/.better-codex}/skills" --resources references
 ```
 
 Request only the resource directories the skill needs. Use `--examples` only when concrete placeholders would help, and replace or remove them before finishing. Do not initialize an existing skill again.

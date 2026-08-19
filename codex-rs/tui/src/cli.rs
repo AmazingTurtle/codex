@@ -16,7 +16,7 @@ pub struct Cli {
     #[arg(long = "strict-config", default_value_t = false)]
     pub strict_config: bool,
 
-    // Internal controls set by the top-level `codex resume` subcommand.
+    // Internal controls set by the top-level `better-codex resume` subcommand.
     // These are not exposed as user flags on the base `codex` command.
     #[clap(skip)]
     pub resume_picker: bool,

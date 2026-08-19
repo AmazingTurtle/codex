@@ -35,6 +35,7 @@ pub use oauth::StoredOAuthCredentialSnapshot;
 pub use oauth::StoredOAuthTokens;
 pub use oauth::WrappedOAuthTokenResponse;
 pub use oauth::delete_oauth_tokens;
+pub use oauth::import_upstream_direct_keyring_oauth_tokens;
 pub use oauth::save_oauth_tokens;
 pub use oauth::stored_oauth_credential_snapshot;
 pub use oauth::stored_oauth_credentials;

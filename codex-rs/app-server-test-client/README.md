@@ -27,12 +27,12 @@ and the client will send the response and continue streaming the same turn.
 `test-login --amazon-bedrock` initializes the experimental app-server API, sends an
 `account/login/start` request with an Amazon Bedrock API key, and waits for the
 `account/login/completed` and `account/updated` notifications. Login replaces the current primary
-credential and sets `model_provider = "amazon-bedrock"`, so use an isolated `CODEX_HOME` when
+credential and sets `model_provider = "amazon-bedrock"`, so use an isolated `BETTER_CODEX_HOME` when
 testing.
 
 ```bash
-export CODEX_HOME="$(mktemp -d)"
-printf 'cli_auth_credentials_store = "file"\n' > "$CODEX_HOME/config.toml"
+export BETTER_CODEX_HOME="$(mktemp -d)"
+printf 'cli_auth_credentials_store = "file"\n' > "$BETTER_CODEX_HOME/config.toml"
 
 cargo build -p codex-cli --bin codex
 cargo run -p codex-app-server-test-client -- \
@@ -44,12 +44,12 @@ cargo run -p codex-app-server-test-client -- \
 ```
 
 The test client redacts `apiKey` from its outbound request log. After login, start a fresh Codex
-process with the same `CODEX_HOME` to verify that it uses the persisted managed credential.
+process with the same `BETTER_CODEX_HOME` to verify that it uses the persisted managed credential.
 
 ## Testing logout
 
 `test-logout` initializes the app-server, sends an `account/logout` request, and waits for the
-resulting `account/updated` notification. It uses the active `CODEX_HOME`, so point it at an
+resulting `account/updated` notification. It uses the active `BETTER_CODEX_HOME`, so point it at an
 isolated directory when testing credential cleanup.
 
 ```bash

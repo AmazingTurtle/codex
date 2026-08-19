@@ -6,7 +6,7 @@ Buffer {
     area: Rect { x: 0, y: 0, width: 80, height: 6 },
     content: [
         "╭───────────────────────────────────────────╮                                   ",
-        "│ >_ OpenAI Codex (vtest)                   │                                   ",
+        "│ >_ Better Codex (vtest)                   │                                   ",
         "│                                           │                                   ",
         "│ model:     gpt-5-ｶﾞ-ﾊﾟ   /model to change │                                   ", // hidden by multi-width symbols: [(20, " "), (23, " ")]
         "│ directory: project                        │                                   ",

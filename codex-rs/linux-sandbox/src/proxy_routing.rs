@@ -332,7 +332,7 @@ fn create_proxy_socket_dir() -> io::Result<PathBuf> {
 }
 
 fn proxy_socket_parent_dir() -> PathBuf {
-    if let Some(codex_home) = std::env::var_os("CODEX_HOME") {
+    if let Some(codex_home) = std::env::var_os("BETTER_CODEX_HOME") {
         let candidate = PathBuf::from(codex_home).join("tmp");
         if proxy_socket_paths_fit(candidate.as_path())
             && ensure_private_proxy_socket_parent_dir(candidate.as_path()).is_ok()
