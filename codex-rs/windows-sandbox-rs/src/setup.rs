@@ -565,9 +565,6 @@ fn gather_full_read_roots_for_permissions(
             .iter()
             .map(PathBuf::from),
     );
-    if let Ok(up) = std::env::var("USERPROFILE") {
-        roots.extend(profile_read_roots(Path::new(&up)));
-    }
     roots.push(command_cwd.to_path_buf());
     roots.extend(
         permissions
@@ -1359,6 +1356,7 @@ mod tests {
     use std::path::Path;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
     use std::sync::mpsc;
@@ -1366,6 +1364,8 @@ mod tests {
     use std::time::Duration;
     use std::time::Instant;
     use tempfile::TempDir;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn canonical_windows_platform_default_roots() -> Vec<PathBuf> {
         WINDOWS_PLATFORM_DEFAULT_READ_ROOTS
@@ -2302,6 +2302,53 @@ mod tests {
                 .into_iter()
                 .all(|path| roots.contains(&path))
         );
+    }
+
+    #[test]
+    fn full_read_roots_do_not_enumerate_unselected_user_profile_children() {
+        let _env_guard = ENV_LOCK.lock().expect("env lock");
+        let tmp = TempDir::new().expect("tempdir");
+        let codex_home = tmp.path().join("codex-home");
+        let user_profile = tmp.path().join("synthetic-profile");
+        let documents = user_profile.join("Documents");
+        let command_cwd = tmp.path().join("workspace");
+        let writable_root = tmp.path().join("explicit-write-root");
+        fs::create_dir_all(&documents).expect("create documents");
+        fs::create_dir_all(&command_cwd).expect("create workspace");
+        fs::create_dir_all(&writable_root).expect("create writable root");
+        let previous_user_profile = std::env::var_os("USERPROFILE");
+
+        // SAFETY: this test serializes access with ENV_LOCK and restores the
+        // process environment before releasing the lock.
+        unsafe {
+            std::env::set_var("USERPROFILE", &user_profile);
+        }
+        let permission_profile = workspace_write_profile(
+            &[AbsolutePathBuf::from_absolute_path(&writable_root).expect("absolute writable root")],
+            /*exclude_tmpdir_env_var*/ true,
+            /*exclude_slash_tmp*/ true,
+        );
+        let workspace_roots = workspace_roots_for(command_cwd.as_path());
+        let permissions = permissions_for(&permission_profile, workspace_roots.as_slice());
+
+        let roots = gather_read_roots(&command_cwd, &permissions, &HashMap::new(), &codex_home);
+
+        // SAFETY: see set_var safety note above.
+        unsafe {
+            match previous_user_profile {
+                Some(value) => std::env::set_var("USERPROFILE", value),
+                None => std::env::remove_var("USERPROFILE"),
+            }
+        }
+
+        let expected_cwd = dunce::canonicalize(&command_cwd).expect("canonical workspace");
+        let expected_writable =
+            dunce::canonicalize(&writable_root).expect("canonical writable root");
+        let forbidden_documents = dunce::canonicalize(&documents).expect("canonical documents");
+
+        assert!(roots.contains(&expected_cwd));
+        assert!(roots.contains(&expected_writable));
+        assert!(!roots.contains(&forbidden_documents));
     }
 
     #[test]
