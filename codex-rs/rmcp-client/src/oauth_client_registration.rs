@@ -28,11 +28,12 @@ pub(crate) async fn start_authorization(
     redirect_uri: &str,
     callback_id: &str,
     client_registration: McpOAuthClientRegistration,
-) -> Result<OAuthState> {
+) -> Result<(OAuthState, Option<String>)> {
     let mut auth_manager =
         AuthorizationManager::new_with_oauth_http_client(server_url, http_client).await?;
     auth_manager.set_allow_missing_issuer(true);
     let metadata = auth_manager.resolve_metadata().await?.metadata;
+    let authorization_server_issuer = metadata.issuer.clone();
 
     let cimd_advertised = metadata
         .additional_fields
@@ -96,7 +97,7 @@ pub(crate) async fn start_authorization(
         .await
         .map_err(|(_auth_manager, error)| error)?;
 
-    Ok(OAuthState::Session(session))
+    Ok((OAuthState::Session(session), authorization_server_issuer))
 }
 
 #[cfg(test)]

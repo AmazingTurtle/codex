@@ -24,6 +24,7 @@ use super::OAuthPersistorInner;
 use super::StoredOAuthTokens;
 use super::WrappedOAuthTokenResponse;
 use super::compute_expires_at_millis;
+use super::ensure_refresh_token_issuer_bound;
 use super::refresh_lock::RefreshCredentialLock;
 use super::token_needs_refresh;
 
@@ -161,6 +162,7 @@ impl OAuthPersistor {
         // The provider uses a separate HTTP client and cannot re-enter `AuthClient`. Retain this
         // async guard so requests cannot observe credentials while they are staged and committed.
         let mut guard = manager.lock().await;
+        ensure_refresh_token_issuer_bound(&guard, &latest).await?;
         install_tokens_in_manager_guard(&mut guard, &latest)
             .await
             .context("failed to stage OAuth credentials for refresh")?;
@@ -301,6 +303,7 @@ fn refreshed_tokens(
     StoredOAuthTokens {
         server_name: inner.server_name.clone(),
         url: inner.url.clone(),
+        issuer: previous.issuer.clone(),
         client_id: previous.client_id.clone(),
         expires_at: compute_expires_at_millis(&token_response),
         token_response: WrappedOAuthTokenResponse(token_response),

@@ -65,6 +65,7 @@ use self::store_lock::OAuthStoreLockFailure;
 use codex_keyring_store::DefaultKeyringStore;
 use codex_keyring_store::KeyringStore;
 use rmcp::transport::auth::AuthorizationManager;
+use rmcp::transport::auth::AuthError;
 use tokio::sync::Mutex;
 
 use codex_utils_home_dir::find_codex_home;
@@ -82,6 +83,8 @@ const REFRESH_SKEW_MILLIS: u64 = 30_000;
 pub struct StoredOAuthTokens {
     pub server_name: String,
     pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
     pub client_id: String,
     pub token_response: WrappedOAuthTokenResponse,
     #[serde(default)]
@@ -282,12 +285,74 @@ fn oauth_tokens_are_usable(tokens: &StoredOAuthTokens) -> bool {
 
     let token_response = &tokens.token_response.0;
     if token_needs_refresh(tokens.expires_at) {
+        if tokens
+            .issuer
+            .as_ref()
+            .is_none_or(|issuer| issuer.trim().is_empty())
+        {
+            return false;
+        }
+
         return token_response
             .refresh_token()
             .is_some_and(|token| !token.secret().trim().is_empty());
     }
 
     !token_response.access_token().secret().trim().is_empty()
+}
+
+pub(crate) async fn ensure_refresh_token_issuer_bound(
+    authorization_manager: &AuthorizationManager,
+    tokens: &StoredOAuthTokens,
+) -> Result<()> {
+    if !token_needs_refresh(tokens.expires_at) {
+        return Ok(());
+    }
+
+    if tokens
+        .token_response
+        .0
+        .refresh_token()
+        .is_none_or(|refresh_token| refresh_token.secret().trim().is_empty())
+    {
+        return Ok(());
+    }
+
+    let Some(stored_issuer) = tokens.issuer.as_deref().filter(|issuer| !issuer.trim().is_empty())
+    else {
+        return Err(AuthError::AuthorizationRequired).with_context(|| {
+            format!(
+                "OAuth refresh credentials for server {} are missing an authorization server issuer; authorization required",
+                tokens.server_name
+            )
+        });
+    };
+
+    let current_issuer = authorization_manager
+        .resolve_metadata()
+        .await
+        .context("failed to resolve OAuth metadata before using stored refresh credentials")?
+        .metadata
+        .issuer;
+    let Some(current_issuer) = current_issuer.filter(|issuer| !issuer.trim().is_empty()) else {
+        return Err(AuthError::AuthorizationRequired).with_context(|| {
+            format!(
+                "OAuth metadata for server {} did not include an authorization server issuer; authorization required",
+                tokens.server_name
+            )
+        });
+    };
+
+    if current_issuer != stored_issuer {
+        return Err(AuthError::AuthorizationRequired).with_context(|| {
+            format!(
+                "OAuth authorization server issuer changed for server {}; authorization required",
+                tokens.server_name
+            )
+        });
+    }
+
+    Ok(())
 }
 
 fn refresh_expires_in_from_timestamp(tokens: &mut StoredOAuthTokens) {
@@ -701,6 +766,9 @@ impl OAuthPersistor {
                 let stored = StoredOAuthTokens {
                     server_name: self.inner.server_name.clone(),
                     url: self.inner.url.clone(),
+                    issuer: last_credentials
+                        .as_ref()
+                        .and_then(|previous| previous.issuer.clone()),
                     client_id,
                     token_response: new_token_response,
                     expires_at,
@@ -745,6 +813,8 @@ type FallbackFile = BTreeMap<String, FallbackTokenEntry>;
 struct FallbackTokenEntry {
     server_name: String,
     server_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    issuer: Option<String>,
     client_id: String,
     access_token: String,
     #[serde(default)]
@@ -809,6 +879,7 @@ fn load_oauth_tokens_from_file_with_lock_held(
         let mut stored = StoredOAuthTokens {
             server_name: entry.server_name.clone(),
             url: entry.server_url.clone(),
+            issuer: entry.issuer.clone(),
             client_id: entry.client_id.clone(),
             token_response: WrappedOAuthTokenResponse(token_response),
             expires_at: entry.expires_at,
@@ -851,6 +922,7 @@ fn save_oauth_tokens_to_file_with_lock_held(tokens: &StoredOAuthTokens) -> Resul
     let entry = FallbackTokenEntry {
         server_name: tokens.server_name.clone(),
         server_url: tokens.url.clone(),
+        issuer: tokens.issuer.clone(),
         client_id: tokens.client_id.clone(),
         access_token: token_response.access_token().secret().to_string(),
         expires_at,
@@ -1615,6 +1687,7 @@ mod tests {
         StoredOAuthTokens {
             server_name: "test-server".to_string(),
             url: "https://example.test".to_string(),
+            issuer: Some("https://issuer.example.test".to_string()),
             client_id: "client-id".to_string(),
             token_response: WrappedOAuthTokenResponse(response),
             expires_at,

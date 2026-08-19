@@ -81,6 +81,7 @@ use crate::oauth::OAuthPersistor;
 use crate::oauth::ResolvedOAuthCredentialStore;
 use crate::oauth::ResolvedOAuthTokens;
 use crate::oauth::StoredOAuthTokens;
+use crate::oauth::ensure_refresh_token_issuer_bound;
 use crate::oauth::resolve_oauth_tokens_from_store_policy;
 use crate::oauth_http_client::OAuthHttpClientAdapter;
 use crate::protocol_mode::McpProtocolMode;
@@ -1492,6 +1493,7 @@ async fn create_oauth_transport_and_runtime(
         AuthorizationManager::new_with_oauth_http_client(url.to_string(), oauth_http_client)
             .await?;
     manager.set_allow_missing_issuer(true);
+    ensure_refresh_token_issuer_bound(&manager, &initial_tokens).await?;
     let mut oauth_state = OAuthState::Unauthorized(manager);
 
     oauth_state

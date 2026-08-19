@@ -101,7 +101,7 @@ async fn authorization(
     redirect_uri: &str,
     registration: McpOAuthClientRegistration,
 ) -> Result<(OAuthState, HashMap<String, String>)> {
-    let state = start_authorization(
+    let (state, _issuer) = start_authorization(
         &format!("{}/mcp", server.uri()),
         Arc::new(OAuthHttpClientAdapter::new(
             Arc::new(RouteAwareHttpClient::new(HttpClientFactory::new(
@@ -306,7 +306,7 @@ async fn resource_headers_follow_same_origin_registration_redirect_and_sdk_auth_
         ])),
         /*env_http_headers*/ None,
     )?;
-    let mut state = start_authorization(
+    let (mut state, _issuer) = start_authorization(
         &resource_url,
         Arc::new(OAuthHttpClientAdapter::new(
             Arc::new(RouteAwareHttpClient::new(HttpClientFactory::new(

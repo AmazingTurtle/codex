@@ -554,7 +554,7 @@ impl OauthLoginFlow {
         )?);
 
         let scope_refs: Vec<&str> = scopes.iter().map(String::as_str).collect();
-        let oauth_state = if let Some(oauth_client_id) =
+        let (oauth_state, authorization_server_issuer) = if let Some(oauth_client_id) =
             oauth_client_id.filter(|client_id| !client_id.trim().is_empty())
         {
             start_authorization(
@@ -653,6 +653,7 @@ impl OauthLoginFlow {
             let stored = StoredOAuthTokens {
                 server_name: self.server_name.clone(),
                 url: self.server_url.clone(),
+                issuer: authorization_server_issuer,
                 client_id,
                 token_response: WrappedOAuthTokenResponse(credentials),
                 expires_at,
@@ -698,11 +699,12 @@ async fn start_authorization(
     scopes: &[&str],
     redirect_uri: &str,
     oauth_client_id: &str,
-) -> Result<OAuthState> {
+) -> Result<(OAuthState, Option<String>)> {
     let mut auth_manager =
         AuthorizationManager::new_with_oauth_http_client(server_url, http_client).await?;
     auth_manager.set_allow_missing_issuer(true);
     let metadata = auth_manager.resolve_metadata().await?.metadata;
+    let authorization_server_issuer = metadata.issuer.clone();
     auth_manager.set_metadata(metadata);
     auth_manager.configure_client(
         OAuthClientConfig::new(oauth_client_id, redirect_uri)
@@ -710,8 +712,13 @@ async fn start_authorization(
     )?;
     let auth_url = auth_manager.get_authorization_url(scopes).await?;
 
-    Ok(OAuthState::Session(
-        AuthorizationSession::for_scope_upgrade(auth_manager, auth_url, redirect_uri),
+    Ok((
+        OAuthState::Session(AuthorizationSession::for_scope_upgrade(
+            auth_manager,
+            auth_url,
+            redirect_uri,
+        )),
+        authorization_server_issuer,
     ))
 }
 
@@ -861,7 +868,7 @@ mod tests {
         for (scopes, expected_scope) in [(&[][..], None), (&["read"][..], Some("read"))] {
             let (base_url, registration_requests) = spawn_oauth_metadata_server().await;
             let redirect_uri = "http://127.0.0.1:43123/callback/configured-client";
-            let oauth_state = start_authorization(
+            let (oauth_state, _issuer) = start_authorization(
                 &format!("{base_url}/mcp"),
                 Arc::new(OAuthHttpClientAdapter::new(
                     Arc::new(RouteAwareHttpClient::new(HttpClientFactory::new(
@@ -955,7 +962,7 @@ mod tests {
                     .await
                     .expect("serve authorization metadata fixture");
             });
-            let mut state = start_authorization(
+            let (mut state, _issuer) = start_authorization(
                 &format!("{issuer}/mcp"),
                 Arc::new(OAuthHttpClientAdapter::new(
                     Arc::new(RouteAwareHttpClient::new(HttpClientFactory::new(
