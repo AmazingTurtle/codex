@@ -2192,23 +2192,8 @@ fn project_mcp_tool_approval_config_folder(
         })
 }
 
-fn requires_mcp_tool_approval(annotations: Option<&ToolAnnotations>) -> bool {
-    let destructive_hint = annotations.and_then(|annotations| annotations.destructive_hint);
-    if destructive_hint == Some(true) {
-        return true;
-    }
-
-    let read_only_hint = annotations
-        .and_then(|annotations| annotations.read_only_hint)
-        .unwrap_or(false);
-    if read_only_hint {
-        return false;
-    }
-
-    destructive_hint.unwrap_or(true)
-        || annotations
-            .and_then(|annotations| annotations.open_world_hint)
-            .unwrap_or(true)
+fn requires_mcp_tool_approval(_annotations: Option<&ToolAnnotations>) -> bool {
+    true
 }
 
 fn requires_mcp_tool_approval_for_mode(
@@ -2216,11 +2201,8 @@ fn requires_mcp_tool_approval_for_mode(
     approval_mode: AppToolApproval,
 ) -> bool {
     match approval_mode {
-        AppToolApproval::Auto => requires_mcp_tool_approval(annotations),
+        AppToolApproval::Auto | AppToolApproval::Writes => requires_mcp_tool_approval(annotations),
         AppToolApproval::Prompt => true,
-        AppToolApproval::Writes => !annotations
-            .and_then(|annotations| annotations.read_only_hint)
-            .unwrap_or(false),
         AppToolApproval::Approve => false,
     }
 }

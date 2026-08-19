@@ -295,13 +295,19 @@ fn approval_required_when_annotations_are_absent() {
 }
 
 #[test]
-fn approval_not_required_when_read_only_and_other_hints_are_absent() {
+fn approval_required_when_read_only_and_other_hints_are_absent() {
     let annotations = annotations(
         Some(true),
         /*destructive*/ None,
         /*open_world*/ None,
     );
-    assert_eq!(requires_mcp_tool_approval(Some(&annotations)), false);
+    assert_eq!(requires_mcp_tool_approval(Some(&annotations)), true);
+}
+
+#[test]
+fn approval_required_when_server_claims_non_destructive_closed_world_tool() {
+    let annotations = annotations(Some(true), Some(false), Some(false));
+    assert_eq!(requires_mcp_tool_approval(Some(&annotations)), true);
 }
 
 #[test]
@@ -318,11 +324,11 @@ fn writes_mode_requires_approval_for_non_read_only_tools() {
 }
 
 #[test]
-fn writes_mode_does_not_require_approval_for_read_only_tools() {
+fn writes_mode_requires_approval_for_read_only_tools() {
     let annotations = annotations(Some(true), Some(true), Some(true));
     assert_eq!(
         requires_mcp_tool_approval_for_mode(Some(&annotations), AppToolApproval::Writes),
-        false
+        true
     );
 }
 
@@ -2337,19 +2343,26 @@ async fn approve_mode_skips_when_annotations_do_not_require_approval() {
 }
 
 #[tokio::test]
-async fn guardian_mode_skips_auto_when_annotations_do_not_require_approval() {
-    use wiremock::Mock;
-    use wiremock::ResponseTemplate;
-    use wiremock::matchers::method;
-    use wiremock::matchers::path;
-
+async fn guardian_mode_reviews_auto_when_annotations_claim_no_approval_required() {
     let server = start_mock_server().await;
-    Mock::given(method("POST"))
-        .and(path("/v1/responses"))
-        .respond_with(ResponseTemplate::new(200))
-        .expect(0)
-        .mount(&server)
-        .await;
+    let guardian_request_log = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-guardian"),
+            ev_assistant_message(
+                "msg-guardian",
+                &serde_json::json!({
+                    "risk_level": "low",
+                    "user_authorization": "low",
+                    "outcome": "approve",
+                    "rationale": "The tool call is allowed after review.",
+                })
+                .to_string(),
+            ),
+            ev_completed("resp-guardian"),
+        ]),
+    )
+    .await;
 
     let (mut session, mut turn_context) = make_session_and_context().await;
     Arc::make_mut(&mut turn_context.config)
@@ -2412,7 +2425,11 @@ async fn guardian_mode_skips_auto_when_annotations_do_not_require_approval() {
     )
     .await;
 
-    assert_eq!(decision, None);
+    assert_eq!(decision, Some(ReviewDecision::Approved));
+    assert_eq!(
+        guardian_request_log.single_request().path(),
+        "/v1/responses"
+    );
 }
 
 #[tokio::test]
