@@ -25,7 +25,7 @@ prefix_rule(
     )?;
 
     let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
+        .env(codex_product_info::HOME_ENV, codex_home.path())
         .args([
             "execpolicy",
             "check",
@@ -82,7 +82,7 @@ prefix_rule(
     )?;
 
     let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
+        .env(codex_product_info::HOME_ENV, codex_home.path())
         .args([
             "execpolicy",
             "check",

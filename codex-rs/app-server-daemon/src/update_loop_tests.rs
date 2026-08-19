@@ -84,7 +84,7 @@ fn updater_reexec_preserves_paths_and_recovers_deleted_working_directory() {
         let executable = home.path().join("updater");
         std::fs::write(
         &executable,
-        b"#!/bin/sh\ntest -d \"$CODEX_HOME\" || exit 1\n{ pwd -P; printf '%s\\n' \"$CODEX_HOME\" \"$CODEX_SQLITE_HOME\" \"$AWS_CONFIG_FILE\" \"$SSL_CERT_DIR\" \"$NPM_CONFIG_CAFILE\"; } > \"$CODEX_TEST_UPDATER_OUTPUT\"\n",
+        b"#!/bin/sh\ntest -d \"$BETTER_CODEX_HOME\" || exit 1\n{ pwd -P; printf '%s\\n' \"$BETTER_CODEX_HOME\" \"$CODEX_SQLITE_HOME\" \"$AWS_CONFIG_FILE\" \"$SSL_CERT_DIR\" \"$NPM_CONFIG_CAFILE\"; } > \"$CODEX_TEST_UPDATER_OUTPUT\"\n",
     )
     .expect("updater shim");
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755))
@@ -108,7 +108,7 @@ fn updater_reexec_preserves_paths_and_recovers_deleted_working_directory() {
             .env("CODEX_TEST_UPDATER_STATE", &state)
             .env("CODEX_TEST_UPDATER_OUTPUT", &output)
             .env("CODEX_TEST_UPDATER_DELETE_CWD", delete_cwd.to_string())
-            .env("CODEX_HOME", format!("../{home_name}"))
+            .env("BETTER_CODEX_HOME", format!("../{home_name}"))
             .env("CODEX_SQLITE_HOME", " sqlite ")
             .env("AWS_CONFIG_FILE", "~/config")
             .env("NPM_CONFIG_CAFILE", ca_file)

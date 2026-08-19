@@ -83,7 +83,7 @@ exec "${0%/*}/real-bwrap" "$@"
                 "linux_sandbox_pid_namespace = 'inherit'\n")?;
             let mut command = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
             command.args(["exec-server", "--listen", "stdio"])
-                .env("CODEX_HOME", codex_home.path())
+                .env("BETTER_CODEX_HOME", codex_home.path())
                 .env("PATH", &path)
                 .env("CODEX_LINUX_SANDBOX_PID_NAMESPACE", "inherit")
                 .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())

@@ -104,7 +104,7 @@ async fn accepted_output_survives_success_and_stream_failure() -> Result<()> {
         // There is no following request to prove acceptance of this final item.
         let bundle = std::fs::read_dir(traces.path())?.next().unwrap()?.path();
         let reduced = tokio::process::Command::new(&codex)
-            .env("CODEX_HOME", home.path())
+            .env("BETTER_CODEX_HOME", home.path())
             .args(["debug", "trace-reduce"])
             .arg(&bundle)
             .output()
@@ -222,7 +222,7 @@ async fn accepted_output_survives_interruption_and_shutdown() -> Result<()> {
     // have preserved the accepted output even without response.completed.
     let bundle = std::fs::read_dir(traces.path())?.next().unwrap()?.path();
     let reduced = tokio::process::Command::new(&codex)
-        .env("CODEX_HOME", home.path())
+        .env("BETTER_CODEX_HOME", home.path())
         .args(["debug", "trace-reduce"])
         .arg(&bundle)
         .output()

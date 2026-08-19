@@ -64,7 +64,7 @@ async fn recovery_without_a_snapshot_keeps_each_threads_originator() -> Result<(
         let output = tokio::process::Command::new(std::env::current_exe()?)
             .args(["--exact", "suite::rmcp_client::storage_telemetry_tests::recovery_without_a_snapshot_keeps_each_threads_originator", "--nocapture"])
             .env("CODEX_MCP_TELEMETRY_TEST_CHILD", "1")
-            .env("CODEX_HOME", home.path())
+            .env("BETTER_CODEX_HOME", home.path())
             .output().await?;
         assert!(
             output.status.success(),

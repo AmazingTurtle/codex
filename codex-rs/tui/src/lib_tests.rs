@@ -388,7 +388,7 @@ async fn startup_resume_rejects_guardian_thread() -> color_eyre::Result<()> {
         .expect_err("Guardian resume should be rejected");
     insta::assert_snapshot!(error.to_string(), @"
         Cannot resume a Guardian review thread.
-        Resume its parent session instead: codex resume 00000000-0000-0000-0000-000000000001
+        Resume its parent session instead: better-codex resume 00000000-0000-0000-0000-000000000001
         ");
     app_server.shutdown().await?;
     Ok(())
@@ -695,7 +695,7 @@ fn resolve_remote_addr_accepts_secure_websocket_url() {
 
 #[test]
 fn resolve_remote_addr_accepts_default_socket() -> color_eyre::Result<()> {
-    let codex_home = find_codex_home().wrap_err("failed to resolve CODEX_HOME")?;
+    let codex_home = find_codex_home().wrap_err("failed to resolve BETTER_CODEX_HOME")?;
     assert_eq!(
         resolve_remote_addr("unix://")?,
         RemoteAppServerEndpoint::UnixSocket {

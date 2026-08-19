@@ -16,7 +16,7 @@ pub(super) fn check(config: Option<&Config>, cwd: &Path) -> DoctorCheck {
     let home = config
         .map(|config| config.codex_home.as_path().to_path_buf())
         .or_else(|| find_codex_home().ok().map(Into::into))
-        .or_else(|| std::env::var_os("CODEX_HOME").map(Into::into));
+        .or_else(|| std::env::var_os("BETTER_CODEX_HOME").map(Into::into));
 
     check_with_paths(home.as_deref(), cwd, available_space)
 }
@@ -43,7 +43,10 @@ fn check_with_paths(
     ));
     let mut lowest = None;
 
-    for (label, path) in [("CODEX_HOME", home.as_deref()), ("worktree", Some(cwd))] {
+    for (label, path) in [
+        ("BETTER_CODEX_HOME", home.as_deref()),
+        ("worktree", Some(cwd)),
+    ] {
         let field = format!("{label} available");
         let available = path
             .and_then(|path| path.ancestors().find(|ancestor| ancestor.is_dir()))

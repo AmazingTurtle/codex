@@ -49,7 +49,7 @@ fn managed_daemon_restarts_from_deleted_working_directory() -> Result<()> {
         .arg(&project)
         .arg(&daemon.codex)
         .current_dir(&project)
-        .env("CODEX_HOME", daemon.home.path())
+        .env("BETTER_CODEX_HOME", daemon.home.path())
         .output()?;
     ensure!(
         restarted.status.success(),

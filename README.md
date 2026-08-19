@@ -1,81 +1,114 @@
-<p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
-<p align="center">
-  <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />
-</p>
-</br>
-If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/codex/ide">install in your IDE.</a>
-</br>If you want the desktop app experience, run <code>codex app</code> or visit <a href="https://chatgpt.com/codex?app-landing-page=true">the Codex App page</a>.
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Codex Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a>.</p>
+# Better Codex
+
+Better Codex is an unofficial derivative of OpenAI's Codex
+CLI. It adds multi-account ChatGPT subscription rotation and keeps its command,
+configuration, credentials, sessions, and caches isolated from upstream Codex.
+
+Better Codex is maintained independently by AmazingTurtle. It is not endorsed
+by or affiliated with OpenAI. “Codex”, “OpenAI”, and “ChatGPT” remain the
+property of their respective owners.
 
 ---
 
 ## Quickstart
 
-### Installing and running Codex CLI
+### Installing and running Better Codex
 
-Run the following on Mac or Linux to install Codex CLI:
-
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
-```
-
-Run the following on Windows to install Codex CLI:
+On GNU Linux x86_64, install the pinned release with Python 3.12 or newer:
 
 ```shell
-powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+curl -fsSL https://raw.githubusercontent.com/AmazingTurtle/codex/v0.159.0-better-codex.2/scripts/better_codex_release/install.py \
+  | python3 - --version v0.159.0-better-codex.2
 ```
 
-The standalone installers download from `https://releases.openai.com/codex` by default and fall back to GitHub Releases if a metadata or asset download is unavailable. To force GitHub Releases, set `CODEX_INSTALLER_USE_RELEASES_OPENAI_COM` to `false` (`0` and `no` are also accepted):
+Then run:
 
 ```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_INSTALLER_USE_RELEASES_OPENAI_COM=false sh
+better-codex
 ```
 
-```powershell
-$env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM='false'; irm https://chatgpt.com/codex/install.ps1 | iex
-```
+The installer verifies checksums, checks the package in an isolated home, and
+atomically switches `~/.local/share/better-codex/current`. Earlier versions
+remain available for rollback. It creates `~/.local/bin/better-codex`; add that
+directory to your `PATH`. The executable inside the package remains `codex`
+so internal upstream paths and helper discovery need fewer downstream changes.
+An existing unmanaged `better-codex` command is preserved; choose a different
+`--bin-dir` or move the old command before installing.
 
-Codex CLI can also be installed via the following package managers:
+For other platforms, build the canonical package from the pinned source tag:
 
 ```shell
-# Install using npm
-npm install -g @openai/codex
+git clone --depth 1 --branch v0.159.0-better-codex.2 https://github.com/AmazingTurtle/codex better-codex-source
+cd better-codex-source
+just assemble-codex-package
 ```
+
+Use a `better-codex` launcher pointing to the assembled package's `bin/codex`.
+Keep the package directory together: it includes the code-mode host and sandbox,
+shell, and search resources. Installing only the Cargo binary omits those resources.
+
+Better Codex uses `~/.better-codex` by default. Override it only with
+`BETTER_CODEX_HOME`; upstream `CODEX_HOME` and `CODEX_SQLITE_HOME` are not used.
+
+To preview or perform a one-time, non-destructive import of your upstream state:
 
 ```shell
-# Install using Homebrew
-brew install --cask codex
+better-codex import-codex-state --dry-run
+better-codex import-codex-state
 ```
 
-Then simply run `codex` to get started.
+The import leaves `~/.codex` untouched. Use `--from DIR` for a non-default
+upstream home. The destination must be absent or empty.
 
-<details>
-<summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
+### Release and rebase policy
 
-Each GitHub Release contains many executables, but in practice, you likely want one of these:
+Downstream releases track stable upstream tags. For example, upstream
+`rust-v0.153.1` maps to `v0.153.1-better-codex`; downstream-only hotfixes use
+`v0.153.1-better-codex.1`, `.2`, and so on. Rebases are best effort and may lag
+an upstream release while conflicts and regressions are resolved.
 
-- macOS
-  - Apple Silicon/arm64: `codex-aarch64-apple-darwin.tar.gz`
-  - x86_64 (older Mac hardware): `codex-x86_64-apple-darwin.tar.gz`
-- Linux
-  - x86_64: `codex-x86_64-unknown-linux-musl.tar.gz`
-  - arm64: `codex-aarch64-unknown-linux-musl.tar.gz`
+GitHub releases include a GNU Linux runtime, a separate matching debug-symbol
+archive, `release.json`, and `SHA256SUMS`. Only staged package copies are stripped;
+Cargo outputs keep their symbols. Run `better-codex update` to check the latest
+release and print its pinned installation command.
 
-Each archive contains a single entry with the platform baked into the name (e.g., `codex-x86_64-unknown-linux-musl`), so you likely want to rename it to `codex` after extracting it.
+Hourly CI prepares a rebase in an isolated worktree. Clean candidates run focused
+regressions, formatting, lint, package checks, and smoke tests before main and an
+immutable release tag are pushed atomically with leases. Conflicts or failed gates
+leave a draft recovery PR and diagnostics. A weekly job runs the complete Linux
+workspace. See [maintenance instructions](scripts/better_codex_release/README.md).
 
-</details>
+### Profile-backed workers
 
-### Using Codex with your ChatGPT plan
+Register a trusted existing profile explicitly in `~/.better-codex/config.toml`:
 
-Run `codex` and select **Sign in with ChatGPT**. We recommend signing into your ChatGPT account to use Codex as part of your Plus, Pro, Business, Edu, or Enterprise plan. [Learn more about what's included in your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt).
+```toml
+[agents.spark]
+description = "Local coding worker"
+profile = "spark"
+```
 
-You can also use Codex with an API key, but this requires [additional setup](https://developers.openai.com/codex/auth#sign-in-with-an-api-key).
+This loads `spark.config.toml` from the same home when an agent uses
+`agent_type = "spark"`. The worker uses the profile's provider, authentication,
+model, catalog, instructions, and context limits, while keeping the parent's
+permissions, approval policy, tools, and filesystem boundaries. `profile` and
+`config_file` are mutually exclusive. Set `[features.multi_agent_v2] enabled = false`
+in the profile to make it a leaf worker. Provider switches require a fresh
+conversation (`fork_turns = "none"`); profiles are never exposed as roles automatically.
+
+### Using Better Codex with your ChatGPT plan
+
+Run `better-codex` and select **Sign in with ChatGPT**. Better Codex uses the
+same OpenAI service and model APIs as upstream Codex; eligibility and usage are
+still governed by your ChatGPT plan and OpenAI's terms.
+
+You can also use Better Codex with an API key, but this requires [additional setup](https://developers.openai.com/codex/auth#sign-in-with-an-api-key).
 
 ## Docs
 
 - [**Codex Documentation**](https://developers.openai.com/codex)
-- [**Contributing**](./docs/contributing.md)
-- [**Installing & building**](./docs/install.md)
-- [**Open source fund**](./docs/open-source-fund.md)
+- [**Installing & maintaining Better Codex**](scripts/better_codex_release/README.md)
+- [**Upstream Codex documentation**](https://developers.openai.com/codex)
 
-This repository is licensed under the [Apache-2.0 License](LICENSE).
+This derivative remains licensed under the [Apache-2.0 License](LICENSE). The
+upstream license and notices are preserved.

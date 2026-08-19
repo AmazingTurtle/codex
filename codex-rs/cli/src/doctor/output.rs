@@ -79,7 +79,10 @@ pub(super) fn render_human_report(report: &DoctorReport, options: HumanOutputOpt
     let _ = writeln!(
         out,
         "{} {}",
-        bold("Codex Doctor", options),
+        bold(
+            &format!("{} Doctor", codex_product_info::DISPLAY_NAME),
+            options
+        ),
         dim(&header_suffix(report), options)
     );
     out.push('\n');
@@ -464,7 +467,10 @@ fn write_footer(out: &mut String, options: HumanOutputOptions) {
             out,
             "{}",
             dim(
-                "Run codex doctor without --summary for detailed diagnostics.",
+                &format!(
+                    "Run {} doctor without --summary for detailed diagnostics.",
+                    codex_product_info::CLI_NAME
+                ),
                 options
             )
         );
@@ -1354,7 +1360,7 @@ mod tests {
         let rendered = render_human_report(&sample_report(), detailed_no_color_unicode_options());
         let expected = format!(
             "\
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    ⚠ terminal     narrow terminal
@@ -1489,7 +1495,7 @@ Background Server
         let rendered = render_human_report(&sample_report(), summary_no_color_unicode_options());
         let expected = format!(
             "\
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    ⚠ terminal     narrow terminal
@@ -1523,7 +1529,7 @@ Background Server
 {}
 12 ok · 2 notes · 1 warn · 1 fail failed
 
-Run codex doctor without --summary for detailed diagnostics.
+Run better-codex doctor without --summary for detailed diagnostics.
 --all expand truncated lists       --json redacted report
 ",
             "─".repeat(SEPARATOR_WIDTH)
@@ -1597,7 +1603,7 @@ Run codex doctor without --summary for detailed diagnostics.
         );
         let expected = format!(
             "\
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    [!!] terminal     narrow terminal
@@ -1631,7 +1637,7 @@ Background Server
 {}
 12 ok | 2 notes | 1 warn | 1 fail failed
 
-Run codex doctor without --summary for detailed diagnostics.
+Run better-codex doctor without --summary for detailed diagnostics.
 --all expand truncated lists       --json redacted report
 ",
             "-".repeat(SEPARATOR_WIDTH)

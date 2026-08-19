@@ -76,7 +76,7 @@ async fn rejected_refresh_requires_reauthentication_after_runtime_rebuild() -> a
     }))?;
     let credential_name = server_config.oauth_credential_name(server_name);
     let home = Arc::new(tempfile::tempdir()?);
-    let _codex_home_guard = EnvVarGuard::set("CODEX_HOME", home.path().as_os_str());
+    let _codex_home_guard = EnvVarGuard::set("BETTER_CODEX_HOME", home.path().as_os_str());
     write_fallback_oauth_tokens(
         credential_name.as_ref(),
         &server_url,
@@ -285,7 +285,7 @@ async fn oauth_mode_refresh_replaces_the_live_connection(
         "environment_id": DEFAULT_MCP_SERVER_ENVIRONMENT_ID,
     }))?;
     let home = Arc::new(tempfile::tempdir()?);
-    let _codex_home_guard = EnvVarGuard::set("CODEX_HOME", home.path().as_os_str());
+    let _codex_home_guard = EnvVarGuard::set("BETTER_CODEX_HOME", home.path().as_os_str());
     write_fallback_oauth_tokens(
         server_config.oauth_credential_name(server_name).as_ref(),
         &server_url,

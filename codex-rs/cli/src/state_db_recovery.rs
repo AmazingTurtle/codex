@@ -67,15 +67,17 @@ pub(crate) fn confirm_fresh_start_rebuild(
 }
 
 pub(crate) fn print_diagnostic_guidance(startup_error: &LocalStateDbStartupError) {
-    eprintln!("Codex couldn't start because its local database appears to be damaged.");
-    eprintln!("Run `codex doctor` to check your setup and get next-step guidance.");
+    eprintln!("Better Codex couldn't start because its local database appears to be damaged.");
+    eprintln!("Run `better-codex doctor` to check your setup and get next-step guidance.");
     eprintln!("If this keeps happening, share the technical details below when asking for help.");
     print_technical_details(startup_error);
 }
 
 pub(crate) fn print_locked_guidance(startup_error: &LocalStateDbStartupError) {
-    eprintln!("Codex couldn't start because another Codex process is using its local data.");
-    eprintln!("Quit any other copies of Codex that may still be running, then try again.");
+    eprintln!(
+        "Better Codex couldn't start because another Better Codex process is using its local data."
+    );
+    eprintln!("Quit any other copies of Better Codex that may still be running, then try again.");
     print_technical_details(startup_error);
 }
 

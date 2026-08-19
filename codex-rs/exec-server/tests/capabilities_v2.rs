@@ -38,7 +38,7 @@ async fn v2_rpc_refreshes_metadata_and_enforces_sandbox() -> anyhow::Result<()> 
         [
             ("HOME", &home_path),
             ("USERPROFILE", &home_path),
-            ("CODEX_HOME", &codex_home_path),
+            ("BETTER_CODEX_HOME", &codex_home_path),
         ],
         &[],
     )

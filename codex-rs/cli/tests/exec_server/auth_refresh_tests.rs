@@ -66,7 +66,7 @@ async fn noise_executor_refreshes_on_401_and_reloads_rotated_credentials() -> Re
         .await;
     let mut child = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
         .current_dir(home.path())
-        .env("CODEX_HOME", home.path())
+        .env("BETTER_CODEX_HOME", home.path())
         .env_remove("CODEX_API_KEY")
         .env_remove("OPENAI_API_KEY")
         .env_remove("CODEX_ACCESS_TOKEN")

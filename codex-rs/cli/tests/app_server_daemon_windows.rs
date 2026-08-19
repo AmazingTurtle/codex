@@ -58,7 +58,7 @@ fn winget_package_starts_and_reselects_daemon() -> Result<()> {
         }
     }
     let mut stop = Command::new(&codex);
-    stop.env("CODEX_HOME", &home)
+    stop.env("BETTER_CODEX_HOME", &home)
         .args(["app-server", "daemon", "stop"]);
     let mut daemon = StopDaemon(stop);
     for args in [
@@ -67,7 +67,7 @@ fn winget_package_starts_and_reselects_daemon() -> Result<()> {
         vec!["update", "--from-cli", "--yes"],
     ] {
         let output = Command::new(&codex)
-            .env("CODEX_HOME", &home)
+            .env("BETTER_CODEX_HOME", &home)
             .args(["app-server", "daemon"])
             .args(&args)
             .output()?;
@@ -100,7 +100,7 @@ fn winget_package_starts_and_reselects_daemon() -> Result<()> {
     let selected = current.canonicalize()?;
     std::fs::remove_file(package.join("codex-code-mode-host.exe"))?;
     let invalid = Command::new(&codex)
-        .env("CODEX_HOME", &home)
+        .env("BETTER_CODEX_HOME", &home)
         .args(["app-server", "daemon", "update", "--from-cli", "--yes"])
         .output()?;
     ensure!(

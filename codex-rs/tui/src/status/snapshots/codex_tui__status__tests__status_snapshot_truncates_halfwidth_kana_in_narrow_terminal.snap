@@ -4,7 +4,7 @@ expression: sanitized
 ---
 /status
 
-  >_ OpenAI Codex (v0.0.0)
+  >_ Better Codex (v0.999.0-better-codex)
 
   Visit https://chatgpt.com/settings/usage
   for up-to-date
@@ -21,8 +21,7 @@ expression: sanitized
                        approval)
   Agents.md:           <none>
   Account:             ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ
-                       @example.com (ｶﾞﾊﾟ
-                       plan)
+                       @example.com
   Thread name:         ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ
                        thread
   Collaboration mode:  ｶﾞﾊﾟ collaboration

@@ -58,7 +58,7 @@ fn packaged_daemon_launch(action: &str, initial: InitialDaemon) -> Result<()> {
     std::fs::write(
         package.join("codex-package.json"),
         serde_json::to_vec(&serde_json::json!({
-            "version": env!("CARGO_PKG_VERSION"), "target": target, "entrypoint": "bin/codex"
+            "version": codex_product_info::VERSION, "target": target, "entrypoint": "bin/codex"
         }))?,
     )?;
     if action == "start" && initial == InitialDaemon::Missing {

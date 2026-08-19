@@ -4,7 +4,7 @@ assertion_line: 111
 expression: history
 ---
 
-  >_ OpenAI Codex (v<VERSION>)
+  >_ Better Codex (v<VERSION>)
      /home/user/project
 
 • Daybreak is on for new turns.

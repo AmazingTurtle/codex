@@ -9,7 +9,7 @@ use tempfile::TempDir;
 
 fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
     let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
-    cmd.env("CODEX_HOME", codex_home)
+    cmd.env(codex_product_info::HOME_ENV, codex_home)
         .env_remove("CODEX_ACCESS_TOKEN")
         .env_remove("CODEX_API_KEY")
         .env_remove("OPENAI_API_KEY")
@@ -154,13 +154,16 @@ fn app_server_emits_json_info_events() -> Result<()> {
 fn app_server_keeps_sqlite_logs_in_overridden_sqlite_home() -> Result<()> {
     let home = TempDir::new()?;
     let sqlite_home = TempDir::new()?;
+    // Better Codex ignores CODEX_SQLITE_HOME; configure the override in its own home.
     std::fs::write(
         home.path().join("config.toml"),
-        "[features]\nplugins = false\n",
+        format!(
+            "sqlite_home = {}\n[features]\nplugins = false\n",
+            toml::Value::String(sqlite_home.path().display().to_string())
+        ),
     )?;
 
     codex_command(home.path())?
-        .env("CODEX_SQLITE_HOME", sqlite_home.path())
         .env(
             "CODEX_APP_SERVER_MANAGED_CONFIG_PATH",
             home.path().join("managed_config.toml"),
@@ -314,7 +317,7 @@ async fn print_startup_config_is_independent_of_a_locked_history_database() -> R
     let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
     let mut command = Command::new(&binary);
     command
-        .env("CODEX_HOME", home.path())
+        .env("BETTER_CODEX_HOME", home.path())
         .env("CODEX_SQLITE_HOME", sqlite.path())
         .env_remove("CODEX_ACCESS_TOKEN")
         .env_remove("CODEX_API_KEY")

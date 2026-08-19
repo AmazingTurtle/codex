@@ -6,6 +6,7 @@ pub(crate) mod scrollable_diff;
 mod ui;
 pub(crate) mod util;
 pub use cli::Cli;
+use codex_product_info::CLI_NAME;
 
 use anyhow::anyhow;
 use chrono::Utc;
@@ -93,7 +94,7 @@ async fn init_backend(user_agent_suffix: &str) -> anyhow::Result<BackendContext>
         Some(auth) => auth,
         None => {
             eprintln!(
-                "Not signed in. Please run 'codex login' to sign in with ChatGPT, then re-run 'codex cloud'."
+                "Not signed in. Please run '{CLI_NAME} login' to sign in with ChatGPT, then re-run '{CLI_NAME} cloud'."
             );
             std::process::exit(1);
         }
@@ -105,7 +106,7 @@ async fn init_backend(user_agent_suffix: &str) -> anyhow::Result<BackendContext>
 
     if !auth.uses_codex_backend() {
         eprintln!(
-            "Not signed in. Please run 'codex login' to sign in with ChatGPT, then re-run 'codex cloud'."
+            "Not signed in. Please run '{CLI_NAME} login' to sign in with ChatGPT, then re-run '{CLI_NAME} cloud'."
         );
         std::process::exit(1);
     }

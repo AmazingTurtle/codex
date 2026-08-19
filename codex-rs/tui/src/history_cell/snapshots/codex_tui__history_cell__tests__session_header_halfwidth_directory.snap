@@ -1,13 +1,12 @@
 ---
 source: tui/src/history_cell/tests.rs
-assertion_line: 1903
 expression: "format!(\"{buf:?}\")"
 ---
 Buffer {
     area: Rect { x: 0, y: 0, width: 42, height: 3 },
     content: [
         "                                          ",
-        "  >_ OpenAI Codex (vtest)                 ",
+        "  >_ Better Codex (vtest)                 ",
         "     …ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ-project", // hidden by multi-width symbols: [(7, " "), (9, " "), (11, " "), (13, " "), (15, " "), (17, " "), (19, " "), (21, " "), (23, " "), (25, " "), (27, " "), (29, " "), (31, " "), (33, " ")]
     ],
     styles: [

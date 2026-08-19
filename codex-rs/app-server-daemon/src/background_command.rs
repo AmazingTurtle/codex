@@ -13,7 +13,7 @@ pub(crate) fn set_working_directory(command: &mut Command, state_dir: &Path) -> 
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
         Err(err) => return Err(err.into()),
     };
-    if let Ok(value) = std::env::var("CODEX_HOME")
+    if let Ok(value) = std::env::var("BETTER_CODEX_HOME")
         && !value.is_empty()
     {
         let home = codex_utils_home_dir::find_codex_home()?;
@@ -28,7 +28,7 @@ pub(crate) fn set_working_directory(command: &mut Command, state_dir: &Path) -> 
             // The home resolver ignores non-Unicode env values; keep the valid original alias.
             absolute.as_path()
         };
-        command.env("CODEX_HOME", preserved);
+        command.env("BETTER_CODEX_HOME", preserved);
     }
     // Preserve process-scoped paths before changing cwd; CA names match CUSTOM_CA_ENV_KEYS.
     for name in [

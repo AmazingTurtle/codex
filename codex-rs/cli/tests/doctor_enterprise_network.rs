@@ -84,7 +84,7 @@ trust_level = "trusted"
 
         let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
             .current_dir(codex_home.path())
-            .env("CODEX_HOME", codex_home.path())
+            .env(codex_product_info::HOME_ENV, codex_home.path())
             .env("NO_PROXY", "127.0.0.1,localhost")
             .env("no_proxy", "127.0.0.1,localhost")
             .env_remove("CODEX_ACCESS_TOKEN")
@@ -162,7 +162,7 @@ async fn invalid_custom_ca_falls_back_to_system_roots() -> Result<()> {
         let mut command = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
         command
             .args(["doctor", "--json"])
-            .env("CODEX_HOME", codex_home.path())
+            .env(codex_product_info::HOME_ENV, codex_home.path())
             .env("CODEX_CA_CERTIFICATE", &certificate)
             .stdin(Stdio::null());
         if let Some(sandbox) = sandbox {
@@ -225,7 +225,7 @@ fn doctor_reports_macos_system_proxy_configuration_and_policy() -> Result<()> {
 fn doctor_report(codex_home: &Path) -> Result<Value> {
     let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
         .args(["doctor", "--json"])
-        .env("CODEX_HOME", codex_home)
+        .env(codex_product_info::HOME_ENV, codex_home)
         .stdin(Stdio::null())
         .output()
         .context("failed to run the doctor")?;

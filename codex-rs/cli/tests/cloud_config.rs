@@ -126,7 +126,7 @@ impl CloudManagedConfigFixture {
         command
             .kill_on_drop(true)
             .current_dir(self.codex_home.path())
-            .env("CODEX_HOME", self.codex_home.path())
+            .env(codex_product_info::HOME_ENV, self.codex_home.path())
             .env("NO_PROXY", "127.0.0.1,localhost")
             .env("no_proxy", "127.0.0.1,localhost")
             .env_remove("CODEX_ACCESS_TOKEN")
@@ -485,9 +485,17 @@ async fn startup_config_loads_managed_policy_or_reports_cloud_failure() -> Resul
         let sqlite_home = TempDir::new()?;
         let history_path = sqlite_home.path().join("state_5.sqlite");
         std::fs::write(&history_path, b"history must not be repaired")?;
+        // Better Codex ignores CODEX_SQLITE_HOME; configure the override in its own home.
+        std::fs::write(
+            fixture.codex_home.path().join("config.toml"),
+            format!(
+                "{}sqlite_home = {}\n",
+                fixture.user_config,
+                toml::Value::String(sqlite_home.path().display().to_string())
+            ),
+        )?;
         let output = fixture
             .command(&["app-server", "--print-startup-config"])?
-            .env("CODEX_SQLITE_HOME", sqlite_home.path())
             .env(
                 "CODEX_REFRESH_TOKEN_URL_OVERRIDE",
                 format!("{}/refresh", fixture.server.uri()),
@@ -553,14 +561,21 @@ async fn startup_config_sign_out_reloads_policy_without_starting_runtime() -> Re
         let baseline = successful_json(
             fixture
                 .command(&["app-server", "--print-startup-config"])?
-                .env("CODEX_HOME", signed_out_home.path()),
+                .env("BETTER_CODEX_HOME", signed_out_home.path()),
         )
         .await?;
         let sqlite_home = TempDir::new()?;
+        std::fs::write(
+            fixture.codex_home.path().join("config.toml"),
+            format!(
+                "{}sqlite_home = {}\n",
+                fixture.user_config,
+                toml::Value::String(sqlite_home.path().display().to_string())
+            ),
+        )?;
         let value = successful_json(
             fixture
                 .command(&["app-server", "--print-startup-config", "--startup-sign-out"])?
-                .env("CODEX_SQLITE_HOME", sqlite_home.path())
                 .env(
                     "CODEX_REVOKE_TOKEN_URL_OVERRIDE",
                     format!("{}/revoke", fixture.server.uri()),

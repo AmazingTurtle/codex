@@ -2326,8 +2326,7 @@ async fn task_mention_submission_and_transcript_preserve_the_visible_title() {
 async fn committed_user_message_with_hidden_prompt_context_renders_local_images() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let local_image = PathBuf::from("/tmp/context-image.png");
-    let raw_message =
-        "# Context from my IDE setup:\n\n## Active file: src/lib.rs\n\n## My request for Codex:\n";
+    let raw_message = "# Context from my IDE setup:\n\n## Active file: src/lib.rs\n\n## My request for Better Codex:\n";
 
     complete_user_message_for_inputs(
         &mut chat,

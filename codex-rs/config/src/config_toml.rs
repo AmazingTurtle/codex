@@ -373,12 +373,12 @@ pub struct ConfigToml {
     pub history: Option<History>,
 
     /// Directory where Codex stores the SQLite state DB.
-    /// Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses `$CODEX_HOME`.
+    /// Defaults to the Better Codex home directory.
     pub sqlite_home: Option<AbsolutePathBuf>,
 
     /// Directory for log files. Setting this value explicitly also routes the
     /// SQLite logs database here and enables the TUI text log in this directory.
-    /// When unset, log files use `$CODEX_HOME/log` and SQLite logs use `sqlite_home`.
+    /// When unset, log files use `$BETTER_CODEX_HOME/log` and SQLite logs use `sqlite_home`.
     /// Existing SQLite logs in `sqlite_home` are not migrated automatically.
     /// A managed `sqlite_home` requirement keeps SQLite logs in that required directory.
     pub log_dir: Option<AbsolutePathBuf>,

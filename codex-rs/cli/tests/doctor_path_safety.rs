@@ -39,9 +39,11 @@ impl Fixture {
         std::fs::create_dir(&home)?;
         // Cargo-built paths deliberately ignore npm provenance. Launch outside
         // target/ so this fixture also exercises the packaged-install checks.
-        let program = root
-            .path()
-            .join(format!("codex{}", std::env::consts::EXE_SUFFIX));
+        let program = root.path().join(format!(
+            "{}{}",
+            codex_product_info::CLI_NAME,
+            std::env::consts::EXE_SUFFIX
+        ));
         let source = codex_utils_cargo_bin::cargo_bin("codex")?;
         // Hard-link setup and teardown invalidate other tests' Rosetta translations.
         #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
@@ -50,7 +52,7 @@ impl Fixture {
             // Translate the fixture before the timed diagnostic command.
             anyhow::ensure!(
                 std::process::Command::new(&program)
-                    .env("CODEX_HOME", &home)
+                    .env(codex_product_info::HOME_ENV, &home)
                     .arg("--version")
                     .output()?
                     .status
@@ -119,7 +121,7 @@ wire_api = "responses"
         let mut command = assert_cmd::Command::new(&self.program);
         command
             .current_dir(&self.workspace)
-            .env("CODEX_HOME", &self.home)
+            .env(codex_product_info::HOME_ENV, &self.home)
             .env("HOME", self.root.path())
             .env("PATH", &self.path)
             .env("CODEX_TEST_HELPER_MARKER", &self.marker)
@@ -566,7 +568,7 @@ async fn interactive_tmux_startup_does_not_execute_workspace_helpers() -> Result
                 .chars()
                 .filter(|character| !character.is_whitespace())
                 .collect();
-            if text.contains("Trustthisfolder?") {
+            if text.contains("Trustandcontinue") {
                 return Ok::<_, anyhow::Error>(());
             }
         }
