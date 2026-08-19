@@ -4,13 +4,21 @@ import argparse
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from codex_package.cli import parse_args
 from codex_package.cli import parse_package_version
+from codex_package.version import read_product_version
 
 
 class PackageVersionTest(unittest.TestCase):
+    def test_default_package_version_matches_product(self) -> None:
+        with patch.object(sys, "argv", ["build_codex_package.py"]):
+            args = parse_args()
+        self.assertEqual(args.package_version, read_product_version())
+
     def test_accepts_release_prerelease_and_build_versions(self) -> None:
         for version in (
             "0.0.0",

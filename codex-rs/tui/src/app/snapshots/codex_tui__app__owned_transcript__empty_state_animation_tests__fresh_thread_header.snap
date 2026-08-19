@@ -4,7 +4,7 @@ expression: "format!(\"enabled:\\n{}\\n---\\ndisabled:\\n{}\", text(after), text
 ---
 enabled:
 
-  >_ OpenAI Codex (v0.0.0)
+  >_ Better Codex (v0.999.0-better-codex)
      /tmp/project
 
   Pull up a prompt.
@@ -43,14 +43,14 @@ enabled:
 
 
 
-› Ask Codex to do anything
+› Ask Better Codex to do anything
 
   GPT-5.6-Sol default · /tmp/project
   ? for shortcuts                                                                              ⚠ 1 warning · f2 to view
 ---
 disabled:
 
-  >_ OpenAI Codex (v0.0.0)
+  >_ Better Codex (v0.999.0-better-codex)
      /tmp/project
 
   Pull up a prompt.
@@ -89,7 +89,7 @@ disabled:
 
 
 
-› Ask Codex to do anything
+› Ask Better Codex to do anything
 
   GPT-5.6-Sol default · /tmp/project
   ? for shortcuts                                                                              ⚠ 1 warning · f2 to view
