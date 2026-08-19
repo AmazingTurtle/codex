@@ -52,6 +52,7 @@ struct HookHandlerSource<'a> {
     hook_states: &'a HashMap<String, HookStateToml>,
     env: HashMap<String, String>,
     plugin_id: Option<String>,
+    approval_scope: Option<String>,
 }
 
 enum HookRequirement<'a> {
@@ -136,6 +137,7 @@ pub(crate) fn discover_handlers(
                 hook_states: &hook_states,
                 env: HashMap::new(),
                 plugin_id: None,
+                approval_scope: None,
             };
             if !policy.allows(&policy_source) {
                 continue;
@@ -161,6 +163,9 @@ pub(crate) fn discover_handlers(
             }
 
             for (source_path, hook_events) in [json_hooks, toml_hooks].into_iter().flatten() {
+                let key_source_path = hook_key_source_path(layer, &source_path);
+                let approval_scope = (key_source_path != source_path)
+                    .then(|| key_source_path.display().to_string());
                 append_hook_events(
                     &mut handlers,
                     &mut hook_entries,
@@ -168,7 +173,7 @@ pub(crate) fn discover_handlers(
                     &mut display_order,
                     HookHandlerSource {
                         path: &source_path,
-                        key_source: source_path.display().to_string(),
+                        key_source: key_source_path.display().to_string(),
                         source: hook_source,
                         is_managed,
                         requirement: HookRequirement::Optional,
@@ -176,6 +181,7 @@ pub(crate) fn discover_handlers(
                         hook_states: &hook_states,
                         env: HashMap::new(),
                         plugin_id: None,
+                        approval_scope,
                     },
                     hook_events,
                     policy,
@@ -231,6 +237,7 @@ fn append_managed_requirement_handlers(
             hook_states,
             env: HashMap::new(),
             plugin_id: None,
+            approval_scope: None,
         },
         managed_hooks.get().hooks.clone(),
         policy,
@@ -284,6 +291,7 @@ fn append_plugin_hook_sources(
                 hook_states,
                 env,
                 plugin_id: Some(plugin_id),
+                approval_scope: None,
             },
             hooks,
             policy,
@@ -417,6 +425,23 @@ fn config_toml_source_path(layer: &ConfigLayerEntry) -> AbsolutePathBuf {
         }
         ConfigLayerSource::SessionFlags => synthetic_layer_path("<session-flags>/config.toml"),
     }
+}
+
+fn hook_key_source_path(
+    layer: &ConfigLayerEntry,
+    source_path: &AbsolutePathBuf,
+) -> AbsolutePathBuf {
+    let ConfigLayerSource::Project { .. } = &layer.name else {
+        return source_path.clone();
+    };
+    let Some(config_folder) = layer.config_folder() else {
+        return source_path.clone();
+    };
+    let Some(file_name) = source_path.as_path().file_name() else {
+        return source_path.clone();
+    };
+
+    config_folder.join(Path::new(file_name))
 }
 
 fn synthetic_layer_path(path: &str) -> AbsolutePathBuf {
@@ -652,7 +677,13 @@ fn append_matcher_groups(
                 status_message,
                 additional_context_limit,
             } = normalized;
-            let current_hash = hook_hash(event_name, matcher, &group, config);
+            let current_hash = hook_hash(
+                event_name,
+                matcher,
+                &group,
+                config,
+                source.approval_scope.as_deref(),
+            );
             let key = crate::hook_key(&source.key_source, event_name, group_index, handler_index);
             let state = source.hook_states.get(&key);
             let enabled = hook_enabled(source.is_managed, state);
@@ -745,6 +776,8 @@ fn normalize_command_hook(
 #[derive(Serialize)]
 struct NormalizedHookIdentity {
     event_name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    approval_scope: Option<String>,
     #[serde(flatten)]
     group: MatcherGroup,
 }
@@ -754,12 +787,14 @@ fn hook_hash(
     matcher: Option<&str>,
     group: &MatcherGroup,
     normalized_handler: HookHandlerConfig,
+    approval_scope: Option<&str>,
 ) -> String {
     let mut group = group.clone();
     group.matcher = matcher.map(ToOwned::to_owned);
     group.hooks = vec![normalized_handler];
     let identity = NormalizedHookIdentity {
         event_name: crate::hook_event_key_label(event_name),
+        approval_scope: approval_scope.map(ToOwned::to_owned),
         group,
     };
     let Ok(value) = TomlValue::try_from(identity) else {
@@ -882,6 +917,7 @@ mod tests {
             hook_states,
             env: std::collections::HashMap::new(),
             plugin_id: None,
+            approval_scope: None,
         }
     }
 
@@ -900,6 +936,7 @@ mod tests {
             hook_states,
             env: std::collections::HashMap::new(),
             plugin_id: None,
+            approval_scope: None,
         }
     }
 

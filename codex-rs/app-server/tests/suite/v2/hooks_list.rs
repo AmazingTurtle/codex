@@ -41,6 +41,8 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Serialize)]
 struct NormalizedHookIdentity {
     event_name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    approval_scope: Option<String>,
     #[serde(flatten)]
     group: codex_config::MatcherGroup,
 }
@@ -54,8 +56,31 @@ fn command_hook_hash(
     status_message: Option<&str>,
     additional_context_limit: Option<usize>,
 ) -> String {
+    command_hook_hash_with_approval_scope(
+        event_name,
+        matcher,
+        command,
+        timeout_sec,
+        r#async,
+        status_message,
+        additional_context_limit,
+        /*approval_scope*/ None,
+    )
+}
+
+fn command_hook_hash_with_approval_scope(
+    event_name: &'static str,
+    matcher: Option<&str>,
+    command: &str,
+    timeout_sec: u64,
+    r#async: bool,
+    status_message: Option<&str>,
+    additional_context_limit: Option<usize>,
+    approval_scope: Option<String>,
+) -> String {
     let identity = NormalizedHookIdentity {
         event_name,
+        approval_scope,
         group: codex_config::MatcherGroup {
             matcher: matcher.map(ToOwned::to_owned),
             hooks: vec![codex_config::HookHandlerConfig::Command {
@@ -1052,6 +1077,8 @@ async fn hooks_list_uses_root_repo_hooks_for_linked_worktrees() -> Result<()> {
     let worktree_hook = data[1].hooks[0].clone();
     let repo_config_path =
         AbsolutePathBuf::from_absolute_path(repo_root.join(".codex/config.toml"))?;
+    let worktree_config_path =
+        AbsolutePathBuf::from_absolute_path(worktree_root.join(".codex/config.toml"))?;
 
     assert_eq!(
         repo_hook.handler,
@@ -1067,9 +1094,29 @@ async fn hooks_list_uses_root_repo_hooks_for_linked_worktrees() -> Result<()> {
             r#async: false,
         }
     );
-    assert_eq!(repo_hook.key, worktree_hook.key);
+    assert_ne!(repo_hook.key, worktree_hook.key);
+    assert!(repo_hook.key.contains(&repo_config_path.display().to_string()));
+    assert!(
+        worktree_hook
+            .key
+            .contains(&worktree_config_path.display().to_string())
+    );
     assert_eq!(repo_hook.source_path, repo_config_path);
     assert_eq!(worktree_hook.source_path, repo_config_path);
+    assert_ne!(repo_hook.current_hash, worktree_hook.current_hash);
+    assert_eq!(
+        worktree_hook.current_hash,
+        command_hook_hash_with_approval_scope(
+            "pre_tool_use",
+            Some("Bash"),
+            "echo root hook",
+            /*timeout_sec*/ 5,
+            /*async*/ false,
+            /*status_message*/ None,
+            /*additional_context_limit*/ None,
+            Some(worktree_config_path.display().to_string()),
+        )
+    );
 
     let write_id = mcp
         .send_config_batch_write_request(ConfigBatchWriteParams {
@@ -1096,7 +1143,7 @@ async fn hooks_list_uses_root_repo_hooks_for_linked_worktrees() -> Result<()> {
         })
         .await?;
     let HooksListResponse { data } = timeout(DEFAULT_TIMEOUT, mcp.read_response(list_id)).await??;
-    assert_eq!(data[0].hooks[0].trust_status, HookTrustStatus::Trusted);
+    assert_eq!(data[0].hooks[0].trust_status, HookTrustStatus::Untrusted);
 
     Ok(())
 }
