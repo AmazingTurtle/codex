@@ -2,6 +2,8 @@ use crate::backend::BackendBundleClient;
 use crate::backend::BundleClient;
 use crate::service::CLOUD_CONFIG_BUNDLE_TIMEOUT;
 use crate::service::CloudConfigBundleService;
+use codex_config::CloudConfigBundleLoadError;
+use codex_config::CloudConfigBundleLoadErrorCode;
 use codex_config::CloudConfigBundleLoader;
 use codex_http_client::HttpClientFactory;
 use codex_login::AuthConfig;
@@ -82,6 +84,37 @@ where
         async move { lifetime.service.get_latest().await }
     });
     (loader, abort_handle)
+}
+
+/// Loads the startup cloud configuration using the specified persisted ChatGPT account.
+pub fn cloud_config_bundle_loader_for_chatgpt_account(
+    auth_manager: Arc<AuthManager>,
+    chatgpt_account_id: String,
+    chatgpt_base_url: String,
+    codex_home: PathBuf,
+    http_client_factory: HttpClientFactory,
+) -> CloudConfigBundleLoader {
+    let service = CloudConfigBundleService::new_for_chatgpt_account(
+        auth_manager,
+        chatgpt_account_id,
+        Arc::new(BackendBundleClient::new(
+            chatgpt_base_url,
+            http_client_factory,
+        )),
+        codex_home,
+        CLOUD_CONFIG_BUNDLE_TIMEOUT,
+    );
+    let task = tokio::spawn(async move { service.load_startup_bundle_with_timeout().await });
+    CloudConfigBundleLoader::new(async move {
+        task.await.map_err(|err| {
+            tracing::error!(error = %err, "Account-scoped cloud config bundle task failed");
+            CloudConfigBundleLoadError::new(
+                CloudConfigBundleLoadErrorCode::Internal,
+                /*status_code*/ None,
+                format!("account-scoped cloud config bundle load failed: {err}"),
+            )
+        })?
+    })
 }
 
 pub async fn cloud_config_bundle_loader_for_storage(

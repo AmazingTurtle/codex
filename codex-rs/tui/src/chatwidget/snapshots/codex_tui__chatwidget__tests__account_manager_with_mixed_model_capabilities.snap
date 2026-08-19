@@ -1,0 +1,15 @@
+---
+source: tui/src/chatwidget/tests/accounts.rs
+expression: "render_bottom_popup(&chat, 100)"
+---
+  ChatGPT accounts
+  Select the account Codex should use
+
+  Search accounts
+  pro@example.com (current)      Pro · current model unavailable · 0 models
+› free@example.com               Free · model availability unknown (catalog timed out)
+  Add account in browser…        Sign in to another ChatGPT account with OAuth
+  Add account with device code…  Sign in without a local browser callback
+  Remove an account…             Revoke and remove one stored ChatGPT login
+
+  Press enter to confirm or esc to go back

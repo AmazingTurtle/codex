@@ -230,7 +230,14 @@ impl ChatWidget {
         for (_, handle) in self.refreshing_status_outputs.drain(..) {
             handle.finish_rate_limit_refresh(&[], now);
         }
-        if had_refreshing_status_outputs {
+        let had_refreshing_all_account_status_outputs =
+            !self.refreshing_all_account_status_outputs.is_empty();
+        for (_, handle) in self.refreshing_all_account_status_outputs.drain(..) {
+            handle.fail_account_limits_refresh(
+                "account changed while limits were loading".to_string(),
+            );
+        }
+        if had_refreshing_status_outputs || had_refreshing_all_account_status_outputs {
             self.request_redraw();
         }
         self.status_line_workspace_headline = None;

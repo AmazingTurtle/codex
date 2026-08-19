@@ -1,0 +1,16 @@
+---
+source: tui/src/app/tests/account_manager.rs
+expression: "render_bottom_popup(&app.chat_widget, 100)"
+---
+  ChatGPT accounts
+  Select the account Codex should use
+
+  Search accounts
+  blocked@example.com (current) (disabled)  Pro · model availability unknown (not allowed by the
+                                            current configuration) (disabled: not allowed by the
+                                            current configuration)
+› Add account in browser…                   Sign in to another ChatGPT account with OAuth
+  Add account with device code…             Sign in without a local browser callback
+  Remove an account…                        Revoke and remove one stored ChatGPT login
+
+  Press enter to confirm or esc to go back

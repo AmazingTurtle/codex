@@ -94,7 +94,7 @@ fn start_mock_issuer(chatgpt_account_id: &str) -> (SocketAddr, thread::JoinHandl
 }
 
 #[tokio::test]
-async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
+async fn browser_login_preserves_existing_chatgpt_account() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let chatgpt_account_id = "12345678-0000-0000-0000-000000000000";
@@ -104,9 +104,10 @@ async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().to_path_buf();
 
-    // Seed auth.json with stale API key + tokens that should be overwritten.
+    // Seed auth.json with an existing account that should become an alternate.
     let stale_auth = serde_json::json!({
-        "OPENAI_API_KEY": "sk-stale",
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": null,
         "tokens": {
             "id_token": "stale.header.payload",
             "access_token": "stale-access",
@@ -184,6 +185,15 @@ async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
     assert_eq!(json["tokens"]["access_token"], "access-123");
     assert_eq!(json["tokens"]["refresh_token"], "refresh-123");
     assert_eq!(json["tokens"]["account_id"], chatgpt_account_id);
+    assert_eq!(
+        json["accounts"][0]["tokens"]["access_token"],
+        "stale-access"
+    );
+    assert_eq!(
+        json["accounts"][0]["tokens"]["refresh_token"],
+        "stale-refresh"
+    );
+    assert_eq!(json["accounts"][0]["tokens"]["account_id"], "stale-acc");
 
     // Stop mock issuer
     drop(issuer_handle);

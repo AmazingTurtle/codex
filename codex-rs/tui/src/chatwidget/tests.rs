@@ -231,6 +231,7 @@ fn next_goal_draft(
     }
 }
 
+mod accounts;
 mod app_server;
 mod approval_requests;
 mod composer_submission;

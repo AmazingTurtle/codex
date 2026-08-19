@@ -115,6 +115,18 @@ fn add_originator_header_omits_invalid_originator() {
     assert!(headers.is_empty());
 }
 
+#[test]
+fn explicit_residency_headers_do_not_inherit_the_process_default() {
+    assert_eq!(
+        default_headers_for_residency(/*enforce_residency*/ None).get(RESIDENCY_HEADER_NAME),
+        None
+    );
+    assert_eq!(
+        default_headers_for_residency(Some(ResidencyRequirement::Us)).get(RESIDENCY_HEADER_NAME),
+        Some(&HeaderValue::from_static("us"))
+    );
+}
+
 #[tokio::test]
 async fn test_create_client_sets_default_headers() {
     skip_if_no_network!();

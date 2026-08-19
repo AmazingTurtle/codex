@@ -27,6 +27,7 @@ impl Config {
             forced_chatgpt_workspace_id: self.forced_chatgpt_workspace_id.clone(),
             managed_auth_policy: self.config_layer_stack.requirements().managed_auth_policy(),
             auth_route_config: self.auth_route_config(),
+            chatgpt_account_selection: self.chatgpt_account_selection,
         }
     }
 }
@@ -67,6 +68,7 @@ pub fn bootstrap_auth_config(
             config,
             requirements.feature_requirements.as_ref(),
         )?,
+        chatgpt_account_selection: config.chatgpt_account_selection,
     };
     if let Some(required) = requirements.cli_auth_credentials_store.as_ref() {
         auth_config.auth_credentials_store_mode = required.value;

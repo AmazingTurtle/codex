@@ -1,0 +1,11 @@
+---
+source: tui/src/chatwidget/tests/accounts.rs
+expression: "render_bottom_popup(&chat, 100)"
+---
+  ChatGPT accounts
+  Add a ChatGPT account to use with Codex
+
+› 1. Add account in browser…        Sign in to another ChatGPT account with OAuth
+  2. Add account with device code…  Sign in without a local browser callback
+
+  Press enter to confirm or esc to go back
