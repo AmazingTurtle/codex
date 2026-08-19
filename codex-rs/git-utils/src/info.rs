@@ -817,6 +817,47 @@ pub async fn resolve_root_git_project_for_trust(
     }
 
     let common_dir = worktrees_dir.parent()?;
+    if common_dir.as_path().file_name() != Some(OsStr::new(".git")) {
+        return None;
+    }
+
+    let git_dir_path_uri = PathUri::from_abs_path(&git_dir_path);
+    if !fs
+        .get_metadata(&git_dir_path_uri, /*sandbox*/ None)
+        .await
+        .ok()?
+        .is_directory
+    {
+        return None;
+    }
+
+    let reverse_gitdir_file = git_dir_path.join("gitdir");
+    let reverse_gitdir_file_uri = PathUri::from_abs_path(&reverse_gitdir_file);
+    let reverse_gitdir_s = fs
+        .read_file_text(&reverse_gitdir_file_uri, /*sandbox*/ None)
+        .await
+        .ok()?;
+    let reverse_gitdir = reverse_gitdir_s.trim();
+    if reverse_gitdir.is_empty() {
+        return None;
+    }
+
+    let reverse_gitdir_path =
+        AbsolutePathBuf::resolve_path_against_base(reverse_gitdir, git_dir_path.as_path());
+    let expected_dot_git_uri = PathUri::from_abs_path(&dot_git);
+    let reverse_gitdir_uri = PathUri::from_abs_path(&reverse_gitdir_path);
+    if fs
+        .canonicalize(&expected_dot_git_uri, /*sandbox*/ None)
+        .await
+        .ok()?
+        != fs
+            .canonicalize(&reverse_gitdir_uri, /*sandbox*/ None)
+            .await
+            .ok()?
+    {
+        return None;
+    }
+
     common_dir.parent()
 }
 
