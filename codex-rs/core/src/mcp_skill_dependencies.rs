@@ -77,7 +77,7 @@ pub(crate) async fn maybe_prompt_and_install_mcp_dependencies(
             sess,
             turn_context,
             config.as_ref(),
-            mentioned_skills,
+            unprompted_missing,
             elicitation_reviewer,
         )
         .await;
@@ -88,10 +88,10 @@ pub(crate) async fn maybe_install_mcp_dependencies(
     sess: &Session,
     turn_context: &TurnContext,
     config: &crate::config::Config,
-    mentioned_skills: &[SkillMetadata],
+    missing: HashMap<String, McpServerConfig>,
     elicitation_reviewer: Option<ElicitationReviewerHandle>,
 ) {
-    if mentioned_skills.is_empty()
+    if missing.is_empty()
         || !config
             .features
             .enabled(codex_features::Feature::SkillMcpDependencyInstall)
@@ -101,7 +101,14 @@ pub(crate) async fn maybe_install_mcp_dependencies(
 
     let codex_home = config.codex_home.clone();
     let installed = sess.runtime_mcp_servers(config).await;
-    let missing = collect_missing_mcp_dependencies(mentioned_skills, &installed);
+    let installed_keys: HashSet<String> = installed
+        .iter()
+        .map(|(name, config)| canonical_mcp_server_key(name, config))
+        .collect();
+    let missing = missing
+        .into_iter()
+        .filter(|(name, config)| !installed_keys.contains(&canonical_mcp_server_key(name, config)))
+        .collect::<HashMap<_, _>>();
     if missing.is_empty() {
         return;
     }
@@ -346,6 +353,10 @@ fn canonical_mcp_key(transport: &str, identifier: &str, fallback: &str) -> Strin
         format!("mcp__{transport}__{identifier}")
     }
 }
+
+#[cfg(test)]
+#[path = "mcp_skill_dependencies_tests.rs"]
+mod tests;
 
 fn canonical_mcp_server_key(name: &str, config: &McpServerConfig) -> String {
     match &config.transport {
