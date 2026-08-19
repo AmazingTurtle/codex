@@ -1,0 +1,6 @@
+---
+source: tui/src/chatwidget/tests/tool_flow.rs
+expression: active_blob(&chat)
+---
+• Searching the web
+  └ Search rust ratatui wrapping

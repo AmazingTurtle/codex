@@ -13,10 +13,22 @@ impl ChatWidget {
 
     pub(super) fn on_view_image_tool_call(&mut self, path: LegacyAppPathString) {
         self.flush_answer_stream_with_separator();
-        self.add_to_history(history_cell::new_view_image_tool_call(
-            path,
-            &self.config.cwd,
-        ));
+        if let Some(cell) = self.transcript.active_cell.as_mut().and_then(|cell| {
+            cell.as_any_mut()
+                .downcast_mut::<history_cell::ViewImageCell>()
+        }) {
+            cell.add_path(path, &self.config.cwd);
+        } else {
+            self.flush_active_cell();
+            self.transcript.active_cell = Some(Box::new(
+                history_cell::new_view_image_tool_call_with_display(
+                    path,
+                    &self.config.cwd,
+                    self.config.tui_tool_call_display,
+                ),
+            ));
+        }
+        self.bump_active_cell_revision();
         self.request_redraw();
     }
 
@@ -70,12 +82,24 @@ impl ChatWidget {
 
     pub(super) fn on_web_search_begin(&mut self, call_id: String) {
         self.flush_answer_stream_with_separator();
-        self.flush_active_cell();
-        self.transcript.active_cell = Some(Box::new(history_cell::new_active_web_search_call(
-            call_id,
-            String::new(),
-            self.config.animations,
-        )));
+        if let Some(cell) = self
+            .transcript
+            .active_cell
+            .as_mut()
+            .and_then(|cell| cell.as_any_mut().downcast_mut::<WebSearchCell>())
+        {
+            cell.add_call(call_id, String::new());
+        } else {
+            self.flush_active_cell();
+            self.transcript.active_cell = Some(Box::new(
+                history_cell::new_active_web_search_call_with_display(
+                    call_id,
+                    String::new(),
+                    self.config.animations,
+                    self.config.tui_tool_call_display,
+                ),
+            ));
+        }
         self.bump_active_cell_revision();
         self.request_redraw();
     }
@@ -87,24 +111,25 @@ impl ChatWidget {
         action: codex_app_server_protocol::WebSearchAction,
     ) {
         self.flush_answer_stream_with_separator();
-        let mut handled = false;
         if let Some(cell) = self
             .transcript
             .active_cell
             .as_mut()
             .and_then(|cell| cell.as_any_mut().downcast_mut::<WebSearchCell>())
-            && cell.call_id() == call_id
         {
-            cell.update(action.clone(), query.clone());
-            cell.complete();
-            self.bump_active_cell_revision();
+            cell.complete_call(call_id, action, query);
+        } else {
             self.flush_active_cell();
-            handled = true;
+            self.transcript.active_cell =
+                Some(Box::new(history_cell::new_web_search_call_with_display(
+                    call_id,
+                    query,
+                    action,
+                    self.config.tui_tool_call_display,
+                )));
         }
-
-        if !handled {
-            self.add_to_history(history_cell::new_web_search_call(call_id, query, action));
-        }
+        self.bump_active_cell_revision();
+        self.request_redraw();
         self.transcript.had_work_activity = true;
     }
 
@@ -177,15 +202,18 @@ impl ChatWidget {
         };
         self.flush_answer_stream_with_separator();
         self.flush_active_cell();
-        self.transcript.active_cell = Some(Box::new(history_cell::new_active_mcp_tool_call(
-            id,
-            McpInvocation {
-                server,
-                tool,
-                arguments: Some(arguments),
-            },
-            self.config.animations,
-        )));
+        self.transcript.active_cell = Some(Box::new(
+            history_cell::new_active_mcp_tool_call_with_display(
+                id,
+                McpInvocation {
+                    server,
+                    tool,
+                    arguments: Some(arguments),
+                },
+                self.config.animations,
+                self.config.tui_tool_call_display,
+            ),
+        ));
         self.bump_active_cell_revision();
         self.request_redraw();
     }
@@ -236,8 +264,12 @@ impl ChatWidget {
             Some(cell) if cell.call_id() == id => cell.complete(duration, result),
             _ => {
                 self.flush_active_cell();
-                let mut cell =
-                    history_cell::new_active_mcp_tool_call(id, invocation, self.config.animations);
+                let mut cell = history_cell::new_active_mcp_tool_call_with_display(
+                    id,
+                    invocation,
+                    self.config.animations,
+                    self.config.tui_tool_call_display,
+                );
                 let extra_cell = cell.complete(duration, result);
                 self.transcript.active_cell = Some(Box::new(cell));
                 extra_cell

@@ -47,6 +47,7 @@ pub(crate) struct McpToolCallCell {
     duration: Option<Duration>,
     result: Option<Result<McpToolResult, String>>,
     animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +76,7 @@ impl McpToolCallCell {
         call_id: String,
         invocation: McpInvocation,
         animations_enabled: bool,
+        tool_call_display: ToolCallDisplay,
     ) -> Self {
         Self {
             call_id,
@@ -83,6 +85,7 @@ impl McpToolCallCell {
             duration: None,
             result: None,
             animations_enabled,
+            tool_call_display,
         }
     }
 
@@ -132,7 +135,9 @@ impl McpToolCallCell {
         let mut lines: Vec<Line<'static>> = Vec::new();
         let status = self.success();
         let node_repl = self.result_kind() == McpResultKind::NodeRepl;
-        let compact = node_repl && mode == McpToolCallRenderMode::Display;
+        let compact = node_repl
+            && mode == McpToolCallRenderMode::Display
+            && self.tool_call_display == ToolCallDisplay::Summary;
         let bullet = match status {
             Some(true) => "•".green().bold(),
             Some(false) => "•".red().bold(),
@@ -316,12 +321,27 @@ impl HistoryCell for McpToolCallCell {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn new_active_mcp_tool_call(
     call_id: String,
     invocation: McpInvocation,
     animations_enabled: bool,
 ) -> McpToolCallCell {
-    McpToolCallCell::new(call_id, invocation, animations_enabled)
+    new_active_mcp_tool_call_with_display(
+        call_id,
+        invocation,
+        animations_enabled,
+        ToolCallDisplay::default(),
+    )
+}
+
+pub(crate) fn new_active_mcp_tool_call_with_display(
+    call_id: String,
+    invocation: McpInvocation,
+    animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
+) -> McpToolCallCell {
+    McpToolCallCell::new(call_id, invocation, animations_enabled, tool_call_display)
 }
 /// Render a summary of configured MCP servers from the current `Config`.
 pub(crate) fn empty_mcp_output() -> WebHyperlinkHistoryCell {

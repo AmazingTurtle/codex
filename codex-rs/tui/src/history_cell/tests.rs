@@ -1258,6 +1258,97 @@ fn web_search_history_cell_without_detail_snapshot() {
 }
 
 #[test]
+fn grouped_web_search_history_cell_snapshot() {
+    let mut cell = new_web_search_call_with_display(
+        "call-1".to_string(),
+        "rust ratatui wrapping".to_string(),
+        WebSearchAction::Search {
+            query: Some("rust ratatui wrapping".to_string()),
+            queries: None,
+        },
+        ToolCallDisplay::Summary,
+    );
+    cell.add_call("call-2".to_string(), String::new());
+    cell.complete_call(
+        "call-2".to_string(),
+        WebSearchAction::OpenPage {
+            url: Some("https://docs.rs/ratatui/latest/ratatui/".to_string()),
+        },
+        "https://docs.rs/ratatui/latest/ratatui/".to_string(),
+    );
+    cell.add_call("call-3".to_string(), String::new());
+    cell.complete_call(
+        "call-3".to_string(),
+        WebSearchAction::OpenPage { url: None },
+        String::new(),
+    );
+    cell.add_call("call-4".to_string(), String::new());
+    cell.complete_call("call-4".to_string(), WebSearchAction::Other, String::new());
+    cell.add_call("call-5".to_string(), String::new());
+    cell.complete_call(
+        "call-5".to_string(),
+        WebSearchAction::FindInPage {
+            url: Some("https://docs.rs/ratatui/latest/ratatui/".to_string()),
+            pattern: Some("installation".to_string()),
+        },
+        "'installation' in https://docs.rs/ratatui/latest/ratatui/".to_string(),
+    );
+
+    let rendered = render_lines(&cell.display_lines(/*width*/ 64)).join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn active_grouped_web_search_history_cell_snapshot() {
+    let mut cell = new_web_search_call_with_display(
+        "call-1".to_string(),
+        "rust ratatui wrapping".to_string(),
+        WebSearchAction::Search {
+            query: Some("rust ratatui wrapping".to_string()),
+            queries: None,
+        },
+        ToolCallDisplay::Summary,
+    );
+    cell.add_call("call-2".to_string(), String::new());
+
+    let rendered = render_lines(&cell.display_lines(/*width*/ 64)).join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn grouped_web_search_history_cell_reserves_width_for_tree_prefix() {
+    let mut cell = new_web_search_call_with_display(
+        "call-1".to_string(),
+        "rust ratatui wrapping across a narrow terminal".to_string(),
+        WebSearchAction::Search {
+            query: Some("rust ratatui wrapping across a narrow terminal".to_string()),
+            queries: None,
+        },
+        ToolCallDisplay::Summary,
+    );
+    cell.add_call("call-2".to_string(), "second grouped search".to_string());
+
+    let rendered = render_lines(&cell.display_lines(/*width*/ 24));
+
+    assert_eq!(
+        rendered,
+        vec![
+            "• Searching the web".to_string(),
+            "  └ Search rust ratatui".to_string(),
+            "           wrapping".to_string(),
+            "           across a".to_string(),
+            "           narrow".to_string(),
+            "           terminal".to_string(),
+            "    Browse second".to_string(),
+            "           grouped".to_string(),
+            "           search".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn web_search_history_cell_wraps_with_indented_continuation() {
     let query = "example search query with several generic words to exercise wrapping".to_string();
     let cell = new_web_search_call(
@@ -1336,7 +1427,7 @@ fn active_mcp_tool_call_snapshot() {
 }
 
 #[test]
-fn code_mode_tool_call_uses_title_and_preserves_full_transcript() {
+fn code_mode_tool_call_individual_display_preserves_full_invocation() {
     let output = format!("{} transcript tail", "0123456789".repeat(20));
     let mut cell = new_active_mcp_tool_call(
         "call-code-mode".into(),
@@ -1349,6 +1440,72 @@ fn code_mode_tool_call_uses_title_and_preserves_full_transcript() {
             })),
         },
         /*animations_enabled*/ false,
+    );
+    cell.complete(
+        Duration::ZERO,
+        Ok(CallToolResult {
+            content: vec![
+                text_block("Script completed\nWall time 0.1 seconds\nOutput:\n"),
+                text_block(
+                    &json!({"chunk_id": "chunk-1", "output": output, "exit_code": 0}).to_string(),
+                ),
+            ],
+            is_error: None,
+            structured_content: None,
+            meta: None,
+        }),
+    );
+
+    let history = render_lines(&cell.display_lines(/*width*/ 40))
+        .into_iter()
+        .map(|line| line.trim_end().to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let transcript = render_lines(&cell.transcript_lines(/*width*/ 180)).join("\n");
+    insta::assert_snapshot!(format!("history:\n{history}\n\ntranscript:\n{transcript}"), @r#"
+    history:
+    • Called
+      └ node_repl.js({"title":"Inspect
+            Spotify workspace","code":"await
+            tools.exec_command({ cmd: 'git
+            status' })"})
+        Script completed
+        Wall time 0.1 seconds
+        Output:
+
+        {"chunk_id": "chunk-1", "output":
+            "0123456789012345678901234567890
+            12345678901234567890123456789012
+            34567890123456789012345678901234
+            56789012345678901234567890123456
+            7890123456...
+
+    transcript:
+    • Called node_repl.js({"title":"Inspect Spotify workspace","code":"await tools.exec_command({ cmd: 'git status' })"})
+      └ Script completed
+        Wall time 0.1 seconds
+        Output:
+        {"chunk_id":"chunk-
+            1","output":"012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678
+            90123456789012345678901234567890123456789 transcript tail","exit_code":0}
+    "#);
+}
+
+#[test]
+fn code_mode_tool_call_summary_uses_title_and_preserves_full_transcript() {
+    let output = format!("{} transcript tail", "0123456789".repeat(20));
+    let mut cell = new_active_mcp_tool_call_with_display(
+        "call-code-mode-summary".into(),
+        McpInvocation {
+            server: "node_repl".into(),
+            tool: "js".into(),
+            arguments: Some(json!({
+                "title": "Inspect Spotify workspace",
+                "code": "await tools.exec_command({ cmd: 'git status' })",
+            })),
+        },
+        /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     cell.complete(
         Duration::ZERO,
@@ -1413,8 +1570,9 @@ fn code_mode_tool_call_preserves_failure_details() {
     let transcript = render_lines(&cell.transcript_lines(/*width*/ 120)).join("\n");
     insta::assert_snapshot!(format!("history:\n{history}\n\ntranscript:\n{transcript}"), @r#"
     history:
-    • Called Inspect workspace
-      └ Script failed
+    • Called
+      └ node_repl.js({"title":"Inspect workspace","code":"throw Error('denied')"})
+        Script failed
         Output:
         permission denied
 
@@ -1888,7 +2046,7 @@ fn session_header_directory_front_truncates_long_segment() {
 fn coalesces_sequential_reads_within_one_call() {
     // Build one exec cell with a Search followed by two Reads
     let call_id = "c1".to_string();
-    let mut cell = ExecCell::new(
+    let mut cell = ExecCell::new_with_display(
         ExecCall {
             call_id: call_id.clone(),
             command: vec!["bash".into(), "-lc".into(), "echo".into()],
@@ -1916,6 +2074,7 @@ fn coalesces_sequential_reads_within_one_call() {
             interaction_input: None,
         },
         /*animations_enabled*/ true,
+        ToolCallDisplay::Summary,
     );
     // Mark call complete so markers are ✓
     cell.complete_call(&call_id, CommandOutput::default(), Duration::from_millis(1));
@@ -1927,7 +2086,7 @@ fn coalesces_sequential_reads_within_one_call() {
 
 #[test]
 fn coalesces_reads_across_multiple_calls() {
-    let mut cell = ExecCell::new(
+    let mut cell = ExecCell::new_with_display(
         ExecCall {
             call_id: "c1".to_string(),
             command: vec!["bash".into(), "-lc".into(), "echo".into()],
@@ -1943,6 +2102,7 @@ fn coalesces_reads_across_multiple_calls() {
             interaction_input: None,
         },
         /*animations_enabled*/ true,
+        ToolCallDisplay::Summary,
     );
     // Call 1: Search only
     cell.complete_call("c1", CommandOutput::default(), Duration::from_millis(1));
@@ -1980,7 +2140,7 @@ fn coalesces_reads_across_multiple_calls() {
 
 #[test]
 fn coalesced_reads_dedupe_names() {
-    let mut cell = ExecCell::new(
+    let mut cell = ExecCell::new_with_display(
         ExecCall {
             call_id: "c1".to_string(),
             command: vec!["bash".into(), "-lc".into(), "echo".into()],
@@ -2008,6 +2168,7 @@ fn coalesced_reads_dedupe_names() {
             interaction_input: None,
         },
         /*animations_enabled*/ true,
+        ToolCallDisplay::Summary,
     );
     cell.complete_call("c1", CommandOutput::default(), Duration::from_millis(1));
     let lines = cell.display_lines(/*width*/ 80);
