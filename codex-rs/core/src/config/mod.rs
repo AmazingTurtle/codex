@@ -48,6 +48,7 @@ use codex_config::types::Notice;
 use codex_config::types::OAuthCredentialsStoreMode;
 use codex_config::types::ResumeCwdMode;
 use codex_config::types::SessionPickerViewMode;
+use codex_config::types::ToolCallDisplay;
 use codex_config::types::ToolSuggestConfig;
 use codex_config::types::ToolSuggestDisabledTool;
 use codex_config::types::ToolSuggestDiscoverable;
@@ -749,6 +750,9 @@ pub struct Config {
 
     /// Start the TUI in raw scrollback mode for copy-friendly transcript output.
     pub tui_raw_output_mode: bool,
+
+    /// Controls how tool calls are rendered in normal TUI history.
+    pub tui_tool_call_display: ToolCallDisplay,
 
     /// Start the TUI in the specified collaboration mode (plan/default).
 
@@ -4373,6 +4377,11 @@ impl Config {
                 .as_ref()
                 .map(|t| t.raw_output_mode)
                 .unwrap_or(false),
+            tui_tool_call_display: cfg
+                .tui
+                .as_ref()
+                .map(|t| t.tool_call_display)
+                .unwrap_or_default(),
             tui_alternate_screen: cfg
                 .tui
                 .as_ref()

@@ -197,7 +197,7 @@ fn projected_image_marker_still_requires_a_complete_image() {
 
 #[test]
 fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
-    let mut cell = new_active_mcp_tool_call(
+    let mut cell = new_active_mcp_tool_call_with_display(
         "call-code-mode".to_string(),
         McpInvocation {
             server: "node_repl".to_string(),
@@ -205,6 +205,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
             arguments: Some(json!({"title": "Inspect results"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     let unknown =
         json!({"type": "future_block", "text": "Script completed\nOutput:\nunknown-side output"});
@@ -254,7 +255,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
         ],
     );
 
-    let mut cua_cell = new_active_mcp_tool_call(
+    let mut cua_cell = new_active_mcp_tool_call_with_display(
         "call-cua-repl".to_string(),
         McpInvocation {
             server: "cua_repl".to_string(),
@@ -262,6 +263,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
             arguments: None,
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     cua_cell.complete(Duration::ZERO, Ok(tool_result));
     let display = cua_cell

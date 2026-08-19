@@ -34,6 +34,7 @@ impl From<&Config> for LocalSettings {
                 vim_mode_default: config.tui_vim_mode_default,
                 question_esc_back: config.tui_question_esc_back,
                 raw_output_mode: config.tui_raw_output_mode,
+                tool_call_display: config.tui_tool_call_display,
                 alternate_screen: config.tui_alternate_screen,
                 status_line: config.tui_status_line.clone(),
                 status_line_use_colors: config.tui_status_line_use_colors,

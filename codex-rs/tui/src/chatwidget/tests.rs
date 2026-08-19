@@ -273,6 +273,7 @@ mod status_and_layout;
 mod status_command_tests;
 mod status_surface_previews;
 mod terminal_title;
+mod tool_flow;
 mod usage;
 #[path = "tests/usage_picker_tests.rs"]
 mod usage_picker_tests;
