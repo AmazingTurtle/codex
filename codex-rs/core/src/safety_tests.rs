@@ -64,6 +64,112 @@ fn test_writable_roots_constraint() {
 }
 
 #[test]
+#[cfg(unix)]
+fn workspace_symlink_target_outside_is_not_constrained_to_writable_paths() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().join("workspace").abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let outside = tmp.path().join("outside.txt").abs();
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(&outside, "unchanged").unwrap();
+    let link = cwd.join("linked-victim.txt");
+    std::os::unix::fs::symlink(&outside, &link).unwrap();
+    let action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&link), "".to_string());
+    let workspace_only_file_system_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &action,
+        &workspace_only_file_system_policy,
+        &cwd_uri,
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn missing_file_under_workspace_symlink_to_outside_is_not_constrained_to_writable_paths() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().join("workspace").abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let outside = tmp.path().join("outside").abs();
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    let link = cwd.join("linked-dir");
+    std::os::unix::fs::symlink(&outside, &link).unwrap();
+    let action = ApplyPatchAction::new_add_for_test(
+        &PathUri::from_abs_path(&link.join("created.txt")),
+        "".to_string(),
+    );
+    let workspace_only_file_system_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &action,
+        &workspace_only_file_system_policy,
+        &cwd_uri,
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn workspace_hardlink_is_not_constrained_to_writable_paths() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().join("workspace").abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let outside = tmp.path().join("outside.txt").abs();
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(&outside, "unchanged").unwrap();
+    let link = cwd.join("linked-victim.txt");
+    std::fs::hard_link(&outside, &link).unwrap();
+    let action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&link), "".to_string());
+    let workspace_only_file_system_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &action,
+        &workspace_only_file_system_policy,
+        &cwd_uri,
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn workspace_symlink_target_inside_remains_constrained_to_writable_paths() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().join("workspace").abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    std::fs::create_dir_all(&cwd).unwrap();
+    let target = cwd.join("target.txt");
+    std::fs::write(&target, "unchanged").unwrap();
+    let link = cwd.join("linked-target.txt");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&link), "".to_string());
+    let workspace_only_file_system_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(is_write_patch_constrained_to_writable_paths(
+        &action,
+        &workspace_only_file_system_policy,
+        &cwd_uri,
+    ));
+}
+
+#[test]
 fn external_sandbox_auto_approves_in_on_request() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().abs();

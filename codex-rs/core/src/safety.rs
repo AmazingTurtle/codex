@@ -136,7 +136,7 @@ fn is_write_patch_constrained_to_writable_paths(
     };
     // Normalize a path by removing `.` and resolving `..` without touching the
     // filesystem (works even if the file does not exist).
-    fn normalize(path: &Path) -> Option<PathBuf> {
+    fn normalize(path: &Path) -> PathBuf {
         let mut out = PathBuf::new();
         for comp in path.components() {
             match comp {
@@ -147,40 +147,106 @@ fn is_write_patch_constrained_to_writable_paths(
                 other => out.push(other.as_os_str()),
             }
         }
-        Some(out)
+        out
     }
+
+    fn resolve_effective_write_path(path: &Path) -> Option<PathBuf> {
+        if let Ok(canonical) = dunce::canonicalize(path) {
+            return Some(canonical);
+        }
+
+        let path_is_symlink =
+            std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink());
+        if path_is_symlink {
+            return None;
+        }
+
+        for ancestor in path.ancestors().skip(1) {
+            if std::fs::symlink_metadata(ancestor).is_err() {
+                continue;
+            }
+            let Ok(canonical_ancestor) = dunce::canonicalize(ancestor) else {
+                return None;
+            };
+            let suffix = path.strip_prefix(ancestor).ok()?;
+            return Some(canonical_ancestor.join(suffix));
+        }
+
+        None
+    }
+
+    #[cfg(unix)]
+    fn existing_file_has_multiple_links(path: &Path) -> bool {
+        use std::os::unix::fs::MetadataExt;
+
+        std::fs::metadata(path).is_ok_and(|metadata| {
+            metadata.file_type().is_file() && metadata.nlink() > 1
+        })
+    }
+
+    #[cfg(not(unix))]
+    fn existing_file_has_multiple_links(_path: &Path) -> bool {
+        false
+    }
+
+    let normalized_abs_path = |path: &PathUri| {
+        // TODO(anp): Make sandbox policy path checks accept PathUri without host projection.
+        let Ok(path) = path.to_abs_path() else {
+            return None;
+        };
+        Some(normalize(&path.into_path_buf()))
+    };
 
     // Determine whether `path` is inside **any** writable root. Both `path`
     // and roots are converted to absolute, normalized forms before the
     // prefix check.
     let is_path_writable = |path: &PathUri| {
-        // TODO(anp): Make sandbox policy path checks accept PathUri without host projection.
-        let Ok(path) = path.to_abs_path() else {
+        let Some(abs) = normalized_abs_path(path) else {
             return false;
         };
-        let abs = path.into_path_buf();
-        let abs = match normalize(&abs) {
-            Some(v) => v,
-            None => return false,
+        file_system_sandbox_policy.can_write_path_with_cwd(&abs, &native_cwd)
+    };
+
+    let is_write_target_writable = |path: &PathUri| {
+        let Some(abs) = normalized_abs_path(path) else {
+            return false;
+        };
+        if !file_system_sandbox_policy.can_write_path_with_cwd(&abs, &native_cwd) {
+            return false;
+        }
+
+        let Some(effective_abs) = resolve_effective_write_path(&abs) else {
+            return false;
         };
 
-        file_system_sandbox_policy.can_write_path_with_cwd(&abs, &native_cwd)
+        file_system_sandbox_policy.can_write_path_with_cwd(&effective_abs, &native_cwd)
+            && !existing_file_has_multiple_links(&effective_abs)
     };
 
     for (path, change) in action.changes() {
         match change {
-            ApplyPatchFileChange::Add { .. } | ApplyPatchFileChange::Delete { .. } => {
+            ApplyPatchFileChange::Add { .. } => {
+                if !is_write_target_writable(path) {
+                    return false;
+                }
+            }
+            ApplyPatchFileChange::Delete { .. } => {
                 if !is_path_writable(path) {
                     return false;
                 }
             }
-            ApplyPatchFileChange::Update { move_path, .. } => {
-                if !is_path_writable(path) {
+            ApplyPatchFileChange::Update {
+                move_path: Some(dest),
+                ..
+            } => {
+                if !is_path_writable(path) || !is_write_target_writable(dest) {
                     return false;
                 }
-                if let Some(dest) = move_path
-                    && !is_path_writable(dest)
-                {
+            }
+            ApplyPatchFileChange::Update {
+                move_path: None, ..
+            } => {
+                if !is_write_target_writable(path) {
                     return false;
                 }
             }
