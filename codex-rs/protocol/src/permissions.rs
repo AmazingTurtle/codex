@@ -53,20 +53,24 @@ pub fn forbidden_agent_metadata_write(
         return None;
     }
 
-    let target = resolve_candidate_path(path, cwd)?;
-    let (protected_metadata_path, metadata_name) =
-        metadata_child_of_writable_root(file_system_sandbox_policy, target.as_path(), cwd)?;
-    if has_explicit_write_entry_for_metadata_path(
-        file_system_sandbox_policy,
-        &protected_metadata_path,
-        target.as_path(),
-        cwd,
-    ) {
-        return None;
-    }
+    for target in metadata_write_candidate_paths(path, cwd)? {
+        let Some((protected_metadata_path, metadata_name)) =
+            metadata_child_of_writable_root(file_system_sandbox_policy, target.as_path(), cwd)
+        else {
+            continue;
+        };
+        if has_explicit_write_entry_for_metadata_path(
+            file_system_sandbox_policy,
+            &protected_metadata_path,
+            target.as_path(),
+            cwd,
+        ) {
+            continue;
+        }
 
-    if !file_system_sandbox_policy.can_write_path_with_cwd(target.as_path(), cwd) {
-        return Some(metadata_name);
+        if !file_system_sandbox_policy.can_write_path_with_cwd(target.as_path(), cwd) {
+            return Some(metadata_name);
+        }
     }
 
     None
@@ -895,21 +899,24 @@ impl FileSystemSandboxPolicy {
             return false;
         }
 
-        let Some(target) = resolve_candidate_path(path, cwd) else {
+        let Some(targets) = metadata_write_candidate_paths(path, cwd) else {
             return true;
         };
-        let Some((protected_metadata_path, _)) =
-            metadata_child_of_writable_root(self, target.as_path(), cwd)
-        else {
-            return false;
-        };
 
-        !has_explicit_write_entry_for_metadata_path(
-            self,
-            &protected_metadata_path,
-            target.as_path(),
-            cwd,
-        )
+        targets.into_iter().any(|target| {
+            let Some((protected_metadata_path, _)) =
+                metadata_child_of_writable_root(self, target.as_path(), cwd)
+            else {
+                return false;
+            };
+
+            !has_explicit_write_entry_for_metadata_path(
+                self,
+                &protected_metadata_path,
+                target.as_path(),
+                cwd,
+            )
+        })
     }
 
     /// Replaces symbolic `:workspace_roots` entries with absolute paths resolved
@@ -1532,6 +1539,30 @@ fn resolve_candidate_path(path: &Path, cwd: &Path) -> Option<AbsolutePathBuf> {
     } else {
         Some(AbsolutePathBuf::from_absolute_path(cwd).ok()?.join(path))
     }
+}
+
+fn metadata_write_candidate_paths(path: &Path, cwd: &Path) -> Option<Vec<AbsolutePathBuf>> {
+    let target = resolve_candidate_path(path, cwd)?;
+    let mut candidates = vec![target.clone()];
+    for ancestor in target.as_path().ancestors() {
+        if std::fs::symlink_metadata(ancestor).is_err() {
+            continue;
+        }
+        let Ok(canonical_ancestor) = ancestor.canonicalize() else {
+            continue;
+        };
+        let Ok(suffix) = target.as_path().strip_prefix(ancestor) else {
+            continue;
+        };
+        if let Ok(canonical_path) =
+            AbsolutePathBuf::from_absolute_path(canonical_ancestor.join(suffix))
+            && !candidates.iter().any(|candidate| candidate == &canonical_path)
+        {
+            candidates.push(canonical_path);
+        }
+        break;
+    }
+    Some(candidates)
 }
 
 /// Returns true when two config paths refer to the same exact target before
@@ -2448,6 +2479,35 @@ mod tests {
         assert!(!writable_roots[0].is_path_writable(&dot_git_config));
         assert!(!writable_roots[0].is_path_writable(&dot_agents_config));
         assert!(!writable_roots[0].is_path_writable(&dot_codex_config));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filesystem_policy_blocks_protected_metadata_writes_through_symlink() {
+        let cwd = TempDir::new().expect("tempdir");
+        fs::create_dir_all(cwd.path().join(".git").join("hooks")).expect("create hooks");
+        fs::create_dir_all(cwd.path().join("regular")).expect("create regular dir");
+        symlink_dir(cwd.path().join(".git").as_path(), cwd.path().join("git-alias").as_path())
+            .expect("create git symlink");
+        symlink_dir(
+            cwd.path().join("regular").as_path(),
+            cwd.path().join("regular-alias").as_path(),
+        )
+        .expect("create regular symlink");
+        let root = AbsolutePathBuf::from_absolute_path(cwd.path()).expect("absolute cwd");
+        let file_system_policy =
+            FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
+                path: root.into(),
+                access: FileSystemAccessMode::Write,
+                missing_path_behavior: None,
+            }]);
+
+        assert!(!file_system_policy
+            .can_write_path_with_cwd(&cwd.path().join("git-alias/hooks/pre-commit"), cwd.path()));
+        assert!(file_system_policy.can_write_path_with_cwd(
+            &cwd.path().join("regular-alias/file.txt"),
+            cwd.path()
+        ));
     }
 
     #[test]

@@ -207,6 +207,31 @@ fn read_only_policy_rejects_patch_with_read_only_reason() {
         },
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn patch_write_through_symlink_to_git_metadata_is_not_auto_approved() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    std::fs::create_dir_all(cwd.join(".git").join("hooks")).unwrap();
+    std::os::unix::fs::symlink(cwd.join(".git"), cwd.join("git-alias")).unwrap();
+    let target = cwd.join("git-alias").join("hooks").join("pre-commit");
+    let action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&target), "".to_string());
+    let file_system_sandbox_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &action,
+        &file_system_sandbox_policy,
+        &cwd_uri,
+    ));
+}
+
 #[test]
 fn explicit_unreadable_paths_prevent_auto_approval_for_external_sandbox() {
     let tmp = TempDir::new().unwrap();
