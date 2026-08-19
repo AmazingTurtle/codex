@@ -575,7 +575,7 @@ async fn regular_turn_emits_turn_started_with_trace_id_without_waiting_for_start
 }
 
 #[tokio::test]
-async fn request_mcp_server_elicitation_auto_accepts_when_auto_deny_is_enabled() {
+async fn request_mcp_server_elicitation_declines_when_auto_deny_is_enabled() {
     let (session, turn_context, rx) = make_session_and_context_with_rx().await;
     session
         .services
@@ -601,8 +601,8 @@ async fn request_mcp_server_elicitation_auto_accepts_when_auto_deny_is_enabled()
     assert_eq!(
         response.response,
         Some(ElicitationResponse {
-            action: ElicitationAction::Accept,
-            content: Some(json!({})),
+            action: ElicitationAction::Decline,
+            content: None,
             meta: None,
         })
     );

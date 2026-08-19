@@ -509,8 +509,8 @@ impl Session {
         if self.services.mcp_runtime.elicitations_auto_deny() {
             return McpServerElicitationOutcome {
                 response: Some(ElicitationResponse {
-                    action: codex_rmcp_client::ElicitationAction::Accept,
-                    content: Some(serde_json::json!({})),
+                    action: codex_rmcp_client::ElicitationAction::Decline,
+                    content: None,
                     meta: None,
                 }),
                 sent: false,
