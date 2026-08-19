@@ -124,12 +124,7 @@ pub(crate) fn is_non_public_target(host: &Host) -> bool {
 fn target_matches_non_public_addr(host: &Host, addr: std::net::IpAddr) -> bool {
     match host {
         Host::Address(ip) => *ip == addr,
-        Host::Name(name) => {
-            name.as_str()
-                .trim_end_matches('.')
-                .eq_ignore_ascii_case("localhost")
-                && addr.is_loopback()
-        }
+        Host::Name(_) => true,
     }
 }
 
@@ -227,10 +222,63 @@ mod tests {
     }
 
     #[test]
-    fn resolved_private_address_does_not_match_allowlisted_hostname() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn direct_connector_allows_allowlisted_hostname_resolved_to_non_public_target() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind local listener");
+        let address = listener.local_addr().expect("local addr");
+        let mut config = NetworkProxyConfig::default();
+        config.set_allowed_domains(vec!["p4.enterprise.invalid".to_string()]);
+        let connector = TargetCheckedStreamConnector {
+            state: Arc::new(network_proxy_state_for_policy(config)),
+            target: HostWithPort::new(
+                Host::Name("p4.enterprise.invalid".parse().expect("fixture domain")),
+                address.port(),
+            ),
+        };
+
+        let result = connector.connect(address).await;
+
+        assert!(
+            result.is_ok(),
+            "allowlisted enterprise hostname should be allowed to reach its resolved non-public target: {result:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn direct_connector_rejects_denied_hostname_resolved_to_non_public_target() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind local listener");
+        let address = listener.local_addr().expect("local addr");
+        let mut config = NetworkProxyConfig::default();
+        config.set_allowed_domains(vec!["p4.enterprise.invalid".to_string()]);
+        config.set_denied_domains(vec!["p4.enterprise.invalid".to_string()]);
+        let connector = TargetCheckedStreamConnector {
+            state: Arc::new(network_proxy_state_for_policy(config)),
+            target: HostWithPort::new(
+                Host::Name("p4.enterprise.invalid".parse().expect("fixture domain")),
+                address.port(),
+            ),
+        };
+
+        let err = connector
+            .connect(address)
+            .await
+            .expect_err("denied hostname should be rejected");
+
+        assert!(
+            format!("{err:?}").contains("network target rejected by policy"),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[test]
+    fn resolved_private_address_matches_hostname_for_policy_evaluation() {
         let host = Host::Name("example.com".parse().expect("valid domain"));
 
-        assert!(!target_matches_non_public_addr(
+        assert!(target_matches_non_public_addr(
             &host,
             Ipv4Addr::LOCALHOST.into()
         ));

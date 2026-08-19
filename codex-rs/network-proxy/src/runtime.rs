@@ -49,6 +49,12 @@ const MAX_BLOCKED_EVENTS: usize = 200;
 const DNS_LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
 const NETWORK_POLICY_VIOLATION_PREFIX: &str = "CODEX_NETWORK_POLICY_VIOLATION";
 
+#[derive(Clone, Copy)]
+enum NonPublicResolutionPolicy {
+    Block,
+    Allow,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkProxyAuditMetadata {
@@ -579,10 +585,15 @@ impl NetworkProxyState {
                 if !is_explicit_local_allowlisted(&allowed_domains, &host) {
                     return Ok(HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal));
                 }
-            } else if host_resolves_to_non_public_ip(
+            } else if host_resolution_rejected_by_local_policy(
                 host_str,
                 port,
                 DNS_LOOKUP_TIMEOUT,
+                if is_allowlisted {
+                    NonPublicResolutionPolicy::Allow
+                } else {
+                    NonPublicResolutionPolicy::Block
+                },
                 |host, port| async move {
                     lookup_host((host.as_str(), port))
                         .await
@@ -931,10 +942,11 @@ pub(crate) fn unix_socket_permissions_supported() -> bool {
     cfg!(target_os = "macos")
 }
 
-async fn host_resolves_to_non_public_ip<F, Fut>(
+async fn host_resolution_rejected_by_local_policy<F, Fut>(
     host: &str,
     port: u16,
     lookup_timeout: Duration,
+    non_public_resolution_policy: NonPublicResolutionPolicy,
     lookup: F,
 ) -> bool
 where
@@ -964,7 +976,9 @@ where
     };
 
     for addr in addrs {
-        if is_non_public_ip(addr.ip()) {
+        if matches!(non_public_resolution_policy, NonPublicResolutionPolicy::Block)
+            && is_non_public_ip(addr.ip())
+        {
             return true;
         }
     }
@@ -1683,11 +1697,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn host_resolves_to_non_public_ip_blocks_on_dns_lookup_timeout() {
-        let blocked = host_resolves_to_non_public_ip(
+    async fn host_resolution_rejected_by_local_policy_blocks_on_dns_lookup_timeout() {
+        let blocked = host_resolution_rejected_by_local_policy(
             "slow.example",
             /*port*/ 80,
             Duration::from_millis(1),
+            NonPublicResolutionPolicy::Allow,
             |_host, _port| async {
                 std::future::pending::<std::io::Result<Vec<SocketAddr>>>().await
             },
@@ -1698,11 +1713,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn host_resolves_to_non_public_ip_blocks_on_dns_lookup_error() {
-        let blocked = host_resolves_to_non_public_ip(
+    async fn host_resolution_rejected_by_local_policy_blocks_on_dns_lookup_error() {
+        let blocked = host_resolution_rejected_by_local_policy(
             "error.example",
             /*port*/ 80,
             Duration::from_millis(10),
+            NonPublicResolutionPolicy::Allow,
             |_host, _port| async {
                 Err::<Vec<SocketAddr>, std::io::Error>(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
@@ -1716,11 +1732,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn host_resolves_to_non_public_ip_blocks_private_resolution() {
-        let blocked = host_resolves_to_non_public_ip(
+    async fn host_resolution_rejected_by_local_policy_blocks_private_resolution() {
+        let blocked = host_resolution_rejected_by_local_policy(
             "local.example",
             /*port*/ 80,
             Duration::from_millis(10),
+            NonPublicResolutionPolicy::Block,
             |_host, _port| async { Ok(vec!["127.0.0.1:80".parse().unwrap()]) },
         )
         .await;
@@ -1729,11 +1746,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn host_resolves_to_non_public_ip_allows_public_resolution() {
-        let blocked = host_resolves_to_non_public_ip(
+    async fn host_resolution_rejected_by_local_policy_allows_allowlisted_private_resolution() {
+        let blocked = host_resolution_rejected_by_local_policy(
+            "local.example",
+            /*port*/ 80,
+            Duration::from_millis(10),
+            NonPublicResolutionPolicy::Allow,
+            |_host, _port| async { Ok(vec!["127.0.0.1:80".parse().unwrap()]) },
+        )
+        .await;
+
+        assert!(!blocked);
+    }
+
+    #[tokio::test]
+    async fn host_resolution_rejected_by_local_policy_allows_public_resolution() {
+        let blocked = host_resolution_rejected_by_local_policy(
             "public.example",
             /*port*/ 80,
             Duration::from_millis(10),
+            NonPublicResolutionPolicy::Block,
             |_host, _port| async { Ok(vec!["8.8.8.8:80".parse().unwrap()]) },
         )
         .await;
