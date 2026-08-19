@@ -56,6 +56,10 @@ fn parse_with_cached_process(
     executable: &str,
     script: &str,
 ) -> PowershellParseOutcome {
+    if script_contains_parse_time_construct(script) {
+        return PowershellParseOutcome::Unsupported;
+    }
+
     // `powershell.exe` and `pwsh.exe` do not accept the same language surface, so each
     // executable keeps its own parser process and request stream.
     let parser_key = executable.to_string();
@@ -100,6 +104,133 @@ fn encoded_parser_script() -> &'static str {
     static ENCODED: LazyLock<String> =
         LazyLock::new(|| encode_powershell_base64(POWERSHELL_PARSER_SCRIPT));
     &ENCODED
+}
+
+fn script_contains_parse_time_construct(script: &str) -> bool {
+    let mut index = 0;
+    while index < script.len() {
+        let Some(ch) = script[index..].chars().next() else {
+            break;
+        };
+        let next = index + ch.len_utf8();
+
+        if script[index..].starts_with("<#") {
+            let Some(end) = script[next..].find("#>") else {
+                return false;
+            };
+            index = next + end + "#>".len();
+            continue;
+        }
+
+        match ch {
+            '\'' => {
+                index = skip_single_quoted_string(script, next);
+            }
+            '"' => {
+                index = skip_double_quoted_string(script, next);
+            }
+            '#' => {
+                if is_line_directive_start(script, index)
+                    && script[index..]
+                        .to_ascii_lowercase()
+                        .starts_with("#requires")
+                {
+                    return true;
+                }
+                index = skip_line_comment(script, next);
+            }
+            _ if is_powershell_word_character(ch) || ch == '`' => {
+                let (word, word_end) = read_powershell_word(script, index);
+                if matches!(word.as_str(), "configuration" | "using") {
+                    return true;
+                }
+                index = word_end;
+            }
+            _ => {
+                index = next;
+            }
+        }
+    }
+
+    false
+}
+
+fn skip_single_quoted_string(script: &str, mut index: usize) -> usize {
+    while index < script.len() {
+        let Some(ch) = script[index..].chars().next() else {
+            break;
+        };
+        index += ch.len_utf8();
+        if ch == '\'' {
+            if script[index..].starts_with('\'') {
+                index += '\''.len_utf8();
+                continue;
+            }
+            break;
+        }
+    }
+    index
+}
+
+fn skip_double_quoted_string(script: &str, mut index: usize) -> usize {
+    while index < script.len() {
+        let Some(ch) = script[index..].chars().next() else {
+            break;
+        };
+        index += ch.len_utf8();
+        match ch {
+            '`' => {
+                if let Some(escaped) = script[index..].chars().next() {
+                    index += escaped.len_utf8();
+                }
+            }
+            '"' => break,
+            _ => {}
+        }
+    }
+    index
+}
+
+fn skip_line_comment(script: &str, index: usize) -> usize {
+    script[index..]
+        .find(['\r', '\n'])
+        .map_or(script.len(), |offset| index + offset)
+}
+
+fn is_line_directive_start(script: &str, index: usize) -> bool {
+    script[..index]
+        .chars()
+        .rev()
+        .take_while(|ch| *ch != '\r' && *ch != '\n')
+        .all(char::is_whitespace)
+}
+
+fn read_powershell_word(script: &str, mut index: usize) -> (String, usize) {
+    let mut word = String::new();
+    while index < script.len() {
+        let Some(ch) = script[index..].chars().next() else {
+            break;
+        };
+        if ch == '`' {
+            index += ch.len_utf8();
+            let Some(escaped) = script[index..].chars().next() else {
+                break;
+            };
+            word.push(escaped.to_ascii_lowercase());
+            index += escaped.len_utf8();
+            continue;
+        }
+        if !is_powershell_word_character(ch) {
+            break;
+        }
+        word.push(ch.to_ascii_lowercase());
+        index += ch.len_utf8();
+    }
+    (word, index)
+}
+
+fn is_powershell_word_character(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-')
 }
 
 struct PowershellParserProcess {
@@ -371,3 +502,7 @@ mod tests {
         assert_eq!(parsed, PowershellParseOutcome::Unsupported);
     }
 }
+
+#[cfg(test)]
+#[path = "powershell_parser_tests.rs"]
+mod parse_time_construct_tests;
