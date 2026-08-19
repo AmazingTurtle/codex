@@ -5,6 +5,60 @@ use pretty_assertions::assert_eq;
 
 use super::*;
 
+#[test]
+fn default_policy_filters_credential_like_names() {
+    let vars = [
+        ("SVS_FIXTURE_API_KEY".to_string(), "synthetic-key".to_string()),
+        (
+            "SVS_FIXTURE_SECRET".to_string(),
+            "synthetic-secret".to_string(),
+        ),
+        (
+            "SVS_FIXTURE_TOKEN".to_string(),
+            "synthetic-token".to_string(),
+        ),
+        ("SVS_SAFE_VALUE".to_string(), "safe".to_string()),
+    ];
+
+    assert_eq!(
+        create_env_from_vars(vars, &ShellEnvironmentPolicy::default(), /*thread_id*/ None),
+        HashMap::from([("SVS_SAFE_VALUE".to_string(), "safe".to_string())])
+    );
+}
+
+#[test]
+fn explicit_ignore_default_excludes_keeps_credential_like_names() {
+    let vars = [
+        ("SVS_FIXTURE_API_KEY".to_string(), "synthetic-key".to_string()),
+        (
+            "SVS_FIXTURE_SECRET".to_string(),
+            "synthetic-secret".to_string(),
+        ),
+        (
+            "SVS_FIXTURE_TOKEN".to_string(),
+            "synthetic-token".to_string(),
+        ),
+        ("SVS_SAFE_VALUE".to_string(), "safe".to_string()),
+    ];
+    let policy = ShellEnvironmentPolicy {
+        ignore_default_excludes: true,
+        ..Default::default()
+    };
+
+    assert_eq!(
+        create_env_from_vars(vars, &policy, /*thread_id*/ None),
+        HashMap::from([
+            ("SVS_FIXTURE_API_KEY".to_string(), "synthetic-key".to_string()),
+            (
+                "SVS_FIXTURE_SECRET".to_string(),
+                "synthetic-secret".to_string(),
+            ),
+            ("SVS_FIXTURE_TOKEN".to_string(), "synthetic-token".to_string()),
+            ("SVS_SAFE_VALUE".to_string(), "safe".to_string()),
+        ])
+    );
+}
+
 const CHILD_MODE_ENV_VAR: &str = "CODEX_SHELL_ENVIRONMENT_SCRUBBER_TEST_MODE";
 const TEST_NAME: &str =
     "shell_environment::tests::command_scrubber_removes_names_from_real_child_environment";

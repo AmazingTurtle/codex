@@ -1,4 +1,5 @@
 use super::*;
+use codex_protocol::shell_environment::create_env_from_vars;
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -50,6 +51,29 @@ include_only = ["PATH", "HOME"]
             include_only: Some(vec!["FLIP_TO_INCLUDE".to_string()]),
             ..Default::default()
         })
+    );
+}
+
+#[test]
+fn shell_environment_policy_toml_default_filters_credential_like_names() {
+    let toml = toml::from_str::<ShellEnvironmentPolicyToml>("")
+        .expect("empty shell environment policy should deserialize");
+    let vars = [
+        ("SVS_FIXTURE_API_KEY".to_string(), "synthetic-key".to_string()),
+        (
+            "SVS_FIXTURE_SECRET".to_string(),
+            "synthetic-secret".to_string(),
+        ),
+        (
+            "SVS_FIXTURE_TOKEN".to_string(),
+            "synthetic-token".to_string(),
+        ),
+        ("SVS_SAFE_VALUE".to_string(), "safe".to_string()),
+    ];
+
+    assert_eq!(
+        create_env_from_vars(vars, &ShellEnvironmentPolicy::from(toml), /*thread_id*/ None),
+        HashMap::from([("SVS_SAFE_VALUE".to_string(), "safe".to_string())])
     );
 }
 

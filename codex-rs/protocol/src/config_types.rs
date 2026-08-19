@@ -224,7 +224,7 @@ pub struct ShellEnvironmentPolicy {
     pub inherit: ShellEnvironmentPolicyInherit,
 
     /// True to skip the check to exclude default environment variables that
-    /// contain "KEY", "SECRET", or "TOKEN" in their name. Defaults to true.
+    /// contain "KEY", "SECRET", or "TOKEN" in their name. Defaults to false.
     pub ignore_default_excludes: bool,
 
     /// Environment variable names to exclude from the environment.
@@ -244,7 +244,7 @@ impl Default for ShellEnvironmentPolicy {
     fn default() -> Self {
         Self {
             inherit: ShellEnvironmentPolicyInherit::All,
-            ignore_default_excludes: true,
+            ignore_default_excludes: false,
             exclude: Vec::new(),
             r#set: HashMap::new(),
             include_only: Vec::new(),

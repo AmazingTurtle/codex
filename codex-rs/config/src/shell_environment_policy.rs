@@ -133,7 +133,7 @@ impl<'de> Deserialize<'de> for ShellEnvironmentPolicyToml {
 impl From<ShellEnvironmentPolicyToml> for ShellEnvironmentPolicy {
     fn from(toml: ShellEnvironmentPolicyToml) -> Self {
         let inherit = toml.inherit.unwrap_or(ShellEnvironmentPolicyInherit::All);
-        let ignore_default_excludes = toml.ignore_default_excludes.unwrap_or(true);
+        let ignore_default_excludes = toml.ignore_default_excludes.unwrap_or(false);
         let (exclude, include_only) = match toml.filters {
             Some(filters) => filters.into_iter().fold(
                 (Vec::new(), Vec::new()),
