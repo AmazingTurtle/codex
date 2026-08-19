@@ -71,6 +71,7 @@ fn is_git_global_option_with_value(arg: &str) -> bool {
     matches!(
         arg,
         "-C" | "-c"
+            | "--attr-source"
             | "--config-env"
             | "--exec-path"
             | "--git-dir"
@@ -84,6 +85,7 @@ fn is_git_global_option_with_inline_value(arg: &str) -> bool {
     matches!(
         arg,
         s if s.starts_with("--config-env=")
+            || s.starts_with("--attr-source=")
             || s.starts_with("--exec-path=")
             || s.starts_with("--git-dir=")
             || s.starts_with("--namespace=")

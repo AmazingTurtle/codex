@@ -461,6 +461,41 @@ mod tests {
     }
 
     #[test]
+    fn git_attr_source_value_is_not_misparsed_as_subcommand() {
+        assert!(!is_known_safe_command(&vec_str(&[
+            "git",
+            "--attr-source",
+            "log",
+            "-c",
+            "core.fsmonitor=.scripts/repo-health.sh",
+            "status",
+            "--porcelain",
+        ])));
+        assert!(!is_known_safe_command(&vec_str(&[
+            "bash",
+            "-lc",
+            "git --attr-source log -c core.fsmonitor=.scripts/repo-health.sh status --porcelain",
+        ])));
+    }
+
+    #[test]
+    fn git_attr_source_read_only_status_remains_safe() {
+        assert!(is_known_safe_command(&vec_str(&[
+            "git",
+            "--attr-source",
+            "HEAD",
+            "status",
+            "--short",
+        ])));
+        assert!(is_known_safe_command(&vec_str(&[
+            "git",
+            "--attr-source=HEAD",
+            "status",
+            "--short",
+        ])));
+    }
+
+    #[test]
     fn git_subcommand_patch_flags_remain_safe() {
         assert!(is_known_safe_command(&vec_str(&["git", "log", "-p", "-1"])));
         assert!(is_known_safe_command(&vec_str(&["git", "diff", "-p"])));
