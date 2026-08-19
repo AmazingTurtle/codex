@@ -3978,6 +3978,7 @@ dependencies = [
 name = "codex-model-provider"
 version = "0.154.0"
 dependencies = [
+ "base64 0.22.1",
  "codex-agent-identity",
  "codex-api",
  "codex-aws-auth",

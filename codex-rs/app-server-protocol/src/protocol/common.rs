@@ -1269,10 +1269,34 @@ client_request_definitions! {
         response: v2::LogoutAccountResponse,
     },
 
+    AccountList => "account/list" {
+        params: v2::AccountListParams,
+        serialization: global("account-auth"),
+        response: v2::AccountListResponse,
+    },
+
+    AccountSwitch => "account/switch" {
+        params: v2::AccountSwitchParams,
+        serialization: global("account-auth"),
+        response: v2::AccountSwitchResponse,
+    },
+
+    AccountRemove => "account/remove" {
+        params: v2::AccountRemoveParams,
+        serialization: global("account-auth"),
+        response: v2::AccountRemoveResponse,
+    },
+
     GetAccountRateLimits => "account/rateLimits/read" {
         params: #[ts(optional, as = "Option<GetAccountRateLimitsParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGetAccountRateLimitsParams,
         serialization: None,
         response: v2::GetAccountRateLimitsResponse,
+    },
+
+    AccountRateLimitsReadMany => "account/rateLimits/readMany" {
+        params: v2::AccountRateLimitsReadManyParams,
+        serialization: global_shared_read("account-auth"),
+        response: v2::AccountRateLimitsReadManyResponse,
     },
 
     ConsumeAccountRateLimitResetCredit => "account/rateLimitResetCredit/consume" {
@@ -1285,6 +1309,18 @@ client_request_definitions! {
         params: #[ts(optional, as = "Option<GetAccountTokenUsageParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGetAccountTokenUsageParams,
         serialization: None,
         response: v2::GetAccountTokenUsageResponse,
+    },
+
+    AccountUsageReadMany => "account/usage/readMany" {
+        params: v2::AccountReadManyParams,
+        serialization: global_shared_read("account-auth"),
+        response: v2::AccountUsageReadManyResponse,
+    },
+
+    AccountModelsReadMany => "account/models/readMany" {
+        params: v2::AccountReadManyParams,
+        serialization: global_shared_read("account-auth"),
+        response: v2::AccountModelsReadManyResponse,
     },
 
     GetWorkspaceMessages => "account/workspaceMessages/read" {

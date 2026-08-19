@@ -24,7 +24,7 @@ pub async fn supported_models(
         .collect()
 }
 
-fn model_from_preset(preset: ModelPreset) -> Model {
+pub(crate) fn model_from_preset(preset: ModelPreset) -> Model {
     Model {
         id: preset.id.to_string(),
         model: preset.model.to_string(),

@@ -51,11 +51,19 @@ impl TokenActivityView {
         }
     }
 
-    pub(super) fn label(self) -> &'static str {
+    pub(in crate::chatwidget) fn label(self) -> &'static str {
         match self {
             Self::Daily => "Daily",
             Self::Weekly => "Weekly",
             Self::Cumulative => "Cumulative",
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Cumulative => "cumulative",
         }
     }
 }

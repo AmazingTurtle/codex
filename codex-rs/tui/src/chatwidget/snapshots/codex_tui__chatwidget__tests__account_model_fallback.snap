@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/accounts.rs
+expression: "render_bottom_popup(&chat, 100)"
+---
+  gpt-5.5 is unavailable for free@example.com
+  Choose a model to switch the account and remember the replacement.
+
+  Search compatible models
+› GPT-5.4 Mini   GPT-5.4 Mini description
+  GPT-5.3 Codex  GPT-5.3 Codex description
+
+  Press enter to confirm or esc to go back

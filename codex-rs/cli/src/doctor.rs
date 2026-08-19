@@ -3437,6 +3437,7 @@ mod tests {
             personal_access_token: None,
             bedrock_api_key: None,
             bedrock_access_keys: None,
+            accounts: Vec::new(),
         };
 
         assert_eq!(
@@ -3457,6 +3458,7 @@ mod tests {
             personal_access_token: None,
             bedrock_api_key: None,
             bedrock_access_keys: None,
+            accounts: Vec::new(),
         };
 
         assert_eq!(
@@ -3479,6 +3481,7 @@ mod tests {
             personal_access_token: Some("at-test".to_string()),
             bedrock_api_key: None,
             bedrock_access_keys: None,
+            accounts: Vec::new(),
         };
 
         assert_eq!(stored_auth_mode(&auth), "personal_access_token");
@@ -3503,6 +3506,7 @@ mod tests {
             personal_access_token: None,
             bedrock_api_key: None,
             bedrock_access_keys: None,
+            accounts: Vec::new(),
         };
 
         assert_eq!(

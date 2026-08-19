@@ -2105,6 +2105,78 @@
             },
             "method": {
               "enum": [
+                "account/list"
+              ],
+              "title": "Account/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AccountListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Account/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "account/switch"
+              ],
+              "title": "Account/switchRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AccountSwitchParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Account/switchRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "account/remove"
+              ],
+              "title": "Account/removeRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AccountRemoveParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Account/removeRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "account/rateLimits/read"
               ],
               "title": "Account/rateLimits/readRequestMethod",
@@ -2126,6 +2198,30 @@
             "method"
           ],
           "title": "Account/rateLimits/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "account/rateLimits/readMany"
+              ],
+              "title": "Account/rateLimits/readManyRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AccountRateLimitsReadManyParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Account/rateLimits/readManyRequest",
           "type": "object"
         },
         {
@@ -2180,6 +2276,54 @@
             "method"
           ],
           "title": "Account/usage/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "account/usage/readMany"
+              ],
+              "title": "Account/usage/readManyRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AccountReadManyParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Account/usage/readManyRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "account/models/readMany"
+              ],
+              "title": "Account/models/readManyRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AccountReadManyParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Account/models/readManyRequest",
           "type": "object"
         },
         {
@@ -6588,6 +6732,49 @@
           }
         ]
       },
+      "AccountListParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "title": "AccountListParams",
+        "type": "object"
+      },
+      "AccountListResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/ChatgptAccountSummary"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "AccountListResponse",
+        "type": "object"
+      },
       "AccountLoginCompletedNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -6623,6 +6810,154 @@
         "title": "AccountLoginCompletedNotification",
         "type": "object"
       },
+      "AccountModelsReadManyResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/AccountModelsReadResult"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "AccountModelsReadManyResponse",
+        "type": "object"
+      },
+      "AccountModelsReadResult": {
+        "properties": {
+          "account": {
+            "$ref": "#/definitions/v2/ChatgptAccountSummary"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "models": {
+            "items": {
+              "$ref": "#/definitions/v2/Model"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "account"
+        ],
+        "type": "object"
+      },
+      "AccountRateLimitsReadManyParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Parameters for reading rate limits across persisted ChatGPT accounts.",
+        "properties": {
+          "accountIds": {
+            "description": "Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "excludeResetCreditDetails": {
+            "description": "Skip reset-credit details for lightweight background polling.",
+            "type": "boolean"
+          },
+          "supportsLunaReserve": {
+            "description": "Whether the requesting client supports automatic Luna Reserve fallback.",
+            "type": "boolean"
+          }
+        },
+        "title": "AccountRateLimitsReadManyParams",
+        "type": "object"
+      },
+      "AccountRateLimitsReadManyResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/AccountRateLimitsReadResult"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "AccountRateLimitsReadManyResponse",
+        "type": "object"
+      },
+      "AccountRateLimitsReadResult": {
+        "properties": {
+          "account": {
+            "$ref": "#/definitions/v2/ChatgptAccountSummary"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rateLimits": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/AccountRateLimitsSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "account"
+        ],
+        "type": "object"
+      },
+      "AccountRateLimitsSnapshot": {
+        "properties": {
+          "ordinaryUsageAllowed": {
+            "description": "Backend permission for ordinary included usage, validated against this account. Null means unavailable; clients must not infer recovery from percentages or reset times.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rateLimitResetCredits": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/RateLimitResetCreditsSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rateLimits": {
+            "$ref": "#/definitions/v2/RateLimitSnapshot"
+          },
+          "rateLimitsByLimitId": {
+            "additionalProperties": {
+              "$ref": "#/definitions/v2/RateLimitSnapshot"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "rateLimits"
+        ],
+        "type": "object"
+      },
       "AccountRateLimitsUpdatedNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "description": "Sparse rolling rate-limit update.\n\nClients should merge available values into the most recent `account/rateLimits/read` response or refetch that snapshot. Nullable account metadata may be unavailable in a rolling update and does not clear a previously observed value.",
@@ -6635,6 +6970,75 @@
           "rateLimits"
         ],
         "title": "AccountRateLimitsUpdatedNotification",
+        "type": "object"
+      },
+      "AccountReadManyParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "accountIds": {
+            "description": "Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "title": "AccountReadManyParams",
+        "type": "object"
+      },
+      "AccountRemoveParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId"
+        ],
+        "title": "AccountRemoveParams",
+        "type": "object"
+      },
+      "AccountRemoveResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "activeAccountId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "title": "AccountRemoveResponse",
+        "type": "object"
+      },
+      "AccountSwitchParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId"
+        ],
+        "title": "AccountSwitchParams",
+        "type": "object"
+      },
+      "AccountSwitchResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "account": {
+            "$ref": "#/definitions/v2/ChatgptAccountSummary"
+          }
+        },
+        "required": [
+          "account"
+        ],
+        "title": "AccountSwitchResponse",
         "type": "object"
       },
       "AccountTokenUsageDailyBucket": {
@@ -6650,6 +7054,26 @@
         "required": [
           "startDate",
           "tokens"
+        ],
+        "type": "object"
+      },
+      "AccountTokenUsageSnapshot": {
+        "properties": {
+          "dailyUsageBuckets": {
+            "items": {
+              "$ref": "#/definitions/v2/AccountTokenUsageDailyBucket"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "summary": {
+            "$ref": "#/definitions/v2/AccountTokenUsageSummary"
+          }
+        },
+        "required": [
+          "summary"
         ],
         "type": "object"
       },
@@ -6718,6 +7142,49 @@
           }
         },
         "title": "AccountUpdatedNotification",
+        "type": "object"
+      },
+      "AccountUsageReadManyResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/AccountUsageReadResult"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "AccountUsageReadManyResponse",
+        "type": "object"
+      },
+      "AccountUsageReadResult": {
+        "properties": {
+          "account": {
+            "$ref": "#/definitions/v2/ChatgptAccountSummary"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/AccountTokenUsageSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "account"
+        ],
         "type": "object"
       },
       "ActivePermissionProfile": {
@@ -8214,6 +8681,35 @@
             "type": "object"
           }
         ]
+      },
+      "ChatgptAccountSummary": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isEligible": {
+            "type": "boolean"
+          },
+          "planType": {
+            "$ref": "#/definitions/v2/PlanType"
+          }
+        },
+        "required": [
+          "accountId",
+          "isActive",
+          "isEligible",
+          "planType"
+        ],
+        "type": "object"
       },
       "CliAuthCredentialsStoreMode": {
         "enum": [
@@ -10316,6 +10812,13 @@
       "ConsumeAccountRateLimitResetCreditParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
+          "accountId": {
+            "description": "Stored ChatGPT account to redeem for. When omitted, uses the active account.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "creditId": {
             "description": "Opaque reset-credit identifier to redeem. When omitted, the backend selects the next available credit.",
             "type": [

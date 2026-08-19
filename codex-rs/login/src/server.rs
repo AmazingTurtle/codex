@@ -916,6 +916,7 @@ pub(crate) async fn persist_tokens_async(
             personal_access_token: None,
             bedrock_api_key: None,
             bedrock_access_keys: None,
+            accounts: Vec::new(),
         };
         save_auth(
             &codex_home,

@@ -7,6 +7,7 @@ use crate::AppServerTarget;
 use crate::app_backtrack::BacktrackState;
 use crate::app_command::AppCommand;
 use crate::app_event::AppEvent;
+use crate::app_event::ChatgptAccountStatusRequest;
 use crate::app_event::ExitMode;
 use crate::app_event::FeedbackCategory;
 use crate::app_event::HistoryLookupResponse;
@@ -255,6 +256,7 @@ mod thread_session_state;
 mod thread_settings;
 mod thread_title;
 mod transcript_export;
+mod usage_picker;
 mod working_directory;
 
 use self::agent_navigation::AgentNavigationDirection;
