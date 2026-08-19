@@ -4,6 +4,6 @@ codex_rust_crate(
     name = "rmcp-client",
     crate_name = "codex_rmcp_client",
     extra_binaries = [
-        "//codex-rs/cli:codex",
+        "//codex-rs/cli:better-codex",
     ],
 )

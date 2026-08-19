@@ -197,8 +197,8 @@ impl PtyCodex {
         let stdin = slave.try_clone().context("clone pseudo-terminal stdin")?;
         let stdout = slave.try_clone().context("clone pseudo-terminal stdout")?;
 
-        let codex = codex_utils_cargo_bin::cargo_bin("codex-tui")
-            .or_else(|_| codex_utils_cargo_bin::cargo_bin("codex"))?;
+        let codex = codex_utils_cargo_bin::cargo_bin("better-codex")
+            .or_else(|_| codex_utils_cargo_bin::cargo_bin("codex-tui"))?;
         let child = Command::new(codex)
             .args(extra_args)
             .arg("--no-alt-screen")
@@ -206,7 +206,7 @@ impl PtyCodex {
             .arg(repo_root)
             .env("TERM", "xterm-256color")
             .env("OPENAI_API_KEY", "focus-palette-test")
-            .env("CODEX_HOME", codex_home.path())
+            .env("BETTER_CODEX_HOME", codex_home.path())
             .stdin(stdin)
             .stdout(stdout)
             .stderr(slave)
@@ -233,7 +233,7 @@ impl PtyCodex {
             self.read_output(Duration::from_millis(/*millis*/ 50))?;
             self.answer_startup_queries()?;
 
-            if self.palette_answered && self.screen_contains("OpenAI Codex") {
+            if self.palette_answered && self.screen_contains(codex_product_info::DISPLAY_NAME) {
                 return Ok(());
             }
 

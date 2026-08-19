@@ -48,7 +48,7 @@ fn startup_delays_composer_for_homes_without_authentication_state() -> std::io::
         &codex_home,
         Ok(system_config_path.clone()),
         || Ok(false),
-        |name| (name == "CODEX_HOME").then(|| "/custom/home".into()),
+        |name| (name == "BETTER_CODEX_HOME").then(|| "/custom/home".into()),
     ));
     assert!(!should_delay_startup_composer_for_first_login(
         &codex_home,
@@ -86,14 +86,14 @@ fn startup_delays_composer_for_homes_without_authentication_state() -> std::io::
         &codex_home,
         Ok(system_config_path.clone()),
         || Ok(false),
-        |name| (name == "CODEX_HOME").then(|| "/custom/home".into()),
+        |name| (name == "BETTER_CODEX_HOME").then(|| "/custom/home".into()),
     ));
     assert!(!should_delay_startup_composer_for_first_login(
         &codex_home,
         Ok(system_config_path.clone()),
         || panic!("process credentials should not probe managed configuration"),
         |name| match name {
-            "CODEX_HOME" => Some("/custom/home".into()),
+            "BETTER_CODEX_HOME" => Some("/custom/home".into()),
             codex_login::CODEX_ACCESS_TOKEN_ENV_VAR => Some("access-token".into()),
             _ => None,
         },

@@ -366,7 +366,7 @@ impl App {
                         ),
                         (
                             "Exit",
-                            "Stop the current task and exit Codex",
+                            "Stop the current task and exit Better Codex",
                             RunningTaskExitAction::Exit,
                         ),
                     ]

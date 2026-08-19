@@ -1,0 +1,12 @@
+---
+source: cli/src/main.rs
+expression: "errors.join(\"\\n\")"
+---
+better-codex --worktree login: `--worktree` supports new interactive sessions, `better-codex fork`, `better-codex exec`, and `better-codex exec fork`
+better-codex fork --worktree: `better-codex fork --worktree` requires an explicit session ID
+better-codex fork --worktree --last: `better-codex fork --worktree` requires an explicit session ID
+better-codex exec resume --worktree session: `--worktree` cannot resume an existing session; use `better-codex exec fork --worktree`
+better-codex exec review --worktree: `--worktree` is not supported for code review
+better-codex resume --worktree session: `--worktree` supports new interactive sessions, `better-codex fork`, `better-codex exec`, and `better-codex exec fork`
+better-codex archive session --worktree: `--worktree` supports new interactive sessions, `better-codex fork`, `better-codex exec`, and `better-codex exec fork`
+better-codex queue --thread session --message hi --worktree: `--worktree` supports new interactive sessions, `better-codex fork`, `better-codex exec`, and `better-codex exec fork`

@@ -176,6 +176,7 @@ mod multi_agents;
 mod named_session_lookup;
 mod notifications;
 #[cfg(any(not(debug_assertions), test))]
+#[cfg(debug_assertions)]
 mod npm_registry;
 pub(crate) mod onboarding;
 mod oss_selection;
@@ -394,7 +395,7 @@ fn websocket_url_supports_auth_token(parsed: &Url) -> bool {
 pub fn resolve_remote_addr(addr: &str) -> color_eyre::Result<RemoteAppServerEndpoint> {
     if let Some(socket_path) = addr.strip_prefix("unix://") {
         let socket_path = if socket_path.is_empty() {
-            let codex_home = find_codex_home().wrap_err("failed to resolve CODEX_HOME")?;
+            let codex_home = find_codex_home().wrap_err("failed to resolve BETTER_CODEX_HOME")?;
             codex_app_server_client::app_server_control_socket_path(&codex_home)
                 .map_err(color_eyre::Report::new)?
         } else {
@@ -1347,7 +1348,7 @@ async fn run_ratatui_app(
                 disconnect_info: None,
                 update_action: None,
                 exit_reason: ExitReason::Fatal(format!(
-                    "No saved session found with ID {id_str}. Run `codex {action}` without an ID to choose from existing sessions."
+                    "No saved session found with ID {id_str}. Run `better-codex {action}` without an ID to choose from existing sessions."
                 )),
             })
         };
@@ -2710,7 +2711,7 @@ requires_openai_auth = {requires_openai_auth}
 
     #[test]
     fn resolve_remote_addr_accepts_default_socket() -> color_eyre::Result<()> {
-        let codex_home = find_codex_home().wrap_err("failed to resolve CODEX_HOME")?;
+        let codex_home = find_codex_home().wrap_err("failed to resolve BETTER_CODEX_HOME")?;
         assert_eq!(
             resolve_remote_addr("unix://")?,
             RemoteAppServerEndpoint::UnixSocket {

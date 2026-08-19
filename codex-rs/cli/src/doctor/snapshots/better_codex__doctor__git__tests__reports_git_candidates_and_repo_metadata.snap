@@ -1,9 +1,8 @@
 ---
 source: cli/src/doctor/git.rs
-assertion_line: 150
 expression: "super::super::render_human_report(&report, super::super::HumanOutputOptions\n{ show_details: true, show_all: false, ascii: true, color_enabled: false, },)"
 ---
-Codex Doctor vtest
+Better Codex Doctor vtest
 
 Environment
   [ok] git          git executable found; execution not verified

@@ -3304,7 +3304,7 @@
               "$ref": "#/definitions/v2/AbsolutePathBuf"
             }
           ],
-          "description": "Absolute path to the server's $CODEX_HOME directory."
+          "description": "Absolute path to the server's $BETTER_CODEX_HOME directory."
         },
         "platformFamily": {
           "description": "Platform family for the running app-server target, for example `\"unix\"` or `\"windows\"`.",
@@ -9558,7 +9558,7 @@
             "type": "object"
           },
           {
-            "description": "User config layer from $CODEX_HOME/config.toml. This layer is special in that it is expected to be: - writable by the user - generally outside the workspace directory",
+            "description": "User config layer from $BETTER_CODEX_HOME/config.toml. This layer is special in that it is expected to be: - writable by the user - generally outside the workspace directory",
             "properties": {
               "file": {
                 "allOf": [

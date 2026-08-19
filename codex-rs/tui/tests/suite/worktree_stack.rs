@@ -91,13 +91,13 @@ async fn picker_worktree_fork_and_cd_run_on_the_production_stack() -> Result<()>
     )?;
     terminal.wait_for_startup()?;
     terminal.wait_for_screen("STACK_SAVED_HISTORY")?;
-    terminal.wait_for_screen("Ask Codex to do anything")?;
+    terminal.wait_for_screen("Ask Better Codex to do anything")?;
 
     submit(&mut terminal, "/resume")?;
     terminal.wait_for_screen("Resume a previous session")?;
     terminal.ensure_running()?;
     terminal.write_input(b"\x1b")?;
-    terminal.wait_for_screen("Ask Codex to do anything")?;
+    terminal.wait_for_screen("Ask Better Codex to do anything")?;
 
     submit(&mut terminal, "/worktree")?;
     terminal.wait_for_screen("Continue current conversation")?;

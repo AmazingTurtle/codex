@@ -33,10 +33,12 @@ impl Fixture {
         let root = TempDir::new()?;
         // Cargo-built paths deliberately ignore npm provenance. Launch outside
         // target/ so this fixture also exercises the packaged-install checks.
-        let program = root
-            .path()
-            .join(format!("codex{}", std::env::consts::EXE_SUFFIX));
-        let source = codex_utils_cargo_bin::cargo_bin("codex")?;
+        let program = root.path().join(format!(
+            "{}{}",
+            codex_product_info::CLI_NAME,
+            std::env::consts::EXE_SUFFIX
+        ));
+        let source = codex_utils_cargo_bin::cargo_bin(codex_product_info::CLI_NAME)?;
         if std::fs::hard_link(&source, &program).is_err() {
             std::fs::copy(&source, &program)?;
         }
@@ -104,7 +106,7 @@ wire_api = "responses"
         let mut command = assert_cmd::Command::new(&self.program);
         command
             .current_dir(&self.workspace)
-            .env("CODEX_HOME", &self.home)
+            .env(codex_product_info::HOME_ENV, &self.home)
             .env("HOME", self.root.path())
             .env("PATH", &self.path)
             .env("CODEX_TEST_HELPER_MARKER", &self.marker)

@@ -303,10 +303,10 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         }
         match command.as_ref() {
             Some(ExecCommand::Resume(_)) => {
-                anyhow::bail!("--worktree is not supported with `codex exec resume`");
+                anyhow::bail!("--worktree is not supported with `better-codex exec resume`");
             }
             Some(ExecCommand::Review(_)) => {
-                anyhow::bail!("--worktree is not supported with `codex exec review`");
+                anyhow::bail!("--worktree is not supported with `better-codex exec review`");
             }
             Some(ExecCommand::Fork(_)) | None => {}
         }

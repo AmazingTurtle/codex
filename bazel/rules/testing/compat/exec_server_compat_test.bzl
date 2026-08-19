@@ -5,7 +5,7 @@ load("//:defs.bzl", "workspace_root_test")
 def exec_server_compat_test(
         name,
         comparison_binary = None,
-        current_binary = "//codex-rs/cli:codex",
+        current_binary = "//codex-rs/cli:better-codex",
         release = None):
     """Tests both executor directions against another Codex build or release.
 

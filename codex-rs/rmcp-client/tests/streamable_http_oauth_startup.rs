@@ -453,13 +453,13 @@ async fn assert_expired_token_refresh(
             | OAuthStartupScenario::SameOriginGatewayHeadersHelper
     );
 
-    // Credential storage resolves CODEX_HOME from the process environment.
+    // Credential storage resolves BETTER_CODEX_HOME from the process environment.
     // Run the client half of the test in an ignored helper test so it can use
     // an isolated home without mutating the parent test runner's environment.
     let mut command = Command::new(std::env::current_exe()?);
     command
         .args(["oauth_startup_child", "--exact", "--ignored", "--nocapture"])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env(CHILD_SERVER_URL_ENV, server_url)
         .env(CHILD_STORED_ISSUER_ENV, authorization_server_issuer)
         .env(CHILD_RESOURCE_API_KEY_ENV, RESOURCE_API_KEY)
@@ -630,7 +630,7 @@ async fn run_issuer_startup_child(
             "--ignored",
             "--nocapture",
         ])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env(CHILD_SERVER_URL_ENV, server_url)
         .env(CHILD_STORED_ISSUER_ENV, stored_issuer)
         .env(CHILD_ACCESS_TOKEN_EXPIRY_ENV, access_token_expiry)
@@ -755,7 +755,7 @@ async fn reports_auth_status_for_persisted_credentials() -> anyhow::Result<()> {
             "--ignored",
             "--nocapture",
         ])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .status()
         .await?;
 
@@ -787,7 +787,7 @@ async fn identifies_expired_unrefreshable_token_startup_error() -> anyhow::Resul
             "--ignored",
             "--nocapture",
         ])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env(CHILD_SERVER_URL_ENV, format!("{}/mcp", server.uri()))
         .status()
         .await?;

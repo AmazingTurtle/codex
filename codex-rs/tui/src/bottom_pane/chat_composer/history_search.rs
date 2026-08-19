@@ -684,7 +684,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -707,7 +707,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content("draft".to_string(), Vec::new(), Vec::new());
@@ -765,7 +765,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -803,7 +803,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -832,7 +832,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.history.record_local_submission(HistoryEntry::new(
@@ -887,7 +887,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -948,7 +948,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -1004,7 +1004,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -1033,7 +1033,7 @@ mod tests {
                 /*has_input_focus*/ true,
                 sender,
                 /*enhanced_keys_supported*/ false,
-                "Ask Codex to do anything".to_string(),
+                "Ask Better Codex to do anything".to_string(),
                 /*disable_paste_burst*/ false,
             );
             composer
@@ -1072,7 +1072,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -1103,7 +1103,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -1138,7 +1138,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -1171,7 +1171,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask Codex to do anything".to_string(),
+            "Ask Better Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer

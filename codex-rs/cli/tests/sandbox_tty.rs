@@ -57,7 +57,7 @@ async fn sandbox_blocks_terminal_input_injection() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let mut env: HashMap<String, String> = std::env::vars().collect();
     env.insert(
-        "CODEX_HOME".to_string(),
+        codex_product_info::HOME_ENV.to_string(),
         codex_home.path().to_string_lossy().into_owned(),
     );
 
@@ -71,7 +71,7 @@ async fn sandbox_blocks_terminal_input_injection() -> anyhow::Result<()> {
     )
     .await?;
 
-    let codex = codex_utils_cargo_bin::cargo_bin("codex")?;
+    let codex = codex_utils_cargo_bin::cargo_bin(codex_product_info::CLI_NAME)?;
     run_probe(
         &codex.to_string_lossy(),
         vec![

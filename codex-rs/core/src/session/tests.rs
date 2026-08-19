@@ -9906,7 +9906,7 @@ async fn record_context_updates_emits_environment_item_for_time_changes() {
             &session.services.models_manager,
         )
         .await;
-    current_context.timezone = Some("Europe/Berlin".to_string());
+    current_context.timezone = Some("Pacific/Honolulu".to_string());
 
     let update_items =
         record_context_update_items(&session, previous_context, current_context).await;
@@ -9917,7 +9917,7 @@ async fn record_context_updates_emits_environment_item_for_time_changes() {
         .expect("environment update item should be emitted");
     let current_date = chrono::Local::now().format("%Y-%m-%d").to_string();
     assert!(environment_update.contains(&format!("<current_date>{current_date}</current_date>")));
-    assert!(environment_update.contains("<timezone>Europe/Berlin</timezone>"));
+    assert!(environment_update.contains("<timezone>Pacific/Honolulu</timezone>"));
 }
 
 #[tokio::test]
