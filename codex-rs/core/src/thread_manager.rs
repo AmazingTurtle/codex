@@ -18,6 +18,7 @@ use crate::session::resolve_multi_agent_version;
 use crate::session::session::Session;
 use crate::tasks::InterruptedTurnHistoryMarker;
 use crate::tasks::interrupted_turn_history_marker;
+use crate::tools::sandboxing::ApprovalStore;
 use codex_agent_graph_store::AgentGraphStore;
 use codex_agent_graph_store::LocalAgentGraphStore;
 use codex_analytics::AnalyticsEventsClient;
@@ -94,6 +95,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tracing::instrument;
 use tracing::warn;
 
@@ -1753,6 +1755,22 @@ impl ThreadManagerState {
             .unwrap_or_default()
     }
 
+    async fn inherited_tool_approvals_for_source(
+        &self,
+        session_source: &SessionSource,
+    ) -> Option<Arc<Mutex<ApprovalStore>>> {
+        let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id, ..
+        }) = session_source
+        else {
+            return None;
+        };
+        self.get_thread(*parent_thread_id)
+            .await
+            .ok()
+            .map(|parent| Arc::clone(&parent.session.services.tool_approvals))
+    }
+
     /// Spawn a new thread with optional history and register it with the manager.
     async fn spawn_thread(&self, request: ThreadSpawnRequest) -> CodexResult<NewThread> {
         let ThreadSpawnRequest {
@@ -1840,6 +1858,9 @@ impl ThreadManagerState {
                 forked_from_thread_id,
             )
             .await;
+        let inherited_tool_approvals = self
+            .inherited_tool_approvals_for_source(&session_source)
+            .await;
         let source_changed_during_startup = Arc::new(AtomicBool::new(false));
         {
             let mut starting = self
@@ -1875,6 +1896,7 @@ impl ThreadManagerState {
             metrics_service_name,
             inherited_environments,
             inherited_exec_policy,
+            inherited_tool_approvals,
             parent_rollout_thread_trace,
             user_shell_override,
             parent_trace,

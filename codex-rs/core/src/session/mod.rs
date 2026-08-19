@@ -41,6 +41,7 @@ use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnEnvironment;
 use crate::session_prefix::format_inter_agent_completion_message;
 use crate::skills_load_input_from_config;
+use crate::tools::sandboxing::ApprovalStore;
 use crate::turn_metadata::TurnMetadataState;
 use crate::turn_timing::now_unix_timestamp_ms;
 use async_channel::Receiver;
@@ -412,6 +413,7 @@ pub(crate) struct SessionSpawnArgs {
     pub(crate) metrics_service_name: Option<String>,
     pub(crate) inherited_exec_policy: Option<Arc<ExecPolicyManager>>,
     pub(crate) inherited_environments: Option<TurnEnvironmentSnapshot>,
+    pub(crate) inherited_tool_approvals: Option<Arc<Mutex<ApprovalStore>>>,
     /// Parent rollout trace used only to derive fresh spawned child traces.
     ///
     /// Root sessions and non-thread-spawn subagents pass a disabled context;
@@ -510,6 +512,7 @@ impl Session {
             user_shell_override,
             inherited_exec_policy,
             inherited_environments,
+            inherited_tool_approvals,
             parent_rollout_thread_trace,
             parent_trace: _,
             environment_selections,
@@ -756,6 +759,7 @@ impl Session {
             external_time_provider,
             multi_agent_version,
             git_enrichment_policy,
+            inherited_tool_approvals,
             windows_sandbox_proxy_settings_mode,
         ))
         .await

@@ -620,6 +620,7 @@ impl Session {
         external_time_provider: Option<Arc<dyn TimeProvider>>,
         multi_agent_version: Option<MultiAgentVersion>,
         git_enrichment_policy: GitEnrichmentPolicy,
+        inherited_tool_approvals: Option<Arc<Mutex<ApprovalStore>>>,
         windows_sandbox_proxy_settings_mode: codex_sandboxing::WindowsSandboxProxySettingsMode,
     ) -> anyhow::Result<Arc<Self>> {
         debug!(
@@ -1296,7 +1297,8 @@ impl Session {
                 .with_legacy_custom_ca_fallback(),
                 session_telemetry,
                 models_manager: Arc::clone(&models_manager),
-                tool_approvals: Mutex::new(ApprovalStore::default()),
+                tool_approvals: inherited_tool_approvals
+                    .unwrap_or_else(|| Arc::new(Mutex::new(ApprovalStore::default()))),
                 guardian_rejection_circuit_breaker: Mutex::new(Default::default()),
                 runtime_handle: tokio::runtime::Handle::current(),
                 skills_service,

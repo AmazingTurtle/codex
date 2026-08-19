@@ -42,6 +42,7 @@ use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::ItemCompletedEvent;
+use codex_protocol::protocol::ReviewDecision;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadHistoryMode;
@@ -567,6 +568,81 @@ async fn get_status_returns_pending_init_for_new_thread() {
     let (thread_id, _) = harness.start_thread().await;
     let status = harness.control.get_status(thread_id).await;
     assert_eq!(status, AgentStatus::PendingInit);
+}
+
+#[tokio::test]
+async fn session_tool_approval_is_shared_across_thread_spawn_agents() {
+    let harness = AgentControlHarness::new().await;
+    let (parent_thread_id, parent_thread) = harness.start_thread().await;
+    let first_child_id = harness
+        .spawn_anonymous_child(parent_thread_id, SpawnAgentOptions::default())
+        .await;
+    let sibling_child_id = harness
+        .spawn_anonymous_child(parent_thread_id, SpawnAgentOptions::default())
+        .await;
+    let first_child = harness
+        .manager
+        .get_thread(first_child_id)
+        .await
+        .expect("first child should exist");
+    let sibling_child = harness
+        .manager
+        .get_thread(sibling_child_id)
+        .await
+        .expect("sibling child should exist");
+    let approval = serde_json::json!({
+        "server": "controlled-enterprise-mcp",
+        "connector_id": null,
+        "tool_name": "safe_enterprise_tool",
+    });
+
+    first_child
+        .session
+        .services
+        .tool_approvals
+        .lock()
+        .await
+        .put(approval.clone(), ReviewDecision::ApprovedForSession);
+
+    assert_eq!(
+        parent_thread
+            .session
+            .services
+            .tool_approvals
+            .lock()
+            .await
+            .get(&approval),
+        Some(ReviewDecision::ApprovedForSession)
+    );
+    assert_eq!(
+        sibling_child
+            .session
+            .services
+            .tool_approvals
+            .lock()
+            .await
+            .get(&approval),
+        Some(ReviewDecision::ApprovedForSession)
+    );
+
+    let future_child_id = harness
+        .spawn_anonymous_child(parent_thread_id, SpawnAgentOptions::default())
+        .await;
+    let future_child = harness
+        .manager
+        .get_thread(future_child_id)
+        .await
+        .expect("future child should exist");
+    assert_eq!(
+        future_child
+            .session
+            .services
+            .tool_approvals
+            .lock()
+            .await
+            .get(&approval),
+        Some(ReviewDecision::ApprovedForSession)
+    );
 }
 
 #[tokio::test]

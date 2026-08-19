@@ -5747,6 +5747,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         /*external_time_provider*/ None,
         Some(config.multi_agent_version_from_features()),
         GitEnrichmentPolicy::Fresh,
+        /*inherited_tool_approvals*/ None,
         codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
     )
     .await;
@@ -5926,7 +5927,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         .with_legacy_custom_ca_fallback(),
         session_telemetry: session_telemetry.clone(),
         models_manager: Arc::clone(&models_manager),
-        tool_approvals: Mutex::new(ApprovalStore::default()),
+        tool_approvals: Arc::new(Mutex::new(ApprovalStore::default())),
         guardian_rejection_circuit_breaker: Mutex::new(Default::default()),
         runtime_handle: tokio::runtime::Handle::current(),
         skills_service,
@@ -6183,6 +6184,7 @@ async fn make_session_with_config_and_rx(
         /*external_time_provider*/ None,
         Some(config.multi_agent_version_from_features()),
         GitEnrichmentPolicy::Fresh,
+        /*inherited_tool_approvals*/ None,
         codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
     )
     .await?;
@@ -6311,6 +6313,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         /*external_time_provider*/ None,
         Some(config.multi_agent_version_from_features()),
         GitEnrichmentPolicy::Fresh,
+        /*inherited_tool_approvals*/ None,
         codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
     )
     .await?;
@@ -8135,7 +8138,7 @@ where
         .with_legacy_custom_ca_fallback(),
         session_telemetry: session_telemetry.clone(),
         models_manager: Arc::clone(&models_manager),
-        tool_approvals: Mutex::new(ApprovalStore::default()),
+        tool_approvals: Arc::new(Mutex::new(ApprovalStore::default())),
         guardian_rejection_circuit_breaker: Mutex::new(Default::default()),
         runtime_handle: tokio::runtime::Handle::current(),
         skills_service,
