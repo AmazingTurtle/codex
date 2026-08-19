@@ -119,6 +119,36 @@ impl std::error::Error for ProviderAccountError {}
 
 pub type ProviderAccountResult = std::result::Result<ProviderAccountState, ProviderAccountError>;
 
+/// Indicates that an account pinned to a model session was removed from persisted auth.
+#[derive(Debug)]
+pub struct PinnedChatgptAccountUnavailable {
+    account_id: String,
+}
+
+impl PinnedChatgptAccountUnavailable {
+    pub fn new(account_id: impl Into<String>) -> Self {
+        Self {
+            account_id: account_id.into(),
+        }
+    }
+
+    pub fn account_id(&self) -> &str {
+        &self.account_id
+    }
+}
+
+impl fmt::Display for PinnedChatgptAccountUnavailable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ChatGPT account `{}` pinned to this session is no longer available",
+            self.account_id
+        )
+    }
+}
+
+impl std::error::Error for PinnedChatgptAccountUnavailable {}
+
 /// Default model used for automatic approval review when a provider does not
 /// require a backend-specific model ID.
 pub const DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL: &str = "codex-auto-review";
@@ -239,12 +269,31 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
         &'a self,
         routing_context: &'a WorkspaceRoutingContext,
     ) -> ModelProviderFuture<'a, codex_protocol::error::Result<ResolvedResponsesProvider>> {
+        self.responses_api_provider_for_auth(routing_context, /*auth*/ None)
+    }
+
+    /// Resolves Responses routing with explicit request-scoped authentication when provided.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "serialize discovery and the session's first successful routing transition"
+    )]
+    fn responses_api_provider_for_auth<'a>(
+        &'a self,
+        routing_context: &'a WorkspaceRoutingContext,
+        auth: Option<&'a CodexAuth>,
+    ) -> ModelProviderFuture<'a, codex_protocol::error::Result<ResolvedResponsesProvider>> {
         Box::pin(async move {
-            let mut provider = self.api_provider().await?;
+            let auth = match auth {
+                Some(auth) => Some(auth.clone()),
+                None => self.auth().await,
+            };
+            let mut provider = self
+                .info()
+                .to_api_provider(auth.as_ref().map(CodexAuth::auth_mode))?;
             let mut redirect_policy = ClientRedirectPolicy::Default;
             if provider_uses_first_party_auth_path(self.info())
                 && self.info().supports_codex_backend_routes()
-                && let Some(auth) = self.auth().await.filter(CodexAuth::is_chatgpt_auth)
+                && let Some(auth) = auth.filter(CodexAuth::is_chatgpt_auth)
                 && let Some(auth_manager) = self.auth_manager()
             {
                 let mut previously_routed = routing_context.previously_routed.lock().await;
@@ -298,9 +347,30 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
             if !provider_uses_first_party_auth_path(self.info()) {
                 return self.api_auth().await.map(ResolvedProviderAuth::new);
             }
-            let auth = self.auth().await;
-            resolve_provider_auth_for_scope(self.auth_manager(), auth.as_ref(), self.info(), scope)
-                .await
+            let auth = match (self.auth_manager(), scope.chatgpt_account_id.as_deref()) {
+                (Some(auth_manager), Some(account_id)) => Some(
+                    auth_manager
+                        .auth_for_chatgpt_account(account_id)
+                        .await
+                        .map_err(codex_protocol::error::CodexErr::Io)?
+                        .ok_or_else(|| {
+                            codex_protocol::error::CodexErr::Io(std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                PinnedChatgptAccountUnavailable::new(account_id),
+                            ))
+                        })?,
+                ),
+                _ => self.auth().await,
+            };
+            let mut resolved = resolve_provider_auth_for_scope(
+                self.auth_manager(),
+                auth.as_ref(),
+                self.info(),
+                scope,
+            )
+            .await?;
+            resolved.source_auth = auth;
+            Ok(resolved)
         })
     }
 
@@ -743,6 +813,7 @@ mod tests {
                 agent_identity_policy: AgentIdentityAuthPolicy::JwtOnly,
                 session_source: SessionSource::Cli,
                 agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
+                chatgpt_account_id: None,
             })
             .await
             .expect("auth should resolve");

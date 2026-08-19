@@ -53,7 +53,30 @@ impl AccountRequestProcessor {
             return Err(invalid_request("creditId must not be empty"));
         }
 
-        let client = self.rate_limit_reset_backend_client().await?;
+        let auth = if let Some(account_id) = params.account_id {
+            self.selected_chatgpt_accounts(/*account_ids*/ Some(vec![account_id.clone()]))?;
+            self.auth_manager
+                .auth_for_chatgpt_account(&account_id)
+                .await
+                .map_err(|err| internal_error(format!("failed to load ChatGPT account: {err}")))?
+        } else {
+            self.auth_manager.auth().await
+        };
+        let Some(auth) = auth else {
+            return Err(invalid_request(
+                "codex account authentication required for rate limit reset credits",
+            ));
+        };
+        if !auth.uses_codex_backend() {
+            return Err(invalid_request(
+                "chatgpt authentication required for rate limit reset credits",
+            ));
+        }
+        let client = BackendClient::from_auth(
+            self.config.chatgpt_base_url.clone(),
+            &auth,
+            self.config.http_client_factory(),
+        );
         let request_timeout = RATE_LIMIT_RESET_REQUEST_TIMEOUT;
         #[cfg(debug_assertions)]
         let request_timeout = std::env::var(RATE_LIMIT_RESET_REQUEST_TIMEOUT_ENV_VAR)
@@ -94,25 +117,6 @@ impl AccountRequestProcessor {
         };
         Ok(Some(
             ConsumeAccountRateLimitResetCreditResponse { outcome }.into(),
-        ))
-    }
-
-    async fn rate_limit_reset_backend_client(&self) -> Result<BackendClient, JSONRPCErrorError> {
-        let Some(auth) = self.auth_manager.auth().await else {
-            return Err(invalid_request(
-                "codex account authentication required for rate limit reset credits",
-            ));
-        };
-        if !auth.uses_codex_backend() {
-            return Err(invalid_request(
-                "chatgpt authentication required for rate limit reset credits",
-            ));
-        }
-
-        Ok(BackendClient::from_auth(
-            self.config.chatgpt_base_url.clone(),
-            &auth,
-            self.config.http_client_factory(),
         ))
     }
 }

@@ -244,9 +244,44 @@ pub fn create_client_for_route(
     route_class: ClientRouteClass,
     redirect_policy: ClientRedirectPolicy,
 ) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+    create_client_for_route_with_headers(
+        http_client_factory,
+        request_url,
+        route_class,
+        default_headers(),
+        redirect_policy,
+    )
+}
+
+/// Creates a route-aware client with an explicit session residency requirement.
+pub fn create_client_for_route_with_residency(
+    http_client_factory: &HttpClientFactory,
+    request_url: &str,
+    route_class: ClientRouteClass,
+    enforce_residency: Option<ResidencyRequirement>,
+    redirect_policy: ClientRedirectPolicy,
+) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+    create_client_for_route_with_headers(
+        http_client_factory,
+        request_url,
+        route_class,
+        default_headers_for_residency(enforce_residency),
+        redirect_policy,
+    )
+}
+
+fn create_client_for_route_with_headers(
+    http_client_factory: &HttpClientFactory,
+    request_url: &str,
+    route_class: ClientRouteClass,
+    default_headers: HeaderMap,
+    redirect_policy: ClientRedirectPolicy,
+) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
     let builder = match redirect_policy {
-        ClientRedirectPolicy::Default => default_http_client_builder(),
-        ClientRedirectPolicy::Reject => default_http_client_builder().without_redirects(),
+        ClientRedirectPolicy::Default => default_http_client_builder_with_headers(default_headers),
+        ClientRedirectPolicy::Reject => {
+            default_http_client_builder_with_headers(default_headers).without_redirects()
+        }
     };
     if matches!(
         http_client_factory.outbound_proxy_policy(),
@@ -297,8 +332,12 @@ pub async fn create_client_for_route_async(
 }
 
 fn default_http_client_builder() -> HttpClientBuilder {
+    default_http_client_builder_with_headers(default_headers())
+}
+
+fn default_http_client_builder_with_headers(default_headers: HeaderMap) -> HttpClientBuilder {
     HttpClientBuilder::new()
-        .default_headers(default_headers())
+        .default_headers(default_headers)
         .with_chatgpt_cloudflare_cookie_store()
 }
 
@@ -337,12 +376,17 @@ pub(crate) fn create_default_auth_client(
 }
 
 pub fn default_headers() -> HeaderMap {
+    default_headers_for_residency(read_default_client_residency_requirement())
+}
+
+/// Builds the standard Codex headers with an explicit residency requirement.
+pub fn default_headers_for_residency(enforce_residency: Option<ResidencyRequirement>) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert("originator", originator().header_value);
     if let Ok(user_agent) = HeaderValue::from_str(&get_codex_user_agent()) {
         headers.insert(USER_AGENT, user_agent);
     }
-    if let Some(requirement) = read_default_client_residency_requirement() {
+    if let Some(requirement) = enforce_residency {
         let value = match requirement {
             ResidencyRequirement::Us => HeaderValue::from_static("us"),
         };

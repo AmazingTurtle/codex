@@ -1,0 +1,50 @@
+---
+source: tui/src/chatwidget/tests/usage_picker_tests.rs
+expression: "states.join(\"\\n---\\n\")"
+---
+  other@example.com
+
+
+› 1. Show usage for this account
+     Redeem usage reset for this account (loading…)
+  2. Back
+
+  enter select · esc back
+---
+  other@example.com
+
+
+› 1. Show usage for this account
+     Redeem usage reset for this account (0 available)
+  2. Back
+
+  enter select · esc back
+---
+  other@example.com
+
+
+› 1. Show usage for this account
+     Redeem usage reset for this account (availability unavailable)
+  2. Try again
+  3. Back
+
+  enter select · esc back
+---
+  other@example.com
+
+
+› 1. Show usage for this account
+  2. Redeem usage reset for this account (3 available)
+  3. Back
+
+  enter select · esc back
+---
+  Usage time range
+
+
+› 1. Daily
+  2. Weekly
+  3. Cumulative
+  4. Back
+
+  enter select · esc back

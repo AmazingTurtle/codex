@@ -92,7 +92,16 @@ impl OpenAiModelsEndpoint {
         client_version: &str,
         http_client_factory: HttpClientFactory,
     ) -> CoreResult<ModelsEndpointResponse> {
-        let auth = self.auth().await;
+        self.list_models_with_auth(self.auth().await, client_version, http_client_factory)
+            .await
+    }
+
+    async fn list_models_with_auth(
+        &self,
+        auth: Option<CodexAuth>,
+        client_version: &str,
+        http_client_factory: HttpClientFactory,
+    ) -> CoreResult<ModelsEndpointResponse> {
         let metric_auth_mode = if self.has_provider_api_key()
             || auth.as_ref().is_some_and(CodexAuth::is_api_key_auth)
         {
@@ -234,6 +243,15 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
             client_version,
             http_client_factory,
         ))
+    }
+
+    fn list_models_for_auth<'a>(
+        &'a self,
+        auth: CodexAuth,
+        client_version: &'a str,
+        http_client_factory: HttpClientFactory,
+    ) -> ModelsEndpointFuture<'a, CoreResult<ModelsEndpointResponse>> {
+        Box::pin(self.list_models_with_auth(Some(auth), client_version, http_client_factory))
     }
 }
 

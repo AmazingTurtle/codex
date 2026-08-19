@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/usage_picker_tests.rs
+expression: "render_bottom_popup(&chat, 80)"
+---
+  Use this reset?
+  other@example.com · Full reset
+
+
+  1. Yes, use reset  Reset your current usage limits.
+› 2. No, go back     Choose a different reset.
+
+  enter confirm · esc back

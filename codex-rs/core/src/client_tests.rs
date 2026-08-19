@@ -22,15 +22,19 @@ use codex_api::TransportError;
 use codex_http_client::HttpClientFactory;
 use codex_http_client::OutboundProxyPolicy;
 use codex_login::AuthManager;
+use codex_login::ChatgptAccountBinding;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
+use codex_login::auth::BedrockApiKeyAuth;
 use codex_model_provider::BearerAuthProvider;
 use codex_model_provider::ModelProvider;
 use codex_model_provider::ModelProviderFuture;
 use codex_model_provider::ProviderAccountResult;
 use codex_model_provider::ProviderAuthRecoveryMessages;
 use codex_model_provider::ProviderUnauthorizedRecovery;
+use codex_model_provider::ResolvedResponsesProvider;
 use codex_model_provider::SharedModelProvider;
+use codex_model_provider::WorkspaceRoutingContext;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 use codex_model_provider_info::ModelProviderInfo;
@@ -126,6 +130,46 @@ fn test_model_client_with_thread_id(
             "https://chatgpt.com/backend-api".into(),
         ),
     )
+}
+
+#[tokio::test]
+async fn bedrock_endpoint_resolution_ignores_chatgpt_account_binding() {
+    let region = "eu-central-1";
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
+            api_key: "bedrock-api-key".to_string(),
+            region: region.to_string(),
+        }));
+    let client = ModelClient::new(
+        Some(auth_manager),
+        AgentIdentityAuthPolicy::JwtOnly,
+        ThreadId::new(),
+        ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
+        SessionSource::Exec,
+        "test_originator".to_string(),
+        /*model_verbosity*/ None,
+        /*content_item_kinds_enabled*/ true,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*concurrent_reasoning_summaries_enabled*/ false,
+        /*attestation_provider*/ None,
+        HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+    )
+    .with_chatgpt_account_binding(Some(ChatgptAccountBinding {
+        account_id: "retained-chatgpt-account".to_string(),
+        manual_switch_revision: 0,
+    }));
+
+    let setup = client
+        .current_client_setup(ClientRouting::ConfiguredProvider)
+        .await
+        .expect("Bedrock client setup should resolve");
+
+    assert_eq!(
+        setup.api_provider.base_url,
+        format!("https://bedrock-mantle.{region}.api.aws/openai/v1")
+    );
 }
 
 fn test_model_provider() -> SharedModelProvider {
@@ -285,6 +329,19 @@ impl ModelProvider for SetupRefreshProvider {
                 }
             }
             self.inner.api_provider().await
+        })
+    }
+
+    fn responses_api_provider_for_auth<'a>(
+        &'a self,
+        routing_context: &'a WorkspaceRoutingContext,
+        auth: Option<&'a CodexAuth>,
+    ) -> ModelProviderFuture<'a, codex_protocol::error::Result<ResolvedResponsesProvider>> {
+        Box::pin(async move {
+            self.api_provider().await?;
+            self.inner
+                .responses_api_provider_for_auth(routing_context, auth)
+                .await
         })
     }
 
@@ -982,6 +1039,46 @@ fn reasoning_effort_for_requests_preserves_non_ultra_and_persistent_behavior() {
             ReasoningEffort::Custom("disabled".to_string()),
         )
     );
+}
+
+fn write_chatgpt_auth_json(codex_home: &std::path::Path) {
+    let auth_json = json!({
+        "tokens": {
+            "id_token": TEST_CHATGPT_ID_TOKEN,
+            "access_token": "test-access-token",
+            "refresh_token": "test-refresh-token",
+            "account_id": "account-123"
+        },
+        "last_refresh": "2099-01-01T00:00:00Z"
+    });
+    std::fs::write(
+        codex_home.join("auth.json"),
+        serde_json::to_string_pretty(&auth_json).expect("serialize auth.json"),
+    )
+    .expect("write auth.json");
+}
+
+async fn chatgpt_auth_manager(
+    codex_home: &TempDir,
+    agent_identity_authapi_base_url: String,
+) -> Arc<AuthManager> {
+    write_chatgpt_auth_json(codex_home.path());
+    let auth_manager = AuthManager::shared(
+        codex_home.path().to_path_buf(),
+        /*enable_codex_api_key_env*/ false,
+        AuthCredentialsStoreMode::File,
+        /*forced_chatgpt_workspace_id*/ None,
+        /*chatgpt_base_url*/ None,
+        AuthKeyringBackendKind::default(),
+        codex_login::test_support::transport_default_auth_route_config(),
+    )
+    .await;
+    let auth = auth_manager.auth().await.expect("auth should load");
+    AuthManager::from_auth_for_testing_with_agent_identity_authapi_base_url(
+        codex_home.path().to_path_buf(),
+        auth,
+        agent_identity_authapi_base_url,
+    )
 }
 
 #[derive(Default)]

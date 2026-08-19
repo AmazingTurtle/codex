@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Parameters for reading rate limits across persisted ChatGPT accounts.",
+  "properties": {
+    "accountIds": {
+      "description": "Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "excludeResetCreditDetails": {
+      "description": "Skip reset-credit details for lightweight background polling.",
+      "type": "boolean"
+    },
+    "supportsLunaReserve": {
+      "description": "Whether the requesting client supports automatic Luna Reserve fallback.",
+      "type": "boolean"
+    }
+  },
+  "title": "AccountRateLimitsReadManyParams",
+  "type": "object"
+}

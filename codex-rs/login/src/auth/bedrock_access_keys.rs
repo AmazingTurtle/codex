@@ -53,6 +53,7 @@ pub fn login_with_bedrock_access_keys(
             secret_access_key: secret_access_key.to_string(),
             session_token: session_token.map(str::to_string),
         }),
+        accounts: Vec::new(),
     };
     save_auth(
         codex_home,

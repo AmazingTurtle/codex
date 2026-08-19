@@ -68,12 +68,18 @@ use codex_api::response_create_client_metadata;
 use codex_http_client::ClientRouteClass;
 use codex_http_client::HttpClientFactory;
 use codex_login::AuthManager;
+use codex_login::ChatgptAccountBinding;
 use codex_login::CodexAuth;
 use codex_login::RefreshTokenError;
 use codex_login::UnauthorizedRecovery;
 use codex_login::default_client::ClientRedirectPolicy;
+use codex_login::default_client::ResidencyRequirement;
 use codex_login::default_client::add_originator_header;
 use codex_login::default_client::create_client_for_route;
+use codex_login::default_client::create_client_for_route_with_residency;
+use codex_login::default_client::default_headers;
+use codex_login::default_client::default_headers_for_residency;
+use codex_models_manager::manager::SharedModelsManager;
 use codex_otel::SessionTelemetry;
 use codex_otel::WEBSOCKET_CONTINUATION_COUNT_METRIC;
 use codex_otel::current_span_w3c_trace_context;
@@ -83,6 +89,7 @@ use codex_protocol::auth::AuthMode;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -136,6 +143,7 @@ use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_login::auth_env_telemetry::AuthEnvTelemetry;
 use codex_login::auth_env_telemetry::collect_auth_env_telemetry;
 use codex_model_provider::AgentIdentitySessionFallback;
+use codex_model_provider::PinnedChatgptAccountUnavailable;
 use codex_model_provider::ProviderAuthScope;
 use codex_model_provider::ProviderUnauthorizedRecovery;
 use codex_model_provider::ResponsesConnectionKey;
@@ -214,6 +222,9 @@ struct ModelClientState {
     disable_websockets: AtomicBool,
     agent_identity_session_fallback: AgentIdentitySessionFallback,
     cached_websocket_session: StdMutex<WebsocketSession>,
+    models_manager: OnceLock<SharedModelsManager>,
+    chatgpt_account_binding: StdMutex<Option<ChatgptAccountBinding>>,
+    session_residency_requirement: OnceLock<Option<ResidencyRequirement>>,
 }
 
 enum ClientRouting {
@@ -233,6 +244,24 @@ struct CurrentClientSetup {
     redirect_policy: ClientRedirectPolicy,
     api_auth: SharedAuthProvider,
     agent_identity_telemetry: Option<AgentIdentityTelemetry>,
+    auth_identity: RequestAuthIdentity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RequestAuthIdentity {
+    auth_mode: Option<AuthMode>,
+    account_id: Option<String>,
+    chatgpt_user_id: Option<String>,
+}
+
+impl RequestAuthIdentity {
+    fn from_auth(auth: Option<&CodexAuth>) -> Self {
+        Self {
+            auth_mode: auth.map(CodexAuth::api_auth_mode),
+            account_id: auth.and_then(CodexAuth::get_account_id),
+            chatgpt_user_id: auth.and_then(CodexAuth::get_chatgpt_user_id),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -322,6 +351,7 @@ struct WebsocketSession {
     last_response_from_untraced_warmup: bool,
     connection_reused: StdMutex<bool>,
     continuation_reset_reason: Option<&'static str>,
+    auth_identity: Option<RequestAuthIdentity>,
 }
 
 // This is intentionally not a `PartialEq` implementation: request equality includes `input` and
@@ -525,6 +555,9 @@ impl ModelClient {
                 disable_websockets: AtomicBool::new(false),
                 agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
+                models_manager: OnceLock::new(),
+                chatgpt_account_binding: StdMutex::new(None),
+                session_residency_requirement: OnceLock::new(),
             }),
             agent_identity_policy,
             prompt_cache_key_override: None,
@@ -556,6 +589,47 @@ impl ModelClient {
         self.event_sender = Some(event_sender);
         self.codex_responses_headers = codex_responses_headers;
         self
+    }
+
+    pub(crate) fn with_models_manager(self, models_manager: SharedModelsManager) -> Self {
+        if self.state.models_manager.set(models_manager).is_err() {
+            warn!("model client models manager was already configured");
+        }
+        self
+    }
+
+    pub(crate) fn with_chatgpt_account_binding(
+        self,
+        binding: Option<ChatgptAccountBinding>,
+    ) -> Self {
+        *self
+            .state
+            .chatgpt_account_binding
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = binding;
+        self
+    }
+
+    pub(crate) fn with_residency_requirement(
+        self,
+        enforce_residency: Option<ResidencyRequirement>,
+    ) -> Self {
+        if self
+            .state
+            .session_residency_requirement
+            .set(enforce_residency)
+            .is_err()
+        {
+            warn!("model client residency requirement was already configured");
+        }
+        self
+    }
+
+    fn default_headers(&self) -> ApiHeaderMap {
+        match self.state.session_residency_requirement.get() {
+            Some(enforce_residency) => default_headers_for_residency(*enforce_residency),
+            None => default_headers(),
+        }
     }
 
     fn prompt_cache_key(&self, responses_metadata: &CodexResponsesMetadata) -> String {
@@ -721,9 +795,7 @@ impl ModelClient {
             return Ok(Vec::new());
         }
 
-        let client_setup = self
-            .current_client_setup(ClientRouting::ConfiguredProvider)
-            .await?;
+        let client_setup = self.current_client_setup_for_model(model_info).await?;
         let transport = self.build_api_transport(
             &client_setup.api_provider,
             MEMORIES_SUMMARIZE_ENDPOINT,
@@ -1028,6 +1100,44 @@ impl ModelClient {
         true
     }
 
+    async fn rotate_chatgpt_account_after_limit(
+        &self,
+        auth_manager: &AuthManager,
+        account_id: &str,
+        attempted_account_ids: &[String],
+        model_info: &ModelInfo,
+    ) -> Result<Option<ChatgptAccountBinding>> {
+        let eligible_account_ids = if let Some(models_manager) = self.state.models_manager.get() {
+            match crate::chatgpt_account_selection::compatible_chatgpt_account_ids_excluding(
+                auth_manager,
+                models_manager,
+                &model_info.slug,
+                self.http_client_factory.clone(),
+                attempted_account_ids,
+            )
+            .await
+            {
+                Ok(eligible) => Some(eligible),
+                Err(fetch_err) => {
+                    warn!(
+                        error = %fetch_err,
+                        "could not verify model availability for failover accounts"
+                    );
+                    Some(Vec::new())
+                }
+            }
+        } else {
+            None
+        };
+        Ok(auth_manager
+            .rotate_chatgpt_account_after_limit(
+                account_id,
+                attempted_account_ids,
+                eligible_account_ids.as_deref(),
+            )
+            .await?)
+    }
+
     /// Returns auth + provider configuration resolved from the current session auth state.
     ///
     /// This centralizes setup used by both prewarm and normal request paths so they stay in
@@ -1043,33 +1153,48 @@ impl ModelClient {
             .map(|manager| manager.auth_change_receiver());
         loop {
             let revision = auth_changes.as_ref().map(|changes| *changes.borrow());
-            let auth = self.state.provider.auth().await;
+            let account_binding = self.current_chatgpt_account_binding();
+            let chatgpt_account_id = account_binding.map(|binding| binding.account_id);
+            let auth_scope = ProviderAuthScope {
+                agent_identity_policy: self.agent_identity_policy,
+                session_source: self.state.session_source.clone(),
+                agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
+                chatgpt_account_id: chatgpt_account_id.clone(),
+            };
+            let mut resolved_auth = self
+                .state
+                .provider
+                .api_auth_for_scope(auth_scope.clone())
+                .await?;
+            let mut auth = match resolved_auth.source_auth.clone() {
+                Some(auth) => Some(auth),
+                None => self.state.provider.auth().await,
+            };
             let (api_provider, redirect_policy) = match routing {
                 ClientRouting::Workspace => {
                     let resolved = self
                         .state
                         .provider
-                        .responses_api_provider(&self.state.workspace_routing)
+                        .responses_api_provider_for_auth(
+                            &self.state.workspace_routing,
+                            auth.as_ref(),
+                        )
                         .await?;
                     (resolved.provider, resolved.redirect_policy)
                 }
-                ClientRouting::ConfiguredProvider => (
-                    self.state.provider.api_provider().await?,
-                    ClientRedirectPolicy::Default,
-                ),
+                ClientRouting::ConfiguredProvider => {
+                    let provider =
+                        if chatgpt_account_id.is_some() && self.state.provider.info().is_openai() {
+                            self.state
+                                .provider
+                                .info()
+                                .to_api_provider(auth.as_ref().map(CodexAuth::auth_mode))?
+                        } else {
+                            self.state.provider.api_provider().await?
+                        };
+                    (provider, ClientRedirectPolicy::Default)
+                }
             };
-            let resolved_auth = self
-                .state
-                .provider
-                .api_auth_for_scope(ProviderAuthScope {
-                    agent_identity_policy: self.agent_identity_policy,
-                    session_source: self.state.session_source.clone(),
-                    agent_identity_session_fallback: self
-                        .state
-                        .agent_identity_session_fallback
-                        .clone(),
-                })
-                .await?;
             // Command-backed bearer refreshes cannot change workspace routing. Keep the captured
             // revisions so a refresh during setup still invalidates cached WebSocket state.
             if self.state.provider.info().auth.is_none() {
@@ -1083,7 +1208,17 @@ impl ModelClient {
                 if auth_changes.as_ref().map(|changes| *changes.borrow()) != revision {
                     continue;
                 }
+            } else {
+                // A command-backed credential can refresh while resolving the provider.
+                // Use the refreshed credential for this request, but retain the captured
+                // revision so cached connections still notice the refresh.
+                resolved_auth = self.state.provider.api_auth_for_scope(auth_scope).await?;
+                auth = match resolved_auth.source_auth.clone() {
+                    Some(auth) => Some(auth),
+                    None => self.state.provider.auth().await,
+                };
             }
+            let auth_identity = RequestAuthIdentity::from_auth(auth.as_ref());
             return Ok(CurrentClientSetup {
                 auth,
                 auth_owner_generation,
@@ -1092,6 +1227,7 @@ impl ModelClient {
                 redirect_policy,
                 api_auth: resolved_auth.auth,
                 agent_identity_telemetry: resolved_auth.agent_identity_telemetry,
+                auth_identity,
             });
         }
     }
@@ -1171,6 +1307,90 @@ impl ModelClient {
         HeaderValue::from_str(&routing_hint).ok()
     }
 
+    async fn current_client_setup_for_model(
+        &self,
+        model_info: &ModelInfo,
+    ) -> Result<CurrentClientSetup> {
+        let unavailable_account_id = match self.current_client_setup(ClientRouting::Workspace).await
+        {
+            Ok(setup) => return Ok(setup),
+            Err(err) => {
+                let Some(unavailable) = (match err.details() {
+                    CodexErrorDetails::Io(io_error) => io_error.get_ref().and_then(|source| {
+                        source.downcast_ref::<PinnedChatgptAccountUnavailable>()
+                    }),
+                    _ => None,
+                }) else {
+                    return Err(err);
+                };
+                unavailable.account_id().to_string()
+            }
+        };
+        let auth_manager = self.state.provider.auth_manager().ok_or_else(|| {
+            CodexErr::Io(std::io::Error::other(
+                "cannot replace a removed session account without authentication",
+            ))
+        })?;
+        let models_manager = self.state.models_manager.get().ok_or_else(|| {
+            CodexErr::Io(std::io::Error::other(
+                "cannot replace a removed session account without model discovery",
+            ))
+        })?;
+        let eligible_account_ids =
+            crate::chatgpt_account_selection::compatible_chatgpt_account_ids(
+                &auth_manager,
+                models_manager,
+                &model_info.slug,
+                self.http_client_factory.clone(),
+            )
+            .await?;
+        let binding = auth_manager
+            .replace_removed_chatgpt_account_for_session(
+                &unavailable_account_id,
+                &eligible_account_ids,
+            )
+            .await?
+            .ok_or_else(|| {
+                CodexErr::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "no remaining ChatGPT account supports model `{}`",
+                        model_info.slug
+                    ),
+                ))
+            })?;
+        self.set_chatgpt_account_binding(binding);
+        self.current_client_setup(ClientRouting::Workspace).await
+    }
+
+    fn current_chatgpt_account_binding(&self) -> Option<ChatgptAccountBinding> {
+        let mut binding = self
+            .state
+            .chatgpt_account_binding
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(manual) = self
+            .state
+            .provider
+            .auth_manager()
+            .and_then(|manager| manager.manual_chatgpt_account_selection())
+            && binding.as_ref().is_none_or(|current| {
+                manual.manual_switch_revision > current.manual_switch_revision
+            })
+        {
+            *binding = Some(manual);
+        }
+        binding.clone()
+    }
+
+    fn set_chatgpt_account_binding(&self, binding: ChatgptAccountBinding) {
+        *self
+            .state
+            .chatgpt_account_binding
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(binding);
+    }
+
     fn build_api_transport(
         &self,
         api_provider: &ApiProvider,
@@ -1185,12 +1405,22 @@ impl ModelClient {
         } else {
             redirect_policy
         };
-        let client = create_client_for_route(
-            &self.http_client_factory,
-            &api_provider.url_for_path(endpoint),
-            ClientRouteClass::Api,
-            redirect_policy,
-        )
+        let request_url = api_provider.url_for_path(endpoint);
+        let client = match self.state.session_residency_requirement.get() {
+            Some(enforce_residency) => create_client_for_route_with_residency(
+                &self.http_client_factory,
+                &request_url,
+                ClientRouteClass::Api,
+                *enforce_residency,
+                redirect_policy,
+            ),
+            None => create_client_for_route(
+                &self.http_client_factory,
+                &request_url,
+                ClientRouteClass::Api,
+                redirect_policy,
+            ),
+        }
         .map_err(std::io::Error::from)?;
         Ok(ReqwestTransport::from_http_client(client))
     }
@@ -1231,7 +1461,7 @@ impl ModelClient {
             ApiWebSocketResponsesClient::new(api_provider, api_auth).connect(
                 &self.http_client_factory,
                 headers,
-                codex_login::default_client::default_headers(),
+                self.default_headers(),
                 /*turn_state*/ None,
                 Some(websocket_telemetry),
             ),
@@ -1457,7 +1687,7 @@ impl ModelClientSession {
         }
         let client_setup = self
             .client
-            .current_client_setup(ClientRouting::Workspace)
+            .current_client_setup_for_model(model_info)
             .await
             .map_err(|err| {
                 ApiError::Stream(format!(
@@ -1468,6 +1698,7 @@ impl ModelClientSession {
             ResponsesConnectionKey::new(&client_setup.api_provider, client_setup.auth_revision);
         if self.websocket_session.connection.is_some()
             && self.websocket_session.connection_key.as_ref() == Some(&connection_key)
+            && self.websocket_session.auth_identity.as_ref() == Some(&client_setup.auth_identity)
         {
             return Ok(());
         }
@@ -1491,6 +1722,7 @@ impl ModelClientSession {
             auth_context,
             request_route_telemetry: RequestRouteTelemetry::for_endpoint("/responses"),
             responses_headers: &responses_headers,
+            auth_identity: client_setup.auth_identity,
         })
         .await?;
         Ok(())
@@ -1522,12 +1754,14 @@ impl ModelClientSession {
             auth_context,
             request_route_telemetry,
             responses_headers,
+            auth_identity,
         } = params;
         let connection_key = ResponsesConnectionKey::new(&api_provider, auth_revision);
         let reset_reason = match self.websocket_session.connection.as_ref() {
             Some(_)
                 if self.websocket_session.responses_headers != *responses_headers
-                    || self.websocket_session.connection_key.as_ref() != Some(&connection_key) =>
+                    || self.websocket_session.connection_key.as_ref() != Some(&connection_key)
+                    || self.websocket_session.auth_identity.as_ref() != Some(&auth_identity) =>
             {
                 Some("other")
             }
@@ -1564,6 +1798,7 @@ impl ModelClientSession {
             self.websocket_session.responses_headers = responses_headers.clone();
             self.websocket_session.auth_owner_generation = auth_owner_generation;
             self.websocket_session.connection_key = Some(connection_key);
+            self.websocket_session.auth_identity = Some(auth_identity);
             self.websocket_session
                 .set_connection_reused(/*connection_reused*/ false);
         } else {
@@ -1619,16 +1854,33 @@ impl ModelClientSession {
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
         let auth_manager = self.client.state.provider.auth_manager();
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = None;
         let mut provider_auth_recovery_attempted = false;
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut attempted_account_ids = Vec::new();
         loop {
             let client_setup = self
                 .client
-                .current_client_setup(ClientRouting::Workspace)
+                .current_client_setup_for_model(model_info)
                 .await?;
+            if auth_recovery.is_none()
+                && let Some(auth_manager) = auth_manager.as_ref()
+            {
+                auth_recovery = Some(match client_setup.auth.clone() {
+                    Some(auth) => auth_manager.unauthorized_recovery_for_auth(auth),
+                    None => auth_manager.unauthorized_recovery(),
+                });
+            }
+            let request_account_id = client_setup
+                .auth
+                .as_ref()
+                .filter(|auth| auth.api_auth_mode() == AuthMode::Chatgpt)
+                .and_then(CodexAuth::get_account_id);
+            if let Some(account_id) = request_account_id.as_ref()
+                && !attempted_account_ids.contains(account_id)
+            {
+                attempted_account_ids.push(account_id.clone());
+            }
             let responses_headers = self
                 .client
                 .responses_headers(client_setup.auth.as_ref(), &model_info.slug);
@@ -1755,6 +2007,47 @@ impl ModelClientSession {
                     );
                     continue;
                 }
+                Err(ApiError::Transport(
+                    rate_limit_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::TOO_MANY_REQUESTS => {
+                    let response_debug_context =
+                        extract_response_debug_context(&rate_limit_transport);
+                    let err = self
+                        .client
+                        .state
+                        .provider
+                        .map_api_error(ApiError::Transport(rate_limit_transport));
+                    inference_trace_attempt.record_failed(
+                        &err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    if matches!(err.details(), CodexErrorDetails::UsageLimitReached(_))
+                        && let (Some(auth_manager), Some(account_id)) =
+                            (auth_manager.as_ref(), request_account_id.as_deref())
+                        && let Some(binding) = self
+                            .client
+                            .rotate_chatgpt_account_after_limit(
+                                auth_manager,
+                                account_id,
+                                &attempted_account_ids,
+                                model_info,
+                            )
+                            .await?
+                    {
+                        self.client.set_chatgpt_account_binding(binding);
+                        let auth = self
+                            .client
+                            .current_client_setup(ClientRouting::Workspace)
+                            .await?
+                            .auth;
+                        auth_recovery =
+                            auth.map(|auth| auth_manager.unauthorized_recovery_for_auth(auth));
+                        pending_retry = PendingUnauthorizedRetry::default();
+                        continue;
+                    }
+                    return Err(err);
+                }
                 Err(err) => {
                     let response_debug_context =
                         extract_response_debug_context_from_api_error(&err);
@@ -1801,16 +2094,22 @@ impl ModelClientSession {
         let provider = Arc::clone(&self.client.state.provider);
         let auth_manager = provider.auth_manager();
 
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = None;
         let mut provider_auth_recovery_attempted = false;
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let client_setup = self
                 .client
-                .current_client_setup(ClientRouting::Workspace)
+                .current_client_setup_for_model(model_info)
                 .await?;
+            if auth_recovery.is_none()
+                && let Some(auth_manager) = auth_manager.as_ref()
+            {
+                auth_recovery = Some(match client_setup.auth.clone() {
+                    Some(auth) => auth_manager.unauthorized_recovery_for_auth(auth),
+                    None => auth_manager.unauthorized_recovery(),
+                });
+            }
             let responses_headers = self
                 .client
                 .responses_headers(client_setup.auth.as_ref(), &model_info.slug);
@@ -1870,6 +2169,7 @@ impl ModelClientSession {
                     auth_context: request_auth_context,
                     request_route_telemetry: RequestRouteTelemetry::for_endpoint("/responses"),
                     responses_headers: &responses_headers,
+                    auth_identity: client_setup.auth_identity,
                 })
                 .await
             {
@@ -2143,10 +2443,17 @@ impl ModelClientSession {
         responses_metadata: &CodexResponsesMetadata,
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
+        let auth_manager = self.client.state.provider.auth_manager();
         let wire_api = self.client.state.provider.info().wire_api;
         match wire_api {
             WireApi::Responses => {
-                if self.client.responses_websocket_enabled() {
+                // Usage-limit responses arrive asynchronously after a WebSocket stream is
+                // returned, which cannot be replayed safely here. Multi-account requests use
+                // HTTP so failover can select another account before exposing a stream.
+                let supports_account_failover = auth_manager
+                    .as_ref()
+                    .is_some_and(|manager| manager.has_multiple_chatgpt_accounts());
+                if self.client.responses_websocket_enabled() && !supports_account_failover {
                     let request_trace = current_span_w3c_trace_context();
                     match self
                         .stream_responses_websocket(
@@ -2511,6 +2818,7 @@ struct WebsocketConnectParams<'a> {
     auth_context: AuthRequestTelemetryContext,
     request_route_telemetry: RequestRouteTelemetry,
     responses_headers: &'a ApiHeaderMap,
+    auth_identity: RequestAuthIdentity,
 }
 
 fn emit_auth_recovery_event(

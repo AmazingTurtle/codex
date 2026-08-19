@@ -80,6 +80,24 @@ fn recall_latest_after_clearing(chat: &mut ChatWidget) -> String {
     chat.bottom_pane.composer_text()
 }
 
+fn start_daily_token_activity_and_expect_refresh(
+    chat: &mut ChatWidget,
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+) -> u64 {
+    chat.add_token_activity_output(
+        TokenActivityView::Daily,
+        crate::chatwidget::TokenActivityTarget::Active,
+    );
+    expect_token_activity_refresh(rx)
+}
+
+fn expect_token_activity_refresh(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> u64 {
+    match rx.try_recv() {
+        Ok(AppEvent::RefreshTokenActivity { request_id, .. }) => request_id,
+        other => panic!("expected token activity refresh request, got {other:?}"),
+    }
+}
+
 fn next_add_to_history_event(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> String {
     loop {
         match rx.try_recv() {
@@ -1396,18 +1414,20 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
 }
 
 #[tokio::test]
-async fn usage_command_with_invalid_view_reports_usage_snapshot() {
+async fn usage_command_with_account_selector_requests_account_usage() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     set_chatgpt_auth(&mut chat);
 
     submit_composer_text(&mut chat, "/usage monthly");
 
-    let rendered = drain_insert_history(&mut rx)
-        .iter()
-        .map(|cell| lines_to_single_string(cell))
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert_chatwidget_snapshot!("usage_command_with_invalid_view_reports_usage", rendered);
+    assert_matches!(rx.try_recv(), Ok(AppEvent::FollowTranscript));
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ShowChatgptAccountUsage {
+            view,
+            selector: Some(selector),
+        }) if view == TokenActivityView::Cumulative && selector == "monthly"
+    );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage monthly");
 }
 
@@ -1468,6 +1488,318 @@ async fn usage_command_runs_with_backend_auth_from_widget_init() {
     );
     assert!(!chat.has_chatgpt_account());
     assert!(chat.has_codex_backend_auth());
+}
+
+#[tokio::test]
+async fn clearing_pending_token_activity_refreshes_discards_late_result() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    assert_eq!(
+        chat.pending_token_activity_output()
+            .map(|cell| lines_to_single_string(&cell.display_lines(u16::MAX))),
+        Some(
+            "/usage daily\n\nAccount: Active account\n Token activity\n   Loading...\n".to_string()
+        ),
+    );
+    assert_eq!(
+        chat.active_cell_transcript_lines(u16::MAX)
+            .map(|lines| lines_to_single_string(&lines)),
+        Some(
+            "/usage daily\n\nAccount: Active account\n Token activity\n   Loading...\n".to_string()
+        ),
+    );
+
+    chat.clear_pending_token_activity_refreshes();
+
+    assert!(
+        !chat.finish_token_activity_refresh(
+            request_id,
+            Err("stale token activity result".to_string()),
+        )
+    );
+}
+
+#[tokio::test]
+async fn account_state_change_discards_pending_token_activity_refresh() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    assert!(chat.pending_token_activity_output().is_some());
+
+    chat.update_account_state(
+        Some(crate::status::StatusAccountDisplay::ChatGpt {
+            name: Some("new-account@example.com".to_string()),
+        }),
+        /*plan_type*/ None,
+        /*has_chatgpt_account*/ true,
+        /*has_codex_backend_auth*/ true,
+    );
+
+    assert!(chat.pending_token_activity_output().is_none());
+    assert!(
+        !chat.finish_token_activity_refresh(
+            request_id,
+            Err("stale token activity result".to_string()),
+        )
+    );
+}
+
+#[tokio::test]
+async fn pending_token_activity_refresh_renders_above_composer_snapshot() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+
+    let width: u16 = 80;
+    let height = chat.desired_height(width);
+    let backend = VT100Backend::new(width, height);
+    let mut term = crate::custom_terminal::Terminal::with_options(backend).expect("terminal");
+    term.set_viewport_area(Rect::new(/*x*/ 0, /*y*/ 0, width, height));
+    term.draw(|f| {
+        chat.render(f.area(), f.buffer_mut());
+    })
+    .unwrap();
+    assert_chatwidget_snapshot!(
+        "pending_token_activity_refresh_renders_above_composer_snapshot",
+        normalize_snapshot_paths(term.backend().vt100().screen().contents())
+    );
+}
+
+#[tokio::test]
+async fn completed_token_activity_refresh_returns_one_history_cell() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    assert!(chat.pending_token_activity_output().is_some());
+
+    assert!(
+        chat.finish_token_activity_refresh(
+            request_id,
+            Err("token activity unavailable".to_string()),
+        )
+    );
+    assert!(chat.pending_token_activity_output().is_some());
+    let cell = chat
+        .take_completed_token_activity_output()
+        .expect("completed token activity cell");
+
+    assert!(chat.pending_token_activity_output().is_none());
+    assert_eq!(
+        lines_to_single_string(&cell.display_lines(u16::MAX)),
+        "/usage daily\n\nAccount: Active account\n Token activity\n   Token activity unavailable\n",
+    );
+}
+
+#[tokio::test]
+async fn completed_token_activity_refresh_waits_for_active_stream() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    chat.on_agent_message_delta("partial response".to_string());
+    assert!(chat.usage_history_insertion_blocked());
+
+    assert!(
+        chat.finish_token_activity_refresh(
+            request_id,
+            Err("token activity unavailable".to_string()),
+        )
+    );
+    assert_eq!(
+        chat.pending_token_activity_output()
+            .map(|cell| lines_to_single_string(&cell.display_lines(u16::MAX))),
+        Some("/usage daily\n\nAccount: Active account\n Token activity\n   Token activity unavailable\n".to_string()),
+    );
+
+    chat.finalize_turn();
+    assert!(chat.usage_history_insertion_blocked());
+    chat.note_stream_consolidation_completed();
+    assert!(!chat.usage_history_insertion_blocked());
+    assert!(
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::CommitPendingUsageOutputAfterStreamShutdown))
+    );
+    assert!(chat.take_completed_token_activity_output().is_some());
+}
+
+#[tokio::test]
+async fn completed_token_activity_refresh_waits_for_queued_stream_consolidation() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    chat.on_agent_message_delta("partial response".to_string());
+    chat.finalize_completed_assistant_message(/*message*/ None);
+    assert!(chat.pending_stream_consolidations > 0);
+
+    assert!(
+        chat.finish_token_activity_refresh(
+            request_id,
+            Err("token activity unavailable".to_string()),
+        )
+    );
+    assert!(chat.usage_history_insertion_blocked());
+
+    chat.note_stream_consolidation_completed();
+
+    assert!(!chat.usage_history_insertion_blocked());
+}
+
+#[tokio::test]
+async fn completed_token_activity_refresh_waits_for_active_history_cell() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    chat.transcript.active_cell = Some(Box::new(PlainHistoryCell::new(vec![Line::from(
+        "active tool",
+    )])));
+    assert!(
+        chat.finish_token_activity_refresh(
+            request_id,
+            Err("token activity unavailable".to_string()),
+        )
+    );
+    assert!(chat.usage_history_insertion_blocked());
+
+    chat.flush_active_cell();
+
+    assert_matches!(rx.try_recv(), Ok(AppEvent::InsertHistoryCell(_)));
+    assert_matches!(rx.try_recv(), Ok(AppEvent::CommitPendingUsageOutput));
+}
+
+#[tokio::test]
+async fn completed_token_activity_refresh_waits_for_active_hook() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+    handle_hook_started(
+        &mut chat,
+        hook_run(
+            "post-tool-use:0:/tmp/hooks.json",
+            codex_app_server_protocol::HookEventName::PostToolUse,
+            codex_app_server_protocol::HookRunStatus::Running,
+            "checking output policy",
+            Vec::new(),
+        ),
+    );
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    assert!(
+        chat.finish_token_activity_refresh(
+            request_id,
+            Err("token activity unavailable".to_string()),
+        )
+    );
+    assert!(chat.usage_history_insertion_blocked());
+
+    handle_hook_completed(
+        &mut chat,
+        hook_run(
+            "post-tool-use:0:/tmp/hooks.json",
+            codex_app_server_protocol::HookEventName::PostToolUse,
+            codex_app_server_protocol::HookRunStatus::Completed,
+            "checking output policy",
+            vec![codex_app_server_protocol::HookOutputEntry {
+                kind: codex_app_server_protocol::HookOutputEntryKind::Context,
+                text: "hook context".to_string(),
+            }],
+        ),
+    );
+
+    assert_matches!(rx.try_recv(), Ok(AppEvent::CommitPendingUsageOutput));
+}
+
+#[tokio::test]
+async fn completed_token_activity_refresh_retries_after_plan_item_completion() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+    let mut controller = crate::streaming::controller::PlanStreamController::new(
+        /*width*/ None,
+        &chat.config.cwd,
+        chat.history_render_mode(),
+    );
+    controller.push("Plan details");
+    chat.plan_stream_controller = Some(controller);
+    assert!(
+        chat.finish_token_activity_refresh(
+            request_id,
+            Err("token activity unavailable".to_string()),
+        )
+    );
+
+    chat.on_plan_item_completed("Plan details".to_string());
+
+    assert!(
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::CommitPendingUsageOutputAfterStreamShutdown))
+    );
+}
+
+#[tokio::test]
+async fn pending_token_activity_refresh_keeps_composer_visible_in_short_viewport() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+    chat.transcript.active_cell = Some(Box::new(PlainHistoryCell::new(
+        std::iter::repeat_n(Line::from("active output"), /*n*/ 20).collect(),
+    )));
+
+    start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+
+    let width: u16 = 80;
+    let height: u16 = 8;
+    let backend = VT100Backend::new(width, height);
+    let mut term = crate::custom_terminal::Terminal::with_options(backend).expect("terminal");
+    term.set_viewport_area(Rect::new(/*x*/ 0, /*y*/ 0, width, height));
+    term.draw(|f| {
+        chat.render(f.area(), f.buffer_mut());
+    })
+    .unwrap();
+
+    assert!(
+        term.backend()
+            .vt100()
+            .screen()
+            .contents()
+            .contains("Ask Better Codex to do anything")
+    );
+}
+
+#[tokio::test]
+async fn repeated_token_activity_refreshes_keep_only_latest_card() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    set_chatgpt_auth(&mut chat);
+
+    let first_request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
+
+    chat.add_token_activity_output(
+        TokenActivityView::Weekly,
+        crate::chatwidget::TokenActivityTarget::Active,
+    );
+    let second_request_id = expect_token_activity_refresh(&mut rx);
+
+    assert_eq!(
+        chat.pending_token_activity_output()
+            .map(|cell| lines_to_single_string(&cell.display_lines(u16::MAX))),
+        Some(
+            "/usage weekly\n\nAccount: Active account\n Token activity\n   Loading...\n"
+                .to_string()
+        ),
+    );
+    assert!(!chat.finish_token_activity_refresh(
+        first_request_id,
+        Err("stale token activity result".to_string()),
+    ));
+    assert!(chat.finish_token_activity_refresh(
+        second_request_id,
+        Err("token activity unavailable".to_string()),
+    ));
 }
 
 #[tokio::test]

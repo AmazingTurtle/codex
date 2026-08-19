@@ -1,9 +1,13 @@
 use super::*;
 use crate::chatwidget::ThreadUsageOutcome;
+use crate::status::StatusAccountDisplay;
+use app_test_support::ChatGptAuthFixture;
+use app_test_support::write_chatgpt_auth;
 use codex_app_server_client::AppServerEvent;
 use codex_app_server_protocol::AccountUpdatedNotification;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::ThreadUsage;
+use codex_config::types::AuthCredentialsStoreMode;
 use codex_protocol::account::PlanType;
 use pretty_assertions::assert_eq;
 use ratatui::layout::Rect;
@@ -115,6 +119,42 @@ async fn account_updated_with_backend_only_auth_enables_thread_usage() -> Result
         }) if requested_thread_id == thread_id
     );
     app_server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn account_updated_status_uses_active_account_name() -> Result<()> {
+    let (mut app, _events, _ops) = make_test_app_with_channels().await;
+    app.config.cli_auth_credentials_store_mode = AuthCredentialsStoreMode::File;
+    write_chatgpt_auth(
+        &app.config.codex_home,
+        ChatGptAuthFixture::new("test-token")
+            .account_id("account-123")
+            .email("contact@turtledev.net")
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )
+    .expect("write synthetic auth");
+    let server = crate::start_embedded_app_server_for_picker(&app.config).await?;
+
+    app.handle_app_server_event(
+        &server,
+        AppServerEvent::ServerNotification(Box::new(ServerNotification::AccountUpdated(
+            AccountUpdatedNotification {
+                auth_mode: Some(AuthMode::Chatgpt),
+                plan_type: Some(PlanType::Pro),
+            },
+        ))),
+    )
+    .await;
+
+    assert_eq!(
+        app.chat_widget.status_account_display(),
+        Some(&StatusAccountDisplay::ChatGpt {
+            name: Some("contact@turtledev.net".to_string()),
+        })
+    );
+    server.shutdown().await?;
     Ok(())
 }
 

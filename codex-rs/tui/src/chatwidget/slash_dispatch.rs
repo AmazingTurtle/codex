@@ -340,6 +340,9 @@ impl ChatWidget {
                 self.open_model_popup();
                 self.defer_input_until_settings_applied();
             }
+            SlashCommand::Account => {
+                self.app_event_tx.send(AppEvent::OpenAccountManager);
+            }
             SlashCommand::Plan => {
                 self.apply_plan_slash_command();
             }
@@ -773,15 +776,72 @@ impl ChatWidget {
             SlashCommand::Pwd => {
                 self.add_error_message("Usage: /pwd".to_string());
             }
+            SlashCommand::Account => {
+                self.app_event_tx.send(AppEvent::SwitchChatgptAccount {
+                    account_id: trimmed.to_string(),
+                });
+            }
+            SlashCommand::Status => {
+                if trimmed.eq_ignore_ascii_case("all") {
+                    let request_id = self.next_status_refresh_request_id;
+                    self.next_status_refresh_request_id =
+                        self.next_status_refresh_request_id.wrapping_add(1);
+                    let refreshing_rate_limits = self.should_prefetch_rate_limits();
+                    self.add_all_account_status_output(request_id, refreshing_rate_limits);
+                    if refreshing_rate_limits {
+                        self.app_event_tx.send(AppEvent::RefreshRateLimits {
+                            origin: RateLimitRefreshOrigin::StatusCommand { request_id },
+                        });
+                    }
+                    self.app_event_tx.send(AppEvent::ShowChatgptAccountStatus {
+                        request: ChatgptAccountStatusRequest::AllAccountsStatusCard { request_id },
+                    });
+                } else {
+                    self.app_event_tx.send(AppEvent::ShowChatgptAccountStatus {
+                        request: ChatgptAccountStatusRequest::SelectedAccount {
+                            selector: trimmed.to_string(),
+                        },
+                    });
+                }
+            }
             SlashCommand::Usage => {
                 if self.ensure_usage_command_available() {
-                    match crate::analytics::TokenActivityView::parse(trimmed) {
-                        Some(view) => self
-                            .app_event_tx
-                            .send(AppEvent::OpenAnalytics { view: Some(view) }),
-                        None => self.add_error_message(
-                            "Usage: /usage [daily|weekly|cumulative]".to_string(),
-                        ),
+                    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("reset") {
+                        self.open_usage_menu();
+                        return;
+                    }
+                    let mut parts = trimmed.split_whitespace();
+                    let first = parts.next().unwrap_or("cumulative");
+                    let (view, selector) =
+                        if let Some(view) = tokens::TokenActivityView::parse(first) {
+                            (view, parts.next().map(str::to_string))
+                        } else {
+                            (
+                                tokens::TokenActivityView::Cumulative,
+                                Some(first.to_string()),
+                            )
+                        };
+                    if parts.next().is_some() {
+                        self.add_error_message(
+                            "Usage: /usage [daily|weekly|cumulative] [account], /usage <account>, or /usage reset".to_string(),
+                        );
+                    } else if selector.is_none() {
+                        self.app_event_tx.send(AppEvent::OpenAnalytics {
+                            view: Some(match view {
+                                tokens::TokenActivityView::Daily => {
+                                    crate::analytics::TokenActivityView::Daily
+                                }
+                                tokens::TokenActivityView::Weekly => {
+                                    crate::analytics::TokenActivityView::Weekly
+                                }
+                                tokens::TokenActivityView::Cumulative => {
+                                    crate::analytics::TokenActivityView::Cumulative
+                                }
+                            }),
+                        });
+                    } else {
+                        self.app_event_tx
+                            .send(AppEvent::ShowChatgptAccountUsage { view, selector });
                     }
                 }
             }
@@ -1246,6 +1306,7 @@ impl ChatWidget {
             | SlashCommand::Compact
             | SlashCommand::Review
             | SlashCommand::Model
+            | SlashCommand::Account
             | SlashCommand::Plan
             | SlashCommand::Goal
             | SlashCommand::Side

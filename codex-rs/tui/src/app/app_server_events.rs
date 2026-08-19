@@ -13,6 +13,7 @@ use crate::app_event::WindowsSandboxEnableMode;
 use crate::app_info::app_info_from_api;
 use crate::app_server_session::AppServerSession;
 use crate::app_server_session::status_account_display_from_auth_mode;
+use crate::status::StatusAccountDisplay;
 use codex_app_server_client::AppServerEvent;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::ClientRequest;
@@ -257,11 +258,24 @@ impl App {
                             | AuthMode::PersonalAccessToken
                     )
                 );
+                let mut status_account_display =
+                    status_account_display_from_auth_mode(notification.auth_mode);
+                if notification
+                    .auth_mode
+                    .is_some_and(AuthMode::has_chatgpt_account)
+                    && let Some(StatusAccountDisplay::ChatGpt { name }) =
+                        &mut status_account_display
+                {
+                    match app_server_client.active_chatgpt_account_name().await {
+                        Ok(active_name) => *name = active_name,
+                        Err(err) => tracing::warn!(
+                            error = %err,
+                            "failed to load the active account name for status"
+                        ),
+                    }
+                }
                 self.chat_widget.update_account_state(
-                    status_account_display_from_auth_mode(
-                        notification.auth_mode,
-                        notification.plan_type,
-                    ),
+                    status_account_display,
                     notification.plan_type,
                     notification
                         .auth_mode

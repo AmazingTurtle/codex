@@ -21,6 +21,25 @@ use crate::outbound_proxy::AuthRouteConfig;
 use crate::token_data::TokenData;
 
 const REVOKE_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
+const REVOKE_TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
+const REVOKE_MAX_CONCURRENCY: usize = 8;
+
+#[derive(Clone, Copy)]
+struct RevokeLimits {
+    request_timeout: Duration,
+    total_timeout: Duration,
+    max_concurrency: usize,
+}
+
+impl Default for RevokeLimits {
+    fn default() -> Self {
+        Self {
+            request_timeout: REVOKE_HTTP_TIMEOUT,
+            total_timeout: REVOKE_TOTAL_TIMEOUT,
+            max_concurrency: REVOKE_MAX_CONCURRENCY,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RevokeTokenKind {
@@ -56,13 +75,87 @@ pub(super) async fn revoke_auth_tokens(
     auth_dot_json: Option<&AuthDotJson>,
     auth_route_config: &AuthRouteConfig,
 ) -> Result<(), std::io::Error> {
-    let Some((token, kind)) = auth_dot_json.and_then(revocable_token) else {
+    revoke_auth_tokens_with_limits(auth_dot_json, auth_route_config, RevokeLimits::default()).await
+}
+
+async fn revoke_auth_tokens_with_limits(
+    auth_dot_json: Option<&AuthDotJson>,
+    auth_route_config: &AuthRouteConfig,
+    limits: RevokeLimits,
+) -> Result<(), std::io::Error> {
+    let Some(auth_dot_json) = auth_dot_json else {
         return Ok(());
     };
 
     let endpoint = revoke_token_endpoint();
     let client = create_default_auth_client(&endpoint, auth_route_config)?;
-    revoke_oauth_token(&client, endpoint.as_str(), token, kind, REVOKE_HTTP_TIMEOUT).await
+    let mut tokens = std::iter::once(auth_dot_json)
+        .chain(&auth_dot_json.accounts)
+        .filter_map(revocable_token)
+        .map(|(token, kind)| (token.to_string(), kind));
+    let max_concurrency = limits.max_concurrency.max(1);
+    let mut revocations = tokio::task::JoinSet::new();
+    for _ in 0..max_concurrency {
+        let Some((token, kind)) = tokens.next() else {
+            break;
+        };
+        let client = client.clone();
+        let endpoint = endpoint.clone();
+        revocations.spawn(async move {
+            revoke_oauth_token(
+                &client,
+                endpoint.as_str(),
+                &token,
+                kind,
+                limits.request_timeout,
+            )
+            .await
+        });
+    }
+
+    let mut failures = Vec::new();
+    let deadline = tokio::time::sleep(limits.total_timeout);
+    tokio::pin!(deadline);
+    while !revocations.is_empty() {
+        tokio::select! {
+            result = revocations.join_next() => {
+                match result {
+                    Some(Ok(Ok(()))) => {}
+                    Some(Ok(Err(err))) => failures.push(err.to_string()),
+                    Some(Err(err)) => failures.push(format!("token revocation task failed: {err}")),
+                    None => break,
+                }
+                if let Some((token, kind)) = tokens.next() {
+                    let client = client.clone();
+                    let endpoint = endpoint.clone();
+                    revocations.spawn(async move {
+                        revoke_oauth_token(
+                            &client,
+                            endpoint.as_str(),
+                            &token,
+                            kind,
+                            limits.request_timeout,
+                        )
+                        .await
+                    });
+                }
+            }
+            () = &mut deadline => {
+                let remaining = revocations.len() + tokens.count();
+                revocations.abort_all();
+                failures.push(format!(
+                    "timed out revoking {remaining} stored OAuth token(s) after {}s",
+                    limits.total_timeout.as_secs_f64()
+                ));
+                break;
+            }
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(failures.join("; ")))
+    }
 }
 
 fn revocable_token(auth_dot_json: &AuthDotJson) -> Option<(&str, RevokeTokenKind)> {

@@ -13,7 +13,7 @@ pub fn supported_models(models: Vec<ModelPreset>, include_hidden: bool) -> Vec<M
         .collect()
 }
 
-fn model_from_preset(preset: ModelPreset) -> Model {
+pub(crate) fn model_from_preset(preset: ModelPreset) -> Model {
     Model {
         id: preset.id.to_string(),
         model: preset.model.to_string(),

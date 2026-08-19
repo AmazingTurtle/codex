@@ -252,6 +252,8 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         workspace_roots: vec![cwd],
         workspace_roots_explicit: false,
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
+        chatgpt_account_selection: Default::default(),
+        session_chatgpt_account_binding: None,
         mcp_servers: Constrained::allow_any(HashMap::new()),
         mcp_enterprise_managed_auth: None,
         non_prefixed_mcp_tool_servers: None,

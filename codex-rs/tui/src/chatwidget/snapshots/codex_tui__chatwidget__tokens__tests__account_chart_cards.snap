@@ -1,0 +1,328 @@
+---
+source: tui/src/chatwidget/tokens_tests.rs
+expression: "rendered.join(\"\\n\")"
+---
+Active Daily width=32 loading
+/usage daily
+
+Account: Active account
+ Token activity
+   Loading...
+Active Daily width=100 loading
+/usage daily
+
+Account: Active account
+ Token activity
+   Loading...
+Active Daily width=32 loaded
+/usage daily
+
+Account: Active account
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K
+ Streak 2d · Longest task 1m
+
+      Mar       Apr     May    
+ Su □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Mo □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Tu □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ We □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Th □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Fr □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Sa □ □ □ □ □ □ □ □ □ □ □ □ □  
+
+   Less □ ■ ■ ■ ■ More
+   daily · weekly · cumulative
+Active Daily width=100 loaded
+/usage daily
+
+Account: Active account
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K · Streak 2d · Longest task 1m
+
+      Jul     Aug       Sep     Oct     Nov       Dec     Jan     Feb     Mar       Apr     May    
+ Su □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Mo □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Tu □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ We □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Th □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Fr □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Sa □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □  
+
+   Less □ ■ ■ ■ ■ More
+   daily · weekly · cumulative
+/usage daily
+
+Account: Active account
+ Token activity
+   Token activity unavailable
+Active Weekly width=32 loading
+/usage weekly
+
+Account: Active account
+ Token activity
+   Loading...
+Active Weekly width=100 loading
+/usage weekly
+
+Account: Active account
+ Token activity
+   Loading...
+Active Weekly width=32 loaded
+/usage weekly
+
+Account: Active account
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K
+ Streak 2d · Longest task 1m
+
+      Mar       Apr     May    
+max                           █
+                              █
+                              █
+                              █
+                              █
+                              █
+  0                           █
+
+   Each column = 1 week · tallest 4K
+   daily · weekly · cumulative
+Active Weekly width=100 loaded
+/usage weekly
+
+Account: Active account
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K · Streak 2d · Longest task 1m
+
+      Jul     Aug       Sep     Oct     Nov       Dec     Jan     Feb     Mar       Apr     May    
+max                                                                                               █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+  0                                                                                               █
+
+   Each column = 1 week · tallest 4K
+   daily · weekly · cumulative
+/usage weekly
+
+Account: Active account
+ Token activity
+   Token activity unavailable
+Active Cumulative width=32 loading
+/usage cumulative
+
+Account: Active account
+ Token activity
+   Loading...
+Active Cumulative width=100 loading
+/usage cumulative
+
+Account: Active account
+ Token activity
+   Loading...
+Active Cumulative width=32 loaded
+/usage cumulative
+
+Account: Active account
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K
+ Streak 2d · Longest task 1m
+
+      Mar       Apr     May    
+max                           █
+                              █
+                              █
+                              █
+                              █
+                              █
+  0                           █
+
+   Running total · top 4K
+   daily · weekly · cumulative
+Active Cumulative width=100 loaded
+/usage cumulative
+
+Account: Active account
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K · Streak 2d · Longest task 1m
+
+      Jul     Aug       Sep     Oct     Nov       Dec     Jan     Feb     Mar       Apr     May    
+max                                                                                               █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+  0                                                                                               █
+
+   Running total · top 4K
+   daily · weekly · cumulative
+/usage cumulative
+
+Account: Active account
+ Token activity
+   Token activity unavailable
+Stored { account_id: "other-account", label: "other@example.com" } Daily width=32 loading
+/usage daily other-account
+
+Account: other@example.com
+ Token activity
+   Loading...
+Stored { account_id: "other-account", label: "other@example.com" } Daily width=100 loading
+/usage daily other-account
+
+Account: other@example.com
+ Token activity
+   Loading...
+Stored { account_id: "other-account", label: "other@example.com" } Daily width=32 loaded
+/usage daily other-account
+
+Account: other@example.com
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K
+ Streak 2d · Longest task 1m
+
+      Mar       Apr     May    
+ Su □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Mo □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Tu □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ We □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Th □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Fr □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Sa □ □ □ □ □ □ □ □ □ □ □ □ □  
+
+   Less □ ■ ■ ■ ■ More
+   daily · weekly · cumulative
+Stored { account_id: "other-account", label: "other@example.com" } Daily width=100 loaded
+/usage daily other-account
+
+Account: other@example.com
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K · Streak 2d · Longest task 1m
+
+      Jul     Aug       Sep     Oct     Nov       Dec     Jan     Feb     Mar       Apr     May    
+ Su □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Mo □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Tu □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ We □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+ Th □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Fr □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ ■
+ Sa □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □  
+
+   Less □ ■ ■ ■ ■ More
+   daily · weekly · cumulative
+/usage daily other-account
+
+Account: other@example.com
+ Token activity
+   Token activity unavailable
+Stored { account_id: "other-account", label: "other@example.com" } Weekly width=32 loading
+/usage weekly other-account
+
+Account: other@example.com
+ Token activity
+   Loading...
+Stored { account_id: "other-account", label: "other@example.com" } Weekly width=100 loading
+/usage weekly other-account
+
+Account: other@example.com
+ Token activity
+   Loading...
+Stored { account_id: "other-account", label: "other@example.com" } Weekly width=32 loaded
+/usage weekly other-account
+
+Account: other@example.com
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K
+ Streak 2d · Longest task 1m
+
+      Mar       Apr     May    
+max                           █
+                              █
+                              █
+                              █
+                              █
+                              █
+  0                           █
+
+   Each column = 1 week · tallest 4K
+   daily · weekly · cumulative
+Stored { account_id: "other-account", label: "other@example.com" } Weekly width=100 loaded
+/usage weekly other-account
+
+Account: other@example.com
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K · Streak 2d · Longest task 1m
+
+      Jul     Aug       Sep     Oct     Nov       Dec     Jan     Feb     Mar       Apr     May    
+max                                                                                               █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+  0                                                                                               █
+
+   Each column = 1 week · tallest 4K
+   daily · weekly · cumulative
+/usage weekly other-account
+
+Account: other@example.com
+ Token activity
+   Token activity unavailable
+Stored { account_id: "other-account", label: "other@example.com" } Cumulative width=32 loading
+/usage cumulative other-account
+
+Account: other@example.com
+ Token activity
+   Loading...
+Stored { account_id: "other-account", label: "other@example.com" } Cumulative width=100 loading
+/usage cumulative other-account
+
+Account: other@example.com
+ Token activity
+   Loading...
+Stored { account_id: "other-account", label: "other@example.com" } Cumulative width=32 loaded
+/usage cumulative other-account
+
+Account: other@example.com
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K
+ Streak 2d · Longest task 1m
+
+      Mar       Apr     May    
+max                           █
+                              █
+                              █
+                              █
+                              █
+                              █
+  0                           █
+
+   Running total · top 4K
+   daily · weekly · cumulative
+Stored { account_id: "other-account", label: "other@example.com" } Cumulative width=100 loaded
+/usage cumulative other-account
+
+Account: other@example.com
+ Token activity   last 12 months
+ Lifetime 4K · Peak 3K · Streak 2d · Longest task 1m
+
+      Jul     Aug       Sep     Oct     Nov       Dec     Jan     Feb     Mar       Apr     May    
+max                                                                                               █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+                                                                                                  █
+  0                                                                                               █
+
+   Running total · top 4K
+   daily · weekly · cumulative
+/usage cumulative other-account
+
+Account: other@example.com
+ Token activity
+   Token activity unavailable

@@ -1,0 +1,14 @@
+---
+source: tui/src/chatwidget/tests/usage_picker_tests.rs
+expression: "render_bottom_popup(&chat, 80)"
+---
+  Usage
+  View usage or redeem a reset for an account.
+
+  Search accounts
+
+› Show cumulative usage
+  active@example.com (current)  Pro
+  other@example.com             Pro
+
+  enter select · esc back

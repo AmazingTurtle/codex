@@ -32,6 +32,8 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 
 pub(super) const THREAD_USAGE_FETCH_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(/*secs*/ 65);
+const TOKEN_ACTIVITY_FETCH_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(/*secs*/ 15);
 const RATE_LIMIT_RESET_REQUEST_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(/*secs*/ 15);
 const WORKSPACE_HEADLINE_FETCH_TIMEOUT: std::time::Duration =
@@ -109,8 +111,7 @@ impl App {
                         .and_then(|result| result.map_err(|err| err.to_string()))
                 }
                 RateLimitRefreshOrigin::StartupPrefetch { .. }
-                | RateLimitRefreshOrigin::StatusCommand { .. }
-                | RateLimitRefreshOrigin::UsageMenu { .. } => {
+                | RateLimitRefreshOrigin::StatusCommand { .. } => {
                     request.await.map_err(|err| err.to_string())
                 }
             };
@@ -120,6 +121,26 @@ impl App {
                 hard_stop_generation,
                 result,
             });
+        });
+    }
+
+    pub(super) fn refresh_token_activity(
+        &mut self,
+        app_server: &AppServerSession,
+        request_id: u64,
+        target: crate::chatwidget::TokenActivityTarget,
+    ) {
+        let request_handle = app_server.request_handle();
+        let app_event_tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = tokio::time::timeout(
+                TOKEN_ACTIVITY_FETCH_TIMEOUT,
+                fetch_account_token_activity(request_handle, target),
+            )
+            .await
+            .map_err(|_| "account/usage/read timed out in TUI".to_string())
+            .and_then(|result| result.map_err(|err| err.to_string()));
+            app_event_tx.send(AppEvent::TokenActivityLoaded { request_id, result });
         });
     }
 
@@ -153,6 +174,7 @@ impl App {
         request_id: u64,
         idempotency_key: String,
         credit_id: Option<String>,
+        account_id: Option<String>,
     ) {
         let request_handle = app_server.request_handle();
         let app_event_tx = self.app_event_tx.clone();
@@ -163,12 +185,14 @@ impl App {
                     request_handle,
                     idempotency_key.clone(),
                     credit_id.clone(),
+                    account_id.clone(),
                 ),
             )
             .await
             .map_err(|_| "account/rateLimitResetCredit/consume timed out in TUI".to_string())
             .and_then(|result| result.map_err(|err| err.to_string()));
             app_event_tx.send(AppEvent::RateLimitResetCreditConsumed {
+                account_id,
                 request_id,
                 idempotency_key,
                 credit_id,
@@ -812,6 +836,48 @@ pub(super) async fn fetch_account_rate_limits(
     result.wrap_err("account/rateLimits/read failed in TUI")
 }
 
+pub(super) async fn fetch_account_token_activity(
+    request_handle: AppServerRequestHandle,
+    target: crate::chatwidget::TokenActivityTarget,
+) -> Result<codex_app_server_protocol::GetAccountTokenUsageResponse> {
+    let request_id = RequestId::String(format!("account-token-usage-{}", Uuid::new_v4()));
+    if let crate::chatwidget::TokenActivityTarget::Stored { account_id, .. } = target {
+        let response: codex_app_server_protocol::AccountUsageReadManyResponse = request_handle
+            .request_typed(ClientRequest::AccountUsageReadMany {
+                request_id,
+                params: codex_app_server_protocol::AccountReadManyParams {
+                    account_ids: Some(vec![account_id.clone()]),
+                },
+            })
+            .await?;
+        let entry = response
+            .data
+            .into_iter()
+            .find(|entry| entry.account.account_id == account_id)
+            .ok_or_else(|| color_eyre::eyre::eyre!("Selected account is unavailable"))?;
+        let usage = entry.usage.ok_or_else(|| {
+            color_eyre::eyre::eyre!(
+                entry
+                    .error
+                    .unwrap_or_else(|| "Token activity unavailable".to_string())
+            )
+        })?;
+        return Ok(GetAccountTokenUsageResponse {
+            summary: usage.summary,
+            daily_usage_buckets: usage.daily_usage_buckets,
+            thread_usage: None,
+        });
+    }
+
+    request_handle
+        .request_typed(ClientRequest::GetAccountTokenUsage {
+            request_id,
+            params: None,
+        })
+        .await
+        .wrap_err("account/usage/read failed in TUI")
+}
+
 pub(super) async fn fetch_thread_usage(
     request_handle: AppServerRequestHandle,
     thread_id: ThreadId,
@@ -836,12 +902,14 @@ pub(super) async fn consume_rate_limit_reset_credit_request(
     request_handle: AppServerRequestHandle,
     idempotency_key: String,
     credit_id: Option<String>,
+    account_id: Option<String>,
 ) -> Result<ConsumeAccountRateLimitResetCreditResponse> {
     let request_id = RequestId::String(format!("consume-rate-limit-reset-{}", Uuid::new_v4()));
     request_handle
         .request_typed(ClientRequest::ConsumeAccountRateLimitResetCredit {
             request_id,
             params: ConsumeAccountRateLimitResetCreditParams {
+                account_id,
                 idempotency_key,
                 credit_id,
             },

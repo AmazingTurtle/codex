@@ -31,7 +31,6 @@ use crate::service_tier_resolution;
 use crate::session_state::MessageHistoryMetadata;
 use crate::session_state::ThreadSessionState;
 use crate::status::StatusAccountDisplay;
-use crate::status::plan_type_display_name;
 use crate::terminal_visualization_instructions::with_terminal_visualization_instructions;
 use codex_app_server_client::AppServerClient;
 use codex_app_server_client::AppServerEvent;
@@ -39,6 +38,17 @@ use codex_app_server_client::AppServerPath;
 use codex_app_server_client::AppServerRequestHandle;
 use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::Account;
+use codex_app_server_protocol::AccountListParams;
+use codex_app_server_protocol::AccountListResponse;
+use codex_app_server_protocol::AccountModelsReadManyResponse;
+use codex_app_server_protocol::AccountRateLimitsReadManyParams;
+use codex_app_server_protocol::AccountRateLimitsReadManyResponse;
+use codex_app_server_protocol::AccountReadManyParams;
+use codex_app_server_protocol::AccountRemoveParams;
+use codex_app_server_protocol::AccountRemoveResponse;
+use codex_app_server_protocol::AccountSwitchParams;
+use codex_app_server_protocol::AccountSwitchResponse;
+use codex_app_server_protocol::AccountUsageReadManyResponse;
 use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::ClientRequest;
@@ -54,6 +64,8 @@ use codex_app_server_protocol::GetAccountParams;
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::JSONRPCErrorError;
+use codex_app_server_protocol::LoginAccountParams;
+use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::LogoutAccountResponse;
 use codex_app_server_protocol::MemoryResetResponse;
 use codex_app_server_protocol::Model as ApiModel;
@@ -686,10 +698,7 @@ impl AppServerSession {
                 (
                     email.clone(),
                     Some(TelemetryAuthMode::Chatgpt),
-                    Some(StatusAccountDisplay::ChatGpt {
-                        email,
-                        plan: Some(plan_type_display_name(plan_type)),
-                    }),
+                    Some(StatusAccountDisplay::ChatGpt { name: email }),
                     Some(plan_type),
                     feedback_audience,
                     true,
@@ -700,6 +709,12 @@ impl AppServerSession {
             }
             None => (None, None, None, None, FeedbackAudience::External, false),
         };
+        let mut status_account_display = status_account_display;
+        if let Some(StatusAccountDisplay::ChatGpt { name: None }) = &status_account_display
+            && let Ok(Some(name)) = self.active_chatgpt_account_name().await
+        {
+            status_account_display = Some(StatusAccountDisplay::ChatGpt { name: Some(name) });
+        }
         Ok(AppServerBootstrap {
             duration: started_at.elapsed(),
             account_email,
@@ -1562,6 +1577,144 @@ impl AppServerSession {
         Ok(())
     }
 
+    pub(crate) async fn list_chatgpt_accounts(&mut self) -> Result<AccountListResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::AccountList {
+                request_id,
+                params: AccountListParams {
+                    cursor: None,
+                    limit: None,
+                },
+            })
+            .await
+            .wrap_err("account/list failed in TUI")
+    }
+
+    pub(crate) async fn active_chatgpt_account_name(&self) -> Result<Option<String>> {
+        let response: AccountListResponse = tokio::time::timeout(
+            std::time::Duration::from_secs(/*secs*/ 3),
+            self.request_handle()
+                .request_typed(ClientRequest::AccountList {
+                    request_id: RequestId::String(format!("status-account-{}", Uuid::new_v4())),
+                    params: AccountListParams {
+                        cursor: None,
+                        limit: None,
+                    },
+                }),
+        )
+        .await
+        .wrap_err("timed out while reading the active account")?
+        .wrap_err("account/list failed while reading the active account")?;
+        Ok(response
+            .data
+            .into_iter()
+            .find(|account| account.is_active)
+            .map(|account| account.email.unwrap_or(account.account_id)))
+    }
+
+    pub(crate) async fn start_browser_chatgpt_login(&mut self) -> Result<LoginAccountResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::LoginAccount {
+                request_id,
+                params: LoginAccountParams::Chatgpt {
+                    codex_streamlined_login: false,
+                    use_hosted_login_success_page: false,
+                    app_brand: None,
+                },
+            })
+            .await
+            .wrap_err("account/login/start browser flow failed in TUI")
+    }
+
+    pub(crate) async fn start_device_code_chatgpt_login(&mut self) -> Result<LoginAccountResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::LoginAccount {
+                request_id,
+                params: LoginAccountParams::ChatgptDeviceCode,
+            })
+            .await
+            .wrap_err("account/login/start device-code flow failed in TUI")
+    }
+
+    pub(crate) async fn read_chatgpt_account_rate_limits(
+        &mut self,
+        account_ids: Option<Vec<String>>,
+    ) -> Result<AccountRateLimitsReadManyResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed::<AccountRateLimitsReadManyResponse>(
+                ClientRequest::AccountRateLimitsReadMany {
+                    request_id,
+                    params: AccountRateLimitsReadManyParams {
+                        account_ids,
+                        supports_luna_reserve: true,
+                        exclude_reset_credit_details: false,
+                    },
+                },
+            )
+            .await
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn read_chatgpt_account_usage(
+        &mut self,
+        account_ids: Option<Vec<String>>,
+    ) -> Result<AccountUsageReadManyResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed::<AccountUsageReadManyResponse>(ClientRequest::AccountUsageReadMany {
+                request_id,
+                params: AccountReadManyParams { account_ids },
+            })
+            .await
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn read_chatgpt_account_models(
+        &mut self,
+        account_ids: Option<Vec<String>>,
+    ) -> Result<AccountModelsReadManyResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed::<AccountModelsReadManyResponse>(ClientRequest::AccountModelsReadMany {
+                request_id,
+                params: AccountReadManyParams { account_ids },
+            })
+            .await
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn switch_chatgpt_account(
+        &mut self,
+        account_id: String,
+    ) -> Result<AccountSwitchResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::AccountSwitch {
+                request_id,
+                params: AccountSwitchParams { account_id },
+            })
+            .await
+            .wrap_err("account/switch failed in TUI")
+    }
+
+    pub(crate) async fn remove_chatgpt_account(
+        &mut self,
+        account_id: String,
+    ) -> Result<AccountRemoveResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::AccountRemove {
+                request_id,
+                params: AccountRemoveParams { account_id },
+            })
+            .await
+            .wrap_err("account/remove failed in TUI")
+    }
+
     pub(crate) async fn thread_unsubscribe(&mut self, thread_id: ThreadId) -> Result<()> {
         let request_id = self.next_request_id();
         let _: ThreadUnsubscribeResponse = self
@@ -1762,17 +1915,13 @@ pub(crate) async fn start_thread_with_request_handle(
 
 pub(crate) fn status_account_display_from_auth_mode(
     auth_mode: Option<AuthMode>,
-    plan_type: Option<codex_protocol::account::PlanType>,
 ) -> Option<StatusAccountDisplay> {
     match auth_mode {
         Some(AuthMode::ApiKey) => Some(StatusAccountDisplay::ApiKey),
         Some(AuthMode::Chatgpt)
         | Some(AuthMode::ChatgptAuthTokens)
         | Some(AuthMode::AgentIdentity)
-        | Some(AuthMode::PersonalAccessToken) => Some(StatusAccountDisplay::ChatGpt {
-            email: None,
-            plan: plan_type.map(plan_type_display_name),
-        }),
+        | Some(AuthMode::PersonalAccessToken) => Some(StatusAccountDisplay::ChatGpt { name: None }),
         Some(AuthMode::Headers)
         | Some(AuthMode::BedrockApiKey)
         | Some(AuthMode::BedrockAccessKeys) => None,
@@ -4275,44 +4424,5 @@ mod tests {
         .expect("session should map");
 
         assert_eq!(session.forked_from_id, Some(forked_from_id));
-    }
-
-    #[test]
-    fn status_account_display_from_auth_mode_uses_remapped_plan_labels() {
-        let business = status_account_display_from_auth_mode(
-            Some(AuthMode::Chatgpt),
-            Some(codex_protocol::account::PlanType::EnterpriseCbpUsageBased),
-        );
-        assert!(matches!(
-            business,
-            Some(StatusAccountDisplay::ChatGpt {
-                email: None,
-                plan: Some(ref plan),
-            }) if plan == "Enterprise"
-        ));
-
-        let team = status_account_display_from_auth_mode(
-            Some(AuthMode::Chatgpt),
-            Some(codex_protocol::account::PlanType::SelfServeBusinessUsageBased),
-        );
-        assert!(matches!(
-            team,
-            Some(StatusAccountDisplay::ChatGpt {
-                email: None,
-                plan: Some(ref plan),
-            }) if plan == "Business"
-        ));
-
-        let business_prolite = status_account_display_from_auth_mode(
-            Some(AuthMode::Chatgpt),
-            Some(codex_protocol::account::PlanType::SelfServeBusinessProLite),
-        );
-        assert!(matches!(
-            business_prolite,
-            Some(StatusAccountDisplay::ChatGpt {
-                email: None,
-                plan: Some(ref plan),
-            }) if plan == "Business Premium"
-        ));
     }
 }

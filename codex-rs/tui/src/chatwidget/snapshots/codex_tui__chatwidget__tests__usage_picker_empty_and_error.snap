@@ -1,0 +1,22 @@
+---
+source: tui/src/chatwidget/tests/usage_picker_tests.rs
+expression: "states.join(\"\\n---\\n\")"
+---
+  Usage
+  No stored accounts. Use /account to add one.
+
+  Search accounts
+
+› Show cumulative usage
+
+  enter select · esc back
+---
+  Usage
+  Couldn't load accounts: service unavailable
+
+  Search accounts
+
+› Show cumulative usage
+  Try again
+
+  enter select · esc back

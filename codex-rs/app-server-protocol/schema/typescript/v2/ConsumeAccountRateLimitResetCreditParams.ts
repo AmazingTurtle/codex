@@ -4,6 +4,10 @@
 
 export type ConsumeAccountRateLimitResetCreditParams = {
 /**
+ * Stored ChatGPT account to redeem for. When omitted, uses the active account.
+ */
+accountId?: string | null,
+/**
  * Identifies one logical reset attempt. A UUID is recommended; reuse the same value when
  * retrying that attempt.
  */
