@@ -103,6 +103,11 @@ async fn write_linked_worktree_pointer(
         worktree_root.join(".git"),
         format!("gitdir: {}\n", worktree_git_dir.display()),
     )
+    .await?;
+    tokio::fs::write(
+        worktree_git_dir.join("gitdir"),
+        format!("{}\n", worktree_root.join(".git").display()),
+    )
     .await
 }
 
