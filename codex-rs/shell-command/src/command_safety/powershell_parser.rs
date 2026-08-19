@@ -7,6 +7,9 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::ErrorKind;
 use std::io::Write;
+#[cfg(windows)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::Child;
 use std::process::ChildStdin;
 use std::process::ChildStdout;
@@ -56,12 +59,16 @@ fn parse_with_cached_process(
     executable: &str,
     script: &str,
 ) -> PowershellParseOutcome {
+    let Some(parser_executable) = trusted_parser_executable(executable) else {
+        return PowershellParseOutcome::Failed;
+    };
+
     // `powershell.exe` and `pwsh.exe` do not accept the same language surface, so each
     // executable keeps its own parser process and request stream.
-    let parser_key = executable.to_string();
+    let parser_key = parser_executable.to_string_lossy().to_string();
     for attempt in 0..=1 {
         if !parser_processes.contains_key(&parser_key) {
-            match PowershellParserProcess::spawn(executable) {
+            match PowershellParserProcess::spawn(&parser_executable) {
                 Ok(process) => {
                     parser_processes.insert(parser_key.clone(), process);
                 }
@@ -88,6 +95,65 @@ fn parse_with_cached_process(
     PowershellParseOutcome::Failed
 }
 
+#[cfg(windows)]
+fn trusted_parser_executable(executable: &str) -> Option<PathBuf> {
+    let executable_name = windows_file_name(executable)?.to_ascii_lowercase();
+    let trusted_path = match executable_name.as_str() {
+        "powershell" | "powershell.exe" => trusted_windows_powershell_path()?,
+        "pwsh" | "pwsh.exe" => trusted_pwsh_path()?,
+        _ => return None,
+    };
+
+    if has_windows_path_separator(executable) && !same_windows_path(executable, &trusted_path) {
+        return None;
+    }
+
+    Some(trusted_path)
+}
+
+#[cfg(not(windows))]
+fn trusted_parser_executable(executable: &str) -> Option<PathBuf> {
+    Some(PathBuf::from(executable))
+}
+
+#[cfg(windows)]
+fn trusted_windows_powershell_path() -> Option<PathBuf> {
+    let system_root = std::env::var_os("SystemRoot")?;
+    let path = PathBuf::from(system_root)
+        .join("System32")
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
+    path.is_file().then_some(path)
+}
+
+#[cfg(windows)]
+fn trusted_pwsh_path() -> Option<PathBuf> {
+    let path = PathBuf::from(r"C:\Program Files\PowerShell\7\pwsh.exe");
+    path.is_file().then_some(path)
+}
+
+#[cfg(windows)]
+fn windows_file_name(path: &str) -> Option<&str> {
+    path.rsplit(|ch| ch == '\\' || ch == '/')
+        .next()
+        .filter(|name| !name.is_empty())
+}
+
+#[cfg(windows)]
+fn has_windows_path_separator(path: &str) -> bool {
+    path.contains(|ch| ch == '\\' || ch == '/')
+}
+
+#[cfg(windows)]
+fn same_windows_path(path: &str, trusted_path: &Path) -> bool {
+    let path = Path::new(path);
+    path.is_absolute()
+        && path
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&trusted_path.to_string_lossy())
+}
+
 fn encode_powershell_base64(script: &str) -> String {
     let mut utf16 = Vec::with_capacity(script.len() * 2);
     for unit in script.encode_utf16() {
@@ -112,7 +178,7 @@ struct PowershellParserProcess {
 }
 
 impl PowershellParserProcess {
-    fn spawn(executable: &str) -> std::io::Result<Self> {
+    fn spawn(executable: impl AsRef<std::ffi::OsStr>) -> std::io::Result<Self> {
         let mut command = Command::new(executable);
         command
             .args([
@@ -271,6 +337,32 @@ mod tests {
     use super::*;
     use crate::powershell::try_find_powershell_executable_blocking;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn parser_rejects_relative_powershell_executable_paths() {
+        assert_eq!(
+            trusted_parser_executable(r".\powershell.exe"),
+            None,
+            "relative PowerShell wrappers are not trusted parser executables",
+        );
+        assert_eq!(
+            trusted_parser_executable(r"subdir\pwsh.exe"),
+            None,
+            "repository-controlled pwsh wrappers are not trusted parser executables",
+        );
+    }
+
+    #[test]
+    fn parser_resolves_bare_powershell_names_to_protected_paths() {
+        let Some(powershell) = trusted_parser_executable("powershell.exe") else {
+            return;
+        };
+        assert!(
+            powershell.is_absolute(),
+            "bare powershell.exe must resolve to a protected absolute path: {powershell:?}",
+        );
+        assert_ne!(powershell, PathBuf::from("powershell.exe"));
+    }
 
     #[test]
     fn parser_process_handles_multiple_requests() {
