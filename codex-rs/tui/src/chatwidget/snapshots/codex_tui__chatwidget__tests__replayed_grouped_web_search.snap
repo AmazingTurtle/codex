@@ -1,0 +1,7 @@
+---
+source: tui/src/chatwidget/tests/tool_flow.rs
+expression: "lines_to_single_string(&cells[0])"
+---
+• Searched the web
+  └ Search rust ratatui wrapping
+    Open a web page

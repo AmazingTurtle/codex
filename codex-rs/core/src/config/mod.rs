@@ -50,6 +50,7 @@ use codex_config::types::Notice;
 use codex_config::types::OAuthCredentialsStoreMode;
 use codex_config::types::ResumeCwdMode;
 use codex_config::types::SessionPickerViewMode;
+use codex_config::types::ToolCallDisplay;
 use codex_config::types::ToolSuggestConfig;
 use codex_config::types::ToolSuggestDisabledTool;
 use codex_config::types::ToolSuggestDiscoverable;
@@ -803,6 +804,8 @@ pub struct Config {
 
     /// Right-click text paste fallback for the fullscreen TUI.
     pub tui_right_click_paste: codex_config::types::RightClickPaste,
+    /// Controls how tool calls are rendered in normal TUI history.
+    pub tui_tool_call_display: ToolCallDisplay,
 
     /// Start the TUI in the specified collaboration mode (plan/default).
 
@@ -4567,6 +4570,11 @@ impl Config {
                 .tui
                 .as_ref()
                 .map(|tui| tui.right_click_paste)
+                .unwrap_or_default(),
+            tui_tool_call_display: cfg
+                .tui
+                .as_ref()
+                .map(|t| t.tool_call_display)
                 .unwrap_or_default(),
             tui_alternate_screen: cfg
                 .tui
