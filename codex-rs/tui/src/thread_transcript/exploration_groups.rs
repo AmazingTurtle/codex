@@ -15,7 +15,7 @@ pub(crate) fn join_exploration_groups(
     let older = older.as_any().downcast_ref::<ExecCell>()?;
     let newer = newer.as_any().downcast_ref::<ExecCell>()?;
     let items = adjacent_items(older, newer, turns)?;
-    let mut group = completed_group(items)?;
+    let mut group = completed_group(items, older.tool_call_display())?;
     group.group.details = newer.group.details.clone();
     group
         .group
@@ -37,7 +37,7 @@ pub(crate) fn older_exploration_group(
         .take(older.group.calls.len())
         .cloned()
         .collect::<Vec<_>>();
-    let mut group = completed_group(&older_items)?;
+    let mut group = completed_group(&older_items, older.tool_call_display())?;
     group.group.details = older.group.details.clone();
     Some(group)
 }
@@ -58,13 +58,16 @@ fn adjacent_items<'a>(
     super::computer_groups::adjacent_activity_items(&ids, turns)
 }
 
-pub(super) fn completed_group(items: &[ThreadItem]) -> Option<ExecCell> {
+pub(super) fn completed_group(
+    items: &[ThreadItem],
+    tool_call_display: codex_config::types::ToolCallDisplay,
+) -> Option<ExecCell> {
     let mut group: Option<ExecCell> = None;
     for item in items {
         if matches!(item, ThreadItem::Reasoning { .. }) {
             continue;
         }
-        let call = CommandHistory::from_item(item.clone())?.into_cell();
+        let call = CommandHistory::from_item(item.clone())?.into_cell(tool_call_display);
         if !call.is_exploring_cell() {
             return None;
         }

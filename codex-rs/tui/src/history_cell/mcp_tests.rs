@@ -192,7 +192,7 @@ fn mcp_preview_shares_one_limit_across_blocks_and_preserves_transcript() {
 
 #[test]
 fn code_mode_output_shares_a_row_budget_across_blocks() {
-    let mut cell = new_active_mcp_tool_call(
+    let mut cell = new_active_mcp_tool_call_with_display(
         "browser-call".to_string(),
         McpInvocation {
             server: "node_repl".to_string(),
@@ -200,6 +200,7 @@ fn code_mode_output_shares_a_row_budget_across_blocks() {
             arguments: Some(json!({"title": "Inspect page", "code": "await tab.snapshot()"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     cell.complete(
         Duration::ZERO,
@@ -235,7 +236,7 @@ fn code_mode_output_shares_a_row_budget_across_blocks() {
 
 #[test]
 fn code_mode_output_preserves_trailing_failure_diagnostics_in_transcript() {
-    let mut cell = new_active_mcp_tool_call(
+    let mut cell = new_active_mcp_tool_call_with_display(
         "browser-error".to_string(),
         McpInvocation {
             server: "node_repl".to_string(),
@@ -243,6 +244,7 @@ fn code_mode_output_preserves_trailing_failure_diagnostics_in_transcript() {
             arguments: Some(json!({"title": "Inspect page"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     cell.complete(
         Duration::ZERO,
@@ -293,7 +295,7 @@ fn code_mode_output_row_budget_applies_after_wrapping_and_to_errors() {
             }),
             Err(output.clone()),
         ] {
-            let mut cell = new_active_mcp_tool_call(
+            let mut cell = new_active_mcp_tool_call_with_display(
                 "browser-call".to_string(),
                 McpInvocation {
                     server: server.to_string(),
@@ -301,6 +303,7 @@ fn code_mode_output_row_budget_applies_after_wrapping_and_to_errors() {
                     arguments: Some(json!({"title": "Inspect"})),
                 },
                 /*animations_enabled*/ false,
+                ToolCallDisplay::Summary,
             );
             cell.complete(Duration::ZERO, completion);
             for width in [20, 40, 80] {
@@ -402,7 +405,7 @@ fn projected_image_marker_still_requires_a_complete_image() {
 
 #[test]
 fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
-    let mut cell = new_active_mcp_tool_call(
+    let mut cell = new_active_mcp_tool_call_with_display(
         "call-code-mode".to_string(),
         McpInvocation {
             server: "node_repl".to_string(),
@@ -410,6 +413,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
             arguments: Some(json!({"title": "Inspect results"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     let unknown =
         json!({"type": "future_block", "text": "Script completed\nOutput:\nunknown-side output"});
@@ -488,7 +492,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
         ],
     );
 
-    let mut cua_cell = new_active_mcp_tool_call(
+    let mut cua_cell = new_active_mcp_tool_call_with_display(
         "call-cua-repl".to_string(),
         McpInvocation {
             server: "cua_repl".to_string(),
@@ -496,6 +500,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
             arguments: None,
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     cua_cell.complete(Duration::ZERO, Ok(tool_result));
     let display = cua_cell
@@ -532,7 +537,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
 #[test]
 fn titled_image_call_keeps_error_and_full_title_when_narrow() {
     let title = "Inspect a very long screenshot title 🦀";
-    let mut cell = new_active_mcp_tool_call(
+    let mut cell = new_active_mcp_tool_call_with_display(
         "call".into(),
         McpInvocation {
             server: "node_repl".into(),
@@ -540,6 +545,7 @@ fn titled_image_call_keeps_error_and_full_title_when_narrow() {
             arguments: Some(json!({"title": title})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     assert_eq!(
         cell.display_lines(/*width*/ 80)[0].to_string(),

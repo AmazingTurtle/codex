@@ -860,6 +860,17 @@ impl QuickDial {
     }
 }
 
+/// Controls how tool calls are presented in normal TUI history.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToolCallDisplay {
+    /// Show the complete invocation and result for each tool call.
+    #[default]
+    Individual,
+    /// Group related tool activity into compact summaries.
+    Summary,
+}
+
 /// Collection of settings that are specific to the TUI.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -947,6 +958,11 @@ pub struct Tui {
     /// This controls the fullscreen fallback, not the terminal's own paste binding.
     #[serde(default)]
     pub right_click_paste: RightClickPaste,
+
+    /// Controls how tool calls are rendered in normal conversation history.
+    /// Defaults to `individual`.
+    #[serde(default, alias = "code_mode_tool_call_display")]
+    pub tool_call_display: ToolCallDisplay,
 
     /// Controls whether the TUI uses the terminal's alternate screen buffer.
     ///

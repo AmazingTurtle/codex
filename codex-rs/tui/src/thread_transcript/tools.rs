@@ -8,17 +8,18 @@ use std::time::Duration;
 
 use crate::exec_cell::CommandOutput;
 use crate::exec_cell::ExecCell;
-use crate::exec_cell::new_active_exec_command;
+use crate::exec_cell::new_active_exec_command_with_display;
 use crate::history_cell::McpInvocation;
 use crate::history_cell::McpToolCallCell;
 use crate::history_cell::PlainHistoryCell;
-use crate::history_cell::new_active_mcp_tool_call;
+use crate::history_cell::new_active_mcp_tool_call_with_display;
 use codex_app_server_protocol::CollabAgentTool;
 use codex_app_server_protocol::CollabAgentToolCallStatus;
 use codex_app_server_protocol::CommandExecutionSource;
 use codex_app_server_protocol::CommandExecutionStatus;
 use codex_app_server_protocol::McpToolCallStatus;
 use codex_app_server_protocol::ThreadItem;
+use codex_config::types::ToolCallDisplay;
 use codex_protocol::mcp::CallToolResult;
 use codex_protocol::parse_command::ParsedCommand;
 use ratatui::style::Stylize as _;
@@ -168,15 +169,16 @@ impl CommandHistory {
         })
     }
 
-    pub(crate) fn into_cell(self) -> ExecCell {
+    pub(crate) fn into_cell(self, tool_call_display: ToolCallDisplay) -> ExecCell {
         let output = CommandOutput::new(self.exit_code, self.aggregated_output);
-        let mut cell = new_active_exec_command(
+        let mut cell = new_active_exec_command_with_display(
             self.id.clone(),
             self.command,
             self.parsed,
             self.source,
             /*interaction_input*/ None,
             /*animations_enabled*/ false,
+            tool_call_display,
         );
         let completed = cell.complete_call(&self.id, output, self.duration);
         debug_assert!(completed, "new exec cell should contain {}", self.id);
@@ -235,9 +237,13 @@ impl McpHistory {
         })
     }
 
-    pub(crate) fn into_cell(self) -> McpToolCallCell {
-        let mut cell =
-            new_active_mcp_tool_call(self.id, self.invocation, /*animations_enabled*/ false);
+    pub(crate) fn into_cell(self, tool_call_display: ToolCallDisplay) -> McpToolCallCell {
+        let mut cell = new_active_mcp_tool_call_with_display(
+            self.id,
+            self.invocation,
+            /*animations_enabled*/ false,
+            tool_call_display,
+        );
         cell.complete(self.duration, self.result);
         cell
     }
