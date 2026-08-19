@@ -28,7 +28,17 @@ pub(crate) async fn build_memory_tool_developer_instructions(
     codex_home: &AbsolutePathBuf,
 ) -> Option<String> {
     let base_path = codex_home.join("memories");
+    let metadata = fs::symlink_metadata(&base_path).await.ok()?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return None;
+    }
+
     let memory_summary_path = base_path.join("memory_summary.md");
+    let metadata = fs::symlink_metadata(&memory_summary_path).await.ok()?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return None;
+    }
+
     let memory_summary = fs::read_to_string(&memory_summary_path)
         .await
         .ok()?
