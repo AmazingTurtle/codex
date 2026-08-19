@@ -51,6 +51,7 @@ use sha2::Sha256;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -998,14 +999,26 @@ fn write_fallback_file(store: &FallbackFile) -> Result<()> {
     }
 
     let serialized = serde_json::to_string(store)?;
-    fs::write(&path, serialized)?;
+
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(false);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+
+    let mut file = options.open(&path)?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let perms = fs::Permissions::from_mode(0o600);
-        fs::set_permissions(&path, perms)?;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
     }
+
+    file.set_len(0)?;
+    file.write_all(serialized.as_bytes())?;
 
     Ok(())
 }
@@ -1228,6 +1241,59 @@ mod tests {
             tokens.token_response.0.access_token().secret().as_str()
         );
         assert!(store.saved_value(&key).is_none());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fallback_file_is_private_while_written() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::Barrier;
+        use std::sync::atomic::AtomicBool;
+        use std::sync::atomic::Ordering;
+
+        let _env = TempCodexHome::new();
+        let path = super::fallback_file_path()?;
+        let readable = Arc::new(AtomicBool::new(false));
+        let complete = Arc::new(AtomicBool::new(false));
+        let ready = Arc::new(Barrier::new(2));
+
+        let observed = Arc::clone(&readable);
+        let done = Arc::clone(&complete);
+        let observer_ready = Arc::clone(&ready);
+        let target = path.clone();
+        let watcher = std::thread::spawn(move || {
+            observer_ready.wait();
+            while !done.load(Ordering::Relaxed) {
+                if fs::metadata(&target).is_ok_and(|metadata| {
+                    metadata.permissions().mode() & 0o077 != 0
+                }) {
+                    observed.store(true, Ordering::Relaxed);
+                    return;
+                }
+                std::hint::spin_loop();
+            }
+        });
+
+        let mut tokens = sample_tokens();
+        tokens
+            .token_response
+            .0
+            .set_access_token(AccessToken::new(
+                "synthetic-bounty-canary-".repeat(400_000),
+            ));
+
+        ready.wait();
+        let result = super::save_oauth_tokens_to_file(&tokens);
+        complete.store(true, Ordering::Relaxed);
+        watcher.join().expect("watcher should not panic");
+
+        result?;
+        assert!(
+            !readable.load(Ordering::Relaxed),
+            "fallback file should never be group- or world-readable"
+        );
+        assert_eq!(fs::metadata(path)?.permissions().mode() & 0o777, 0o600);
         Ok(())
     }
 
