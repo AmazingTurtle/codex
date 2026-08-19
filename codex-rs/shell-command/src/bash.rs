@@ -176,6 +176,9 @@ pub fn parse_shell_lc_single_command_prefix(command: &[String]) -> Option<Vec<St
     }
 
     let command_node = find_single_command_node(root)?;
+    if !heredoc_bodies_are_safe(root, script) {
+        return None;
+    }
     parse_heredoc_command_words(command_node, script)
 }
 
@@ -358,6 +361,68 @@ fn find_single_command_node(root: Node<'_>) -> Option<Node<'_>> {
         }
     }
     single_command
+}
+
+fn heredoc_bodies_are_safe(root: Node<'_>, src: &str) -> bool {
+    let mut stack = vec![root];
+    let mut redirects = Vec::new();
+    let mut bodies = Vec::new();
+
+    while let Some(node) = stack.pop() {
+        match node.kind() {
+            "heredoc_redirect" => {
+                let is_quoted = node
+                    .utf8_text(src.as_bytes())
+                    .is_ok_and(heredoc_redirect_delimiter_is_quoted);
+                redirects.push((node.start_byte(), is_quoted));
+            }
+            "heredoc_body" | "simple_heredoc_body" => {
+                bodies.push((node.start_byte(), node));
+            }
+            _ => {}
+        }
+
+        let mut cursor = node.walk();
+        for child in node.named_children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+
+    redirects.sort_by_key(|(start, _)| *start);
+    bodies.sort_by_key(|(start, _)| *start);
+
+    for (index, (_, body)) in bodies.into_iter().enumerate() {
+        if body
+            .utf8_text(src.as_bytes())
+            .is_ok_and(contains_unescaped_backtick)
+            && !redirects
+                .get(index)
+                .is_some_and(|(_, is_quoted)| *is_quoted)
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn heredoc_redirect_delimiter_is_quoted(text: &str) -> bool {
+    text.contains(['\'', '"', '\\'])
+}
+
+fn contains_unescaped_backtick(text: &str) -> bool {
+    let mut preceding_backslashes = 0;
+    for byte in text.bytes() {
+        if byte == b'\\' {
+            preceding_backslashes += 1;
+            continue;
+        }
+        if byte == b'`' && preceding_backslashes % 2 == 0 {
+            return true;
+        }
+        preceding_backslashes = 0;
+    }
+    false
 }
 
 fn has_named_descendant_kind(node: Node<'_>, kind: &str) -> bool {
@@ -787,5 +852,41 @@ mod tests {
             "python3 $((1<<2)) <<'PY'\nprint('hello')\nPY".to_string(),
         ];
         assert_eq!(parse_shell_lc_single_command_prefix(&command), None);
+    }
+
+    #[test]
+    fn parse_shell_lc_single_command_prefix_rejects_heredoc_body_backticks() {
+        let command = vec![
+            "bash".to_string(),
+            "-lc".to_string(),
+            "cat <<EOF\n`printf reproduced`\nEOF".to_string(),
+        ];
+        assert_eq!(parse_shell_lc_single_command_prefix(&command), None);
+    }
+
+    #[test]
+    fn parse_shell_lc_single_command_prefix_accepts_escaped_heredoc_body_backticks() {
+        let command = vec![
+            "bash".to_string(),
+            "-lc".to_string(),
+            "cat <<EOF\n\\`printf reproduced\\`\nEOF".to_string(),
+        ];
+        assert_eq!(
+            parse_shell_lc_single_command_prefix(&command),
+            Some(vec!["cat".to_string()])
+        );
+    }
+
+    #[test]
+    fn parse_shell_lc_single_command_prefix_accepts_quoted_heredoc_body_backticks() {
+        let command = vec![
+            "bash".to_string(),
+            "-lc".to_string(),
+            "cat <<'EOF'\n`printf reproduced`\nEOF".to_string(),
+        ];
+        assert_eq!(
+            parse_shell_lc_single_command_prefix(&command),
+            Some(vec!["cat".to_string()])
+        );
     }
 }
