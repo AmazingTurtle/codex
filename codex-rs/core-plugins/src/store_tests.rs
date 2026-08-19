@@ -559,18 +559,18 @@ fn install_with_new_version_keeps_existing_plugin_root_and_prunes_old_versions()
     let store = PluginStore::new(tmp.path().to_path_buf());
     let plugin_id = PluginId::new("sample-plugin".to_string(), "debug".to_string()).unwrap();
 
-    write_plugin_with_version(tmp.path(), "v1", "sample-plugin", Some("1.0.0"));
+    write_plugin_with_version(tmp.path(), "source", "sample-plugin", Some("1.0.0"));
     store
         .install(
-            AbsolutePathBuf::try_from(tmp.path().join("v1")).unwrap(),
+            AbsolutePathBuf::try_from(tmp.path().join("source")).unwrap(),
             plugin_id.clone(),
         )
         .unwrap();
 
-    write_plugin_with_version(tmp.path(), "v2", "sample-plugin", Some("2.0.0"));
+    write_plugin_with_version(tmp.path(), "source", "sample-plugin", Some("2.0.0"));
     store
         .install(
-            AbsolutePathBuf::try_from(tmp.path().join("v2")).unwrap(),
+            AbsolutePathBuf::try_from(tmp.path().join("source")).unwrap(),
             plugin_id.clone(),
         )
         .unwrap();
@@ -613,6 +613,36 @@ fn plugin_root_rejects_path_separators_in_key_segments() {
     assert_eq!(
         err.to_string(),
         "invalid marketplace name: only ASCII letters, digits, `_`, and `-` are allowed in `sample@../../etc`"
+    );
+}
+
+#[test]
+fn install_rejects_replacing_plugin_identity_from_different_source_root() {
+    let tmp = tempdir().unwrap();
+    let store = PluginStore::new(tmp.path().to_path_buf());
+    let plugin_id = PluginId::new("sample-plugin".to_string(), "debug".to_string()).unwrap();
+
+    write_plugin_with_version(tmp.path(), "trusted", "sample-plugin", Some("1.0.0"));
+    store
+        .install(
+            AbsolutePathBuf::try_from(tmp.path().join("trusted")).unwrap(),
+            plugin_id.clone(),
+        )
+        .unwrap();
+
+    write_plugin_with_version(tmp.path(), "attacker", "sample-plugin", Some("2.0.0"));
+    let err = store
+        .install(
+            AbsolutePathBuf::try_from(tmp.path().join("attacker")).unwrap(),
+            plugin_id,
+        )
+        .unwrap_err();
+
+    assert!(err.to_string().contains("cannot be replaced"));
+    assert!(
+        !tmp.path()
+            .join("plugins/cache/debug/sample-plugin/2.0.0")
+            .is_dir()
     );
 }
 

@@ -5087,6 +5087,82 @@ source = "/tmp/debug"
 }
 
 #[tokio::test]
+async fn list_marketplaces_rejects_workspace_collision_with_configured_marketplace_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let trusted_marketplace_root = tmp.path().join("trusted-marketplace");
+    let trusted_plugin_root = trusted_marketplace_root.join("plugins/sample");
+    let attacker_workspace = tmp.path().join("attacker-workspace");
+    let attacker_plugin_root = attacker_workspace.join("plugins/sample");
+
+    write_file(
+        &tmp.path().join(CONFIG_TOML_FILE),
+        &format!(
+            r#"[features]
+plugins = true
+
+[marketplaces.debug]
+source_type = "local"
+source = {trusted_marketplace_root:?}
+
+[plugins."sample@debug"]
+enabled = true
+"#
+        ),
+    );
+    write_file(
+        &trusted_marketplace_root.join(".agents/plugins/marketplace.json"),
+        r#"{"name":"debug","plugins":[{"name":"sample","source":{"source":"local","path":"./plugins/sample"}}]}"#,
+    );
+    write_file(
+        &trusted_plugin_root.join(".codex-plugin/plugin.json"),
+        r#"{"name":"sample","version":"1.0.0"}"#,
+    );
+    write_file(
+        &attacker_workspace.join(".agents/plugins/marketplace.json"),
+        r#"{"name":"debug","plugins":[{"name":"sample","source":{"source":"local","path":"./plugins/sample"}}]}"#,
+    );
+    write_file(
+        &attacker_plugin_root.join(".codex-plugin/plugin.json"),
+        r#"{"name":"sample","version":"9.9.9"}"#,
+    );
+    PluginStore::new(tmp.path().to_path_buf())
+        .install(
+            AbsolutePathBuf::try_from(trusted_plugin_root.clone()).unwrap(),
+            PluginId::parse("sample@debug").unwrap(),
+        )
+        .unwrap();
+
+    let config = load_config(tmp.path(), tmp.path()).await;
+    let marketplaces = test_plugins_manager(tmp.path().to_path_buf())
+        .list_marketplaces_for_config(
+            &config,
+            &[AbsolutePathBuf::try_from(attacker_workspace).unwrap()],
+            /*include_openai_curated*/ true,
+        )
+        .unwrap()
+        .marketplaces;
+
+    assert_eq!(marketplaces.len(), 1);
+    assert_eq!(
+        marketplaces[0].path,
+        AbsolutePathBuf::try_from(
+            trusted_marketplace_root.join(".agents/plugins/marketplace.json")
+        )
+        .unwrap()
+    );
+    assert_eq!(marketplaces[0].plugins.len(), 1);
+    assert_eq!(marketplaces[0].plugins[0].id, "sample@debug");
+    assert!(marketplaces[0].plugins[0].installed);
+    assert!(marketplaces[0].plugins[0].enabled);
+    assert_eq!(
+        marketplaces[0].plugins[0].source,
+        MarketplacePluginSource::Local {
+            path: AbsolutePathBuf::try_from(trusted_plugin_root).unwrap(),
+        }
+    );
+}
+
+#[tokio::test]
 async fn configured_marketplace_upgrade_invalidates_cached_tool_suggest_metadata() {
     let tmp = tempfile::tempdir().unwrap();
     let remote_repo = tmp.path().join("remote-marketplace");

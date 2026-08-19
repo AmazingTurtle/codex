@@ -117,6 +117,15 @@ impl MarketplacePolicy {
                 "marketplace `{marketplace_name}` is reserved and cannot be loaded from this source"
             ));
         }
+        if let Some(configured_root) =
+            configured_marketplace_root(config_layer_stack, codex_home, marketplace_name)?
+            && !paths_match_after_normalization(&configured_root, root.as_path())
+        {
+            return Err(format!(
+                "marketplace path `{}` does not match configured marketplace `{marketplace_name}`",
+                root.as_path().display()
+            ));
+        }
         if !self.is_restricted() {
             return Ok(());
         }
@@ -178,6 +187,29 @@ impl MarketplacePolicy {
         let source = configured_marketplace_source(marketplace_name, marketplace)?;
         self.validate_source(&source)
     }
+}
+
+fn configured_marketplace_root(
+    config_layer_stack: &ConfigLayerStack,
+    codex_home: &Path,
+    marketplace_name: &str,
+) -> Result<Option<PathBuf>, String> {
+    let Some(user_config) = config_layer_stack.effective_user_config() else {
+        return Ok(None);
+    };
+    let Some(marketplace) = user_config
+        .get("marketplaces")
+        .and_then(toml::Value::as_table)
+        .and_then(|marketplaces| marketplaces.get(marketplace_name))
+    else {
+        return Ok(None);
+    };
+    let default_install_root = marketplace_install_root(codex_home);
+    resolve_configured_marketplace_root(marketplace_name, marketplace, &default_install_root)
+        .ok_or_else(|| {
+            format!("configured marketplace `{marketplace_name}` does not have a usable root")
+        })
+        .map(Some)
 }
 
 impl AllowedMarketplaceSource {

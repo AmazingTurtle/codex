@@ -6,6 +6,7 @@ use crate::manifest::parse_plugin_manifest;
 use codex_plugin::PluginId;
 use codex_plugin::validate_plugin_segment;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use codex_utils_path::paths_match_after_normalization;
 use codex_utils_plugins::AgentPluginSchemaStatus;
 use codex_utils_plugins::agent_plugin_schema_status;
 use codex_utils_plugins::find_plugin_manifest_path;
@@ -26,9 +27,17 @@ pub const DEFAULT_PLUGIN_VERSION: &str = "local";
 pub const PLUGINS_CACHE_DIR: &str = "plugins/cache";
 pub const PLUGINS_DATA_DIR: &str = "plugins/data";
 const AGENT_PLUGINS_DATA_DIR: &str = "agent-plugins";
+const LOCAL_PLUGIN_INSTALL_METADATA_FILE: &str = ".codex-local-plugin-install.json";
+const LOCAL_PLUGIN_INSTALL_METADATA_SCHEMA_VERSION: u8 = 1;
 const REMOTE_PLUGIN_INSTALL_METADATA_FILE: &str = ".codex-remote-plugin-install.json";
 const REMOTE_PLUGIN_INSTALL_METADATA_SCHEMA_VERSION: u8 = 1;
 const DEFAULT_AGENT_PLUGIN_VERSION: &str = "1.0.0";
+
+#[derive(Debug, Deserialize, Serialize)]
+struct LocalPluginInstallMetadata {
+    schema_version: u8,
+    source_path: PathBuf,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct RemotePluginInstallMetadata {
@@ -359,6 +368,7 @@ impl PluginStore {
                 plugin_id.plugin_name
             )));
         }
+        self.validate_local_install_source(&plugin_id, source_path.as_path())?;
         validate_plugin_version_segment(&plugin_version).map_err(PluginStoreError::Invalid)?;
         let installed_path = self.plugin_root(&plugin_id, &plugin_version);
         replace_plugin_root_atomically(
@@ -367,6 +377,7 @@ impl PluginStore {
             &plugin_version,
             manifest,
         )?;
+        self.write_local_plugin_install_metadata(&plugin_id, source_path.as_path())?;
         self.remove_remote_plugin_install_metadata(&plugin_id)?;
 
         Ok(PluginInstallResult {
@@ -383,6 +394,94 @@ impl PluginStore {
     fn remote_plugin_install_metadata_path(&self, plugin_id: &PluginId) -> AbsolutePathBuf {
         self.plugin_base_root(plugin_id)
             .join(REMOTE_PLUGIN_INSTALL_METADATA_FILE)
+    }
+
+    fn local_plugin_install_metadata_path(&self, plugin_id: &PluginId) -> AbsolutePathBuf {
+        self.plugin_base_root(plugin_id)
+            .join(LOCAL_PLUGIN_INSTALL_METADATA_FILE)
+    }
+
+    fn validate_local_install_source(
+        &self,
+        plugin_id: &PluginId,
+        source_path: &Path,
+    ) -> Result<(), PluginStoreError> {
+        if self.is_staged_materialized_source(source_path) {
+            return Ok(());
+        }
+        let path = self.local_plugin_install_metadata_path(plugin_id);
+        let contents = match fs::read_to_string(path.as_path()) {
+            Ok(contents) => contents,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => {
+                return Err(PluginStoreError::io(
+                    "failed to read local plugin install metadata",
+                    err,
+                ));
+            }
+        };
+        let metadata: LocalPluginInstallMetadata =
+            serde_json::from_str(&contents).map_err(|err| {
+                PluginStoreError::Invalid(format!(
+                    "failed to parse local plugin install metadata: {err}"
+                ))
+            })?;
+        if metadata.schema_version != LOCAL_PLUGIN_INSTALL_METADATA_SCHEMA_VERSION {
+            return Err(PluginStoreError::Invalid(format!(
+                "unsupported local plugin install metadata schema version: {}",
+                metadata.schema_version
+            )));
+        }
+        if !paths_match_after_normalization(&metadata.source_path, source_path) {
+            return Err(PluginStoreError::Invalid(format!(
+                "plugin `{}` is already installed from `{}` and cannot be replaced from `{}`",
+                plugin_id.as_key(),
+                metadata.source_path.display(),
+                source_path.display()
+            )));
+        }
+        Ok(())
+    }
+
+    fn write_local_plugin_install_metadata(
+        &self,
+        plugin_id: &PluginId,
+        source_path: &Path,
+    ) -> Result<(), PluginStoreError> {
+        if self.is_staged_materialized_source(source_path) {
+            return Ok(());
+        }
+        let path = self.local_plugin_install_metadata_path(plugin_id);
+        let parent = path.as_path().parent().ok_or_else(|| {
+            PluginStoreError::Invalid(format!(
+                "local plugin install metadata path has no parent: {}",
+                path.display()
+            ))
+        })?;
+        fs::create_dir_all(parent).map_err(|err| {
+            PluginStoreError::io("failed to create local plugin install metadata directory", err)
+        })?;
+        let mut contents = serde_json::to_vec_pretty(&LocalPluginInstallMetadata {
+            schema_version: LOCAL_PLUGIN_INSTALL_METADATA_SCHEMA_VERSION,
+            source_path: source_path.to_path_buf(),
+        })
+        .map_err(|err| {
+            PluginStoreError::Invalid(format!(
+                "failed to serialize local plugin install metadata: {err}"
+            ))
+        })?;
+        contents.push(b'\n');
+        fs::write(path.as_path(), contents).map_err(|err| {
+            PluginStoreError::io("failed to write local plugin install metadata", err)
+        })
+    }
+
+    fn is_staged_materialized_source(&self, source_path: &Path) -> bool {
+        source_path.starts_with(
+            self.codex_home
+                .join("plugins/.marketplace-plugin-source-staging")
+                .as_path(),
+        )
     }
 
     fn remove_remote_plugin_install_metadata(
