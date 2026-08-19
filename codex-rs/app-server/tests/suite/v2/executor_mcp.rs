@@ -144,11 +144,11 @@ async fn selected_executor_discovers_browser_mcp_with_executor_only_bearer_token
     )?;
     // Browser auth tokens are not inherited by spawned executors, so use the production
     // WebSocket connection and put the token directly in the executor's environment.
-    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
         .args(["exec-server", "--listen", "ws://127.0.0.1:0"])
         .stdout(Stdio::piped())
         .kill_on_drop(true)
-        .env("CODEX_HOME", executor_home.path())
+        .env("BETTER_CODEX_HOME", executor_home.path())
         .env(PROJECT_MCP_BEARER_ENV_NAME, PROJECT_MCP_BEARER_TOKEN)
         .env("HTTP_PROXY", format!("http://{http_addr}"))
         .spawn()?;
@@ -314,11 +314,11 @@ async fn legacy_executor_blocks_plugin_host_credentials_and_keeps_host_owned_mcp
         }))?,
     )?;
 
-    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
         .args(["exec-server", "--listen", "ws://127.0.0.1:0"])
         .stdout(Stdio::piped())
         .kill_on_drop(true)
-        .env("CODEX_HOME", executor_home.path())
+        .env("BETTER_CODEX_HOME", executor_home.path())
         .env(TOKEN_ENV, EXECUTOR_TOKEN)
         .spawn()?;
     let stdout = executor.stdout.take().expect("executor stdout is piped");
@@ -571,11 +571,11 @@ async fn cached_executor_mcp_cannot_read_host_token_after_capability_downgrade()
             "[mcp_servers.cached_executor]\nurl = \"{mcp_url}\"\nbearer_token_env_var = \"{TOKEN_ENV}\"\nrequired = true\nstartup_timeout_sec = 3\n"
         ),
     )?;
-    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
         .args(["exec-server", "--listen", "ws://127.0.0.1:0"])
         .stdout(Stdio::piped())
         .kill_on_drop(true)
-        .env("CODEX_HOME", executor_home.path())
+        .env("BETTER_CODEX_HOME", executor_home.path())
         .env(TOKEN_ENV, EXECUTOR_TOKEN)
         .spawn()?;
     let mut lines = BufReader::new(executor.stdout.take().expect("executor stdout")).lines();
@@ -840,7 +840,7 @@ async fn guardian_review_does_not_discover_executor_mcp() -> Result<()> {
         .write(codex_home.path())?;
     std::fs::write(executor_home.path().join("config.toml"), "")?;
     let codex_bin = toml::Value::String(
-        codex_utils_cargo_bin::cargo_bin("codex")?
+        codex_utils_cargo_bin::cargo_bin("better-codex")?
             .to_string_lossy()
             .into_owned(),
     );
@@ -849,7 +849,7 @@ async fn guardian_review_does_not_discover_executor_mcp() -> Result<()> {
     std::fs::write(
         codex_home.path().join("environments.toml"),
         format!(
-            "default = \"{EXECUTOR_ID}\"\ninclude_local = false\n\n[[environments]]\nid = \"{EXECUTOR_ID}\"\nprogram = {codex_bin}\nargs = [\"exec-server\", \"--listen\", \"stdio\"]\n[environments.env]\nCODEX_HOME = {executor_home_value}\n"
+            "default = \"{EXECUTOR_ID}\"\ninclude_local = false\n\n[[environments]]\nid = \"{EXECUTOR_ID}\"\nprogram = {codex_bin}\nargs = [\"exec-server\", \"--listen\", \"stdio\"]\n[environments.env]\nBETTER_CODEX_HOME = {executor_home_value}\n"
         ),
     )?;
     let mut app_server = TestAppServer::builder()
@@ -1080,11 +1080,11 @@ async fn selected_executor_plugin_exposes_its_mcps_only_to_that_thread() -> Resu
         &oauth_credentials_path,
         serde_json::to_vec(&json!({"host": host_oauth_credential.clone()}))?,
     )?;
-    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+    let mut executor = Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
         .args(["exec-server", "--listen", "ws://127.0.0.1:0"])
         .stdout(Stdio::piped())
         .kill_on_drop(true)
-        .env("CODEX_HOME", executor_home.path())
+        .env("BETTER_CODEX_HOME", executor_home.path())
         .env(EXECUTOR_ENV_NAME, EXECUTOR_ENV_VALUE)
         .env(EXECUTOR_HTTP_AUTH_ENV_NAME, EXECUTOR_HTTP_AUTH_ENV_VALUE)
         .env("HTTP_PROXY", format!("http://{http_addr}"))

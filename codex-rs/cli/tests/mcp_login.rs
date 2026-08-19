@@ -101,10 +101,10 @@ impl Fixture {
     }
 
     async fn start(&self) -> Result<Login> {
-        let mut child = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+        let mut child = Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
             .kill_on_drop(true)
             .current_dir(self.home.path())
-            .env("CODEX_HOME", self.home.path())
+            .env("BETTER_CODEX_HOME", self.home.path())
             .env("NO_PROXY", "127.0.0.1,localhost")
             .env("no_proxy", "127.0.0.1,localhost")
             .args(["mcp", "login", "manual", "--no-browser"])
@@ -231,10 +231,10 @@ async fn add_persists_client_secret_for_subsequent_login_without_disclosure() ->
         .await;
     let output = timeout(
         TEST_TIMEOUT,
-        Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+        Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
             .kill_on_drop(true)
             .current_dir(fixture.home.path())
-            .env("CODEX_HOME", fixture.home.path())
+            .env("BETTER_CODEX_HOME", fixture.home.path())
             .env("NO_PROXY", "127.0.0.1,localhost")
             .env("no_proxy", "127.0.0.1,localhost")
             .args([

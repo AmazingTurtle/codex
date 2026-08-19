@@ -203,12 +203,7 @@ fn terminal_app_ssh_fallback_renders_inline_startup() {
             "terminal_app_over_ssh={terminal_app_over_ssh}, owned={owned}\n{frame}"
         ));
     }
-    insta::assert_snapshot!(
-        "terminal_app_ssh_startup",
-        frames
-            .join("\n---\n")
-            .replace(crate::version::CODEX_CLI_VERSION, "<VERSION>")
-    );
+    insta::assert_snapshot!("terminal_app_ssh_startup", frames.join("\n---\n"));
 }
 
 #[tokio::test]
@@ -302,7 +297,7 @@ async fn startup_draft_clears_loading_status_when_starting_fresh() {
 
 #[tokio::test]
 async fn startup_draft_hydrates_its_header_without_moving_the_composer() {
-    let codex_home = tempfile::tempdir().expect("create temporary Codex home");
+    let codex_home = tempfile::tempdir().expect("create temporary Better Codex home");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
         .build()
@@ -643,7 +638,7 @@ fn startup_draft_preserves_windows_altgr_text_input() {
 
 #[tokio::test]
 async fn startup_draft_applies_paste_burst_preferences_without_losing_buffered_input() {
-    let codex_home = tempfile::tempdir().expect("create temporary Codex home");
+    let codex_home = tempfile::tempdir().expect("create temporary Better Codex home");
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
         .build()
@@ -691,7 +686,7 @@ async fn startup_draft_applies_paste_burst_preferences_without_losing_buffered_i
 
 #[tokio::test]
 async fn startup_draft_applies_editor_keymap_without_enabling_vim() {
-    let codex_home = tempfile::tempdir().expect("create temporary Codex home");
+    let codex_home = tempfile::tempdir().expect("create temporary Better Codex home");
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
         .build()
@@ -749,7 +744,7 @@ async fn startup_draft_waits_for_onboarding_before_accepting_input() {
         ]
         .into_iter(),
     );
-    let codex_home = tempfile::tempdir().expect("create an existing custom Codex home");
+    let codex_home = tempfile::tempdir().expect("create an existing custom Better Codex home");
     std::fs::write(codex_home.path().join("history.jsonl"), "")
         .expect("create existing startup history");
     let system_config_path = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
@@ -763,7 +758,10 @@ async fn startup_draft_waits_for_onboarding_before_accepting_input() {
                 codex_home.path(),
                 Ok(system_config_path),
                 || Ok(false),
-                |name| (name == "CODEX_HOME").then(|| codex_home.path().as_os_str().to_os_string()),
+                |name| {
+                    (name == "BETTER_CODEX_HOME")
+                        .then(|| codex_home.path().as_os_str().to_os_string())
+                },
             )
         {
             StartupDraftInitialScreen::Onboarding

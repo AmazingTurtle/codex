@@ -51,7 +51,7 @@ class SmokePackage:
         )
 
         # Isolate package configuration and state from the user's Codex setup.
-        environment["CODEX_HOME"] = str(config_dir)
+        environment["BETTER_CODEX_HOME"] = str(config_dir)
         # Shell startup files can replace PATH and hide the packaged ripgrep.
         environment.pop("BASH_ENV", None)
         environment["ZDOTDIR"] = str(directory)
@@ -160,7 +160,7 @@ def package(
 
 @pytest.fixture
 def responses_server(package: SmokePackage) -> Iterator[MockResponsesServer]:
-    config_path = Path(package.environment["CODEX_HOME"]) / "config.toml"
+    config_path = Path(package.environment["BETTER_CODEX_HOME"]) / "config.toml"
     original_config = config_path.read_text()
     with MockResponsesServer() as server:
         # Direct CLI commands and SDK-launched servers must share a provider;

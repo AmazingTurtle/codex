@@ -36,8 +36,8 @@ codex_rust_crate(
 
 exec_server_compat_test(
     name = "exec-server-current-version-test",
-    comparison_binary = "//codex-rs/cli:codex",
-    current_binary = "//codex-rs/cli:codex",
+    comparison_binary = "//codex-rs/cli:better-codex",
+    current_binary = "//codex-rs/cli:better-codex",
 )
 
 exec_server_compat_test(

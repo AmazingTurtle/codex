@@ -1,8 +1,9 @@
 ---
 source: cli/src/doctor/filesystem_paths_tests.rs
+assertion_line: 184
 expression: "super::super::render_human_report(&report, super::super::HumanOutputOptions\n{ show_details: true, show_all: false, ascii: true, color_enabled: false, },)"
 ---
-Codex Doctor vtest
+Better Codex Doctor vtest
 
 Configuration
   [ok] sandbox      configured filesystem paths listed; read restrictions prevent probes

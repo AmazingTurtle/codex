@@ -208,17 +208,19 @@ fn default_owned_screen_entry_paints_before_sync_ends_and_exit_clears_inline_dra
     first_frame.process(&terminal.output[..end]);
     let first_contents = first_frame.screen().contents();
     ensure!(
-        first_contents.contains("OpenAI Codex")
-            && first_contents.contains("Ask Codex to do anything"),
+        first_contents.contains("Better Codex")
+            && first_contents.contains("Ask Better Codex to do anything"),
         "owned-screen synchronization ended before its first complete loading frame:\n{first_contents}"
     );
     let composer_row = first_contents
         .lines()
-        .position(|line| line.contains("Ask Codex to do anything"))
+        .position(|line| line.contains("Ask Better Codex to do anything"))
         .context("missing composer in first owned-screen frame")?;
     assert_eq!(
         (
-            first_contents.matches("Ask Codex to do anything").count(),
+            first_contents
+                .matches("Ask Better Codex to do anything")
+                .count(),
             first_frame.screen().cursor_position(),
             first_frame.screen().hide_cursor(),
         ),
@@ -246,7 +248,7 @@ fn default_owned_screen_entry_paints_before_sync_ends_and_exit_clears_inline_dra
     ensure!(
         !terminal
             .screen_contents()
-            .contains("Ask Codex to do anything"),
+            .contains("Ask Better Codex to do anything"),
         "owned-screen exit left the inline composer visible"
     );
     Ok(())
@@ -292,7 +294,7 @@ impl PtyCodex {
         extra_args: &[&str],
     ) -> Result<Self> {
         let codex = codex_utils_cargo_bin::cargo_bin("codex-tui")
-            .or_else(|_| codex_utils_cargo_bin::cargo_bin("codex"))?;
+            .or_else(|_| codex_utils_cargo_bin::cargo_bin("better-codex"))?;
         Self::start_binary(
             &codex, repo_root, codex_home, extra_args, /*editor*/ None,
         )
@@ -304,8 +306,8 @@ impl PtyCodex {
         codex_home: TempDir,
         extra_args: &[&str],
     ) -> Result<Self> {
-        let codex = codex_utils_cargo_bin::cargo_bin("codex")
-            .context("build codex-cli and set CARGO_BIN_EXE_codex to its executable")?;
+        let codex = codex_utils_cargo_bin::cargo_bin("better-codex")
+            .context("build codex-cli and set CARGO_BIN_EXE_better-codex to its executable")?;
         Self::start_binary(
             &codex, repo_root, codex_home, extra_args, /*editor*/ None,
         )
@@ -365,7 +367,7 @@ impl PtyCodex {
             .env("TERM_PROGRAM", "kitty")
             .env_remove("TERM_PROGRAM_VERSION")
             .env("OPENAI_API_KEY", "focus-palette-test")
-            .env("CODEX_HOME", codex_home.path())
+            .env("BETTER_CODEX_HOME", codex_home.path())
             .stdin(stdin)
             .stdout(stdout)
             .stderr(slave)
@@ -392,7 +394,7 @@ impl PtyCodex {
             self.read_output(Duration::from_millis(/*millis*/ 50))?;
             self.answer_startup_queries()?;
 
-            if self.palette_answered && self.screen_contains("OpenAI Codex") {
+            if self.palette_answered && self.screen_contains(codex_product_info::DISPLAY_NAME) {
                 return Ok(());
             }
 

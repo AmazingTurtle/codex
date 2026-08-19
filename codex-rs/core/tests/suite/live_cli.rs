@@ -36,7 +36,7 @@ fn run_live(prompt: &str) -> (assert_cmd::assert::Assert, TempDir) {
     cmd.current_dir(dir.path());
     cmd.env("OPENAI_API_KEY", require_api_key());
     cmd.env("HOME", home.path());
-    cmd.env("CODEX_HOME", &codex_home);
+    cmd.env("BETTER_CODEX_HOME", &codex_home);
 
     // We want three things at once:
     //   1. live streaming of the child’s stdout/stderr while the test is running

@@ -80,7 +80,7 @@ exec "${0%/*}/real-bwrap" "$@"
             // Neither a config key nor executor/request environment variables may opt in.
             std::fs::write(codex_home.path().join("config.toml"),
                 "linux_sandbox_pid_namespace = 'inherit'\n")?;
-            let mut command = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
+            let mut command = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?);
             command.args(["exec-server", "--listen", "stdio"])
                 .env("CODEX_HOME", codex_home.path())
                 .env("PATH", &path)

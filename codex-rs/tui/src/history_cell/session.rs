@@ -48,7 +48,7 @@ pub(crate) fn with_border_with_inner_width(
 pub(crate) fn codex_title(version: &str) -> Vec<Span<'static>> {
     vec![
         ">_ ".fg(accent_color()),
-        "OpenAI Codex".bold(),
+        codex_product_info::DISPLAY_NAME.bold(),
         format!(" (v{version})").dim(),
     ]
 }
@@ -218,7 +218,7 @@ pub(crate) fn new_session_info(
             Line::from(vec![
                 "  ".into(),
                 "/init".into(),
-                " - create an AGENTS.md file with instructions for Codex".dim(),
+                " - create an AGENTS.md file with instructions for Better Codex".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),
@@ -396,7 +396,11 @@ impl HistoryCell for SessionHeaderHistoryCell {
                 .collect();
         }
         let mut lines = vec![
-            Line::from(format!("OpenAI Codex (v{})", self.version)),
+            Line::from(format!(
+                "{} (v{})",
+                codex_product_info::DISPLAY_NAME,
+                self.version
+            )),
             Line::from(format!(
                 "model: {}{}",
                 self.model,

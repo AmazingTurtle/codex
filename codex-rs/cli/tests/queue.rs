@@ -125,26 +125,30 @@ async fn queue_does_not_fallback_from_unsupported_explicit_remote() -> Result<()
 
 #[test]
 fn queue_rejects_empty_message() -> Result<()> {
-    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .args(["queue", "--thread", THREAD_ID, "--message", ""])
-        .output()?;
+    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .args(["queue", "--thread", THREAD_ID, "--message", ""])
+    .output()?;
     assert!(!output.status.success());
     Ok(())
 }
 
 #[test]
 fn queue_rejects_image_attachments() -> Result<()> {
-    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .args([
-            "queue",
-            "--thread",
-            THREAD_ID,
-            "--message",
-            "do the thing",
-            "--image",
-            "screenshot.png",
-        ])
-        .output()?;
+    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .args([
+        "queue",
+        "--thread",
+        THREAD_ID,
+        "--message",
+        "do the thing",
+        "--image",
+        "screenshot.png",
+    ])
+    .output()?;
     assert!(!output.status.success());
     assert!(String::from_utf8(output.stderr)?.contains("does not support image attachments"));
     Ok(())
@@ -178,13 +182,15 @@ async fn run_remote_queue_command(response: QueueResponse) -> Result<(Output, Va
             "CODEX_REMOTE_TOKEN",
         ]
     };
-    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
-        .env("CODEX_REMOTE_TOKEN", "test-token")
-        .args(remote_args)
-        .args(["--thread", THREAD_ID, "--message", "do the thing"])
-        .output()
-        .await?;
+    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .env(codex_product_info::HOME_ENV, codex_home.path())
+    .env("CODEX_REMOTE_TOKEN", "test-token")
+    .args(remote_args)
+    .args(["--thread", THREAD_ID, "--message", "do the thing"])
+    .output()
+    .await?;
     Ok((output, server.await??))
 }
 
@@ -213,11 +219,13 @@ async fn queue_rejects_local_daemon_that_does_not_support_queueing() -> Result<(
         .await
     });
 
-    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
-        .args(["queue", "--thread", THREAD_ID, "--message", "do the thing"])
-        .output()
-        .await?;
+    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .env(codex_product_info::HOME_ENV, codex_home.path())
+    .args(["queue", "--thread", THREAD_ID, "--message", "do the thing"])
+    .output()
+    .await?;
     server.await??;
 
     assert!(!output.status.success());
@@ -247,19 +255,21 @@ async fn queue_rejects_overrides_that_bypass_local_daemon() -> Result<()> {
         Ok::<_, std::io::Error>(())
     });
 
-    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
-        .args([
-            "queue",
-            "-c",
-            "model=\"test-model\"",
-            "--thread",
-            THREAD_ID,
-            "--message",
-            "do the thing",
-        ])
-        .output()
-        .await?;
+    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .env(codex_product_info::HOME_ENV, codex_home.path())
+    .args([
+        "queue",
+        "-c",
+        "model=\"test-model\"",
+        "--thread",
+        THREAD_ID,
+        "--message",
+        "do the thing",
+    ])
+    .output()
+    .await?;
     server.await??;
 
     assert!(!output.status.success());

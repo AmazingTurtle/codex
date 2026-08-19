@@ -1,8 +1,7 @@
 ---
 source: tui/src/app/tests.rs
-assertion_line: 5874
 expression: rendered
 ---
 
-  >_ OpenAI Codex (v<VERSION>)
+  >_ Better Codex (v<VERSION>)
      /tmp/project

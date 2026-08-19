@@ -1,11 +1,10 @@
 ---
 source: tui/src/startup_draft_tests.rs
-assertion_line: 194
-expression: "frames.join(\"\\n---\\n\").replace(crate::version::CODEX_CLI_VERSION, \"<VERSION>\")"
+expression: "frames.join(\"\\n---\\n\")"
 ---
 terminal_app_over_ssh=false, owned=true
 
-  >_ OpenAI Codex (v<VERSION>)
+  >_ Better Codex (v0.999.0-better-codex)
      loading
 
   Pull up a prompt.
@@ -17,18 +16,18 @@ terminal_app_over_ssh=false, owned=true
 
 
 
-› Ask Codex to do anything
+› Ask Better Codex to do anything
 
   ? for shortcuts
 ---
 terminal_app_over_ssh=true, owned=false
 
-  >_ OpenAI Codex (v<VERSION>)
+  >_ Better Codex (v0.999.0-better-codex)
      loading
 
   Pull up a prompt.
 
 
-› Ask Codex to do anything
+› Ask Better Codex to do anything
 
   ? for shortcuts

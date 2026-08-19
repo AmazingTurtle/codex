@@ -5927,7 +5927,7 @@ async fn ctrl_l_clears_owned_history_and_preserves_the_draft() -> Result<()> {
             .is::<history_cell::SessionHeaderHistoryCell>()
     );
     let header = lines_to_single_string(&app.transcript_cells[0].display_lines(/*width*/ 80));
-    assert!(header.contains("OpenAI Codex"));
+    assert!(header.contains("Better Codex"));
     let raw_header = lines_to_single_string(&app.transcript_cells[0].raw_lines());
     assert!(raw_header.contains("gpt-test"));
     assert!(!header.contains("old transcript row"));
