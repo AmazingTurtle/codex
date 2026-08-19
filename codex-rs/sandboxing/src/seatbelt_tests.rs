@@ -83,6 +83,30 @@ fn seatbelt_protected_metadata_name_requirements(root: &Path) -> String {
         .join(" ")
 }
 
+fn protected_ancestor_definition_args(
+    param_prefix: &str,
+    protected_path: &Path,
+    root: &Path,
+) -> Vec<String> {
+    let mut ancestors = Vec::new();
+    let mut next_ancestor = protected_path.parent();
+    while let Some(ancestor) = next_ancestor {
+        if ancestor == root || !ancestor.starts_with(root) {
+            break;
+        }
+        ancestors.push(ancestor.to_path_buf());
+        next_ancestor = ancestor.parent();
+    }
+    ancestors.reverse();
+    ancestors
+        .into_iter()
+        .enumerate()
+        .map(|(index, ancestor)| {
+            format!("-D{param_prefix}_ANCESTOR_{index}={}", ancestor.display())
+        })
+        .collect()
+}
+
 struct TestConfigReloader;
 
 impl ConfigReloader for TestConfigReloader {
@@ -311,6 +335,12 @@ fn explicit_unreadable_paths_are_excluded_from_full_disk_read_and_write_access()
         "expected write carveout in policy:\n{policy}"
     );
     assert!(
+        policy.contains(
+            "(deny file-write-unlink (literal (param \"WRITABLE_ROOT_0_EXCLUDED_1_ANCESTOR_0\")))"
+        ),
+        "expected write-unlink denial for protected path ancestors:\n{policy}"
+    );
+    assert!(
         policy.contains(&seatbelt_protected_metadata_name_requirements(Path::new(
             "/"
         ))),
@@ -327,14 +357,91 @@ fn explicit_unreadable_paths_are_excluded_from_full_disk_read_and_write_access()
         .filter(|arg| arg.starts_with("-DWRITABLE_ROOT_"))
         .cloned()
         .collect();
+    let mut expected_writable_definitions = vec![
+        "-DWRITABLE_ROOT_0=/".to_string(),
+        "-DWRITABLE_ROOT_0_EXCLUDED_0=/.codex".to_string(),
+        format!("-DWRITABLE_ROOT_0_EXCLUDED_1={}", unreadable_root.display()),
+    ];
+    expected_writable_definitions.extend(protected_ancestor_definition_args(
+        "WRITABLE_ROOT_0_EXCLUDED_1",
+        unreadable_root.as_path(),
+        Path::new("/"),
+    ));
     assert_eq!(
         writable_definitions,
-        vec![
-            "-DWRITABLE_ROOT_0=/".to_string(),
-            "-DWRITABLE_ROOT_0_EXCLUDED_0=/.codex".to_string(),
-            format!("-DWRITABLE_ROOT_0_EXCLUDED_1={}", unreadable_root.display()),
-        ],
+        expected_writable_definitions,
         "unexpected write carveout parameters in args: {args:#?}"
+    );
+}
+
+#[test]
+fn writable_root_read_only_file_blocks_protected_ancestor_rename() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let workspace = temp_dir.path().join("workspace");
+    let protected_parent = workspace.join("workflow-parent");
+    let protected_file = protected_parent.join("workflow.yml");
+    fs::create_dir_all(&protected_parent).expect("create protected parent");
+    fs::write(&protected_file, "original-workflow").expect("write protected file");
+    let workspace = workspace.canonicalize().expect("canonicalize workspace");
+    let protected_file = protected_file
+        .canonicalize()
+        .expect("canonicalize protected file");
+
+    let workspace_root =
+        AbsolutePathBuf::from_absolute_path(&workspace).expect("workspace path should be absolute");
+    let protected_file =
+        AbsolutePathBuf::from_absolute_path(&protected_file).expect("protected path absolute");
+    let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: workspace_root.into(),
+            },
+            FileSystemAccessMode::Write,
+        ),
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: protected_file.clone().into(),
+            },
+            FileSystemAccessMode::Read,
+        ),
+    ]);
+
+    let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
+        command: vec!["/bin/true".to_string()],
+        file_system_sandbox_policy: &file_system_policy,
+        network_sandbox_policy: NetworkSandboxPolicy::Restricted,
+        sandbox_policy_cwd: workspace.as_path(),
+        enforce_managed_network: false,
+        managed_network: None,
+        environment_id: None,
+        network: None,
+        extra_allow_unix_sockets: &[],
+    })
+    .unwrap();
+
+    let policy = seatbelt_policy_arg(&args);
+    assert!(
+        policy.contains(
+            "(deny file-write-unlink (literal (param \"WRITABLE_ROOT_0_EXCLUDED_0_ANCESTOR_0\")))"
+        ),
+        "expected protected ancestor rename denial in policy:\n{policy}"
+    );
+    assert!(
+        policy.contains("(require-not (literal (param \"WRITABLE_ROOT_0_EXCLUDED_0\")))"),
+        "expected exact protected file carveout in policy:\n{policy}"
+    );
+    assert!(
+        args.iter().any(|arg| {
+            arg == &format!(
+                "-DWRITABLE_ROOT_0_EXCLUDED_0_ANCESTOR_0={}",
+                protected_file
+                    .as_path()
+                    .parent()
+                    .expect("protected file parent")
+                    .display()
+            )
+        }),
+        "expected protected ancestor parameter in args: {args:#?}"
     );
 }
 

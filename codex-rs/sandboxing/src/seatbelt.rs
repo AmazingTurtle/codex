@@ -364,6 +364,7 @@ fn build_seatbelt_access_policy(
     roots: Vec<SeatbeltAccessRoot>,
 ) -> (String, Vec<(String, PathBuf)>) {
     let mut policy_components = Vec::new();
+    let mut deny_components = Vec::new();
     let mut params = Vec::new();
 
     for (index, access_root) in roots.into_iter().enumerate() {
@@ -396,6 +397,23 @@ fn build_seatbelt_access_policy(
             require_parts.push(format!(
                 "(require-not (subpath (param \"{excluded_param}\")))"
             ));
+            if action == "file-write*" {
+                for (ancestor_index, ancestor) in protected_ancestors_under_root(
+                    &root,
+                    &excluded_subpath,
+                )
+                .into_iter()
+                .enumerate()
+                {
+                    let ancestor_param = format!(
+                        "{param_prefix}_{index}_EXCLUDED_{excluded_index}_ANCESTOR_{ancestor_index}"
+                    );
+                    params.push((ancestor_param.clone(), ancestor.into_path_buf()));
+                    deny_components.push(format!(
+                        "(deny file-write-unlink (literal (param \"{ancestor_param}\")))"
+                    ));
+                }
+            }
         }
         for metadata_name in access_root.protected_metadata_names {
             let regex =
@@ -409,10 +427,36 @@ fn build_seatbelt_access_policy(
         (String::new(), Vec::new())
     } else {
         (
-            format!("(allow {action}\n{}\n)", policy_components.join(" ")),
+            [
+                deny_components.join("\n"),
+                format!("(allow {action}\n{}\n)", policy_components.join(" ")),
+            ]
+            .into_iter()
+            .filter(|component| !component.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
             params,
         )
     }
+}
+
+fn protected_ancestors_under_root(
+    root: &AbsolutePathBuf,
+    excluded_subpath: &AbsolutePathBuf,
+) -> Vec<AbsolutePathBuf> {
+    let mut ancestors = Vec::new();
+    let mut next_ancestor = excluded_subpath.as_path().parent();
+    while let Some(ancestor) = next_ancestor {
+        if ancestor == root.as_path() || !ancestor.starts_with(root.as_path()) {
+            break;
+        }
+        if let Ok(ancestor) = AbsolutePathBuf::from_absolute_path(ancestor) {
+            ancestors.push(ancestor);
+        }
+        next_ancestor = ancestor.parent();
+    }
+    ancestors.reverse();
+    ancestors
 }
 
 fn seatbelt_protected_metadata_name_regex(root: &AbsolutePathBuf, name: &str) -> String {
