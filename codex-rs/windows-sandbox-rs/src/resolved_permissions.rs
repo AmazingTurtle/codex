@@ -24,6 +24,7 @@ pub struct ResolvedWindowsSandboxPermissions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WindowsWritableRoot {
     pub(crate) root: PathBuf,
+    pub(crate) protected_metadata_names: Vec<String>,
     pub(crate) read_only_subpaths: Vec<PathBuf>,
 }
 
@@ -149,6 +150,7 @@ impl ResolvedWindowsSandboxPermissions {
             .into_iter()
             .map(|root| WindowsWritableRoot {
                 root: root.root.into_path_buf(),
+                protected_metadata_names: root.protected_metadata_names,
                 read_only_subpaths: root
                     .read_only_subpaths
                     .into_iter()
@@ -161,6 +163,7 @@ impl ResolvedWindowsSandboxPermissions {
             roots.extend(windows_temp_env_roots(env_map).into_iter().map(|root| {
                 WindowsWritableRoot {
                     root,
+                    protected_metadata_names: Vec::new(),
                     read_only_subpaths: Vec::new(),
                 }
             }));

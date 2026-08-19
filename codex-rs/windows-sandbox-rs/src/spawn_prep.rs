@@ -286,6 +286,12 @@ pub(crate) fn apply_legacy_session_acl_rules(
             }
             deny.insert(path.clone());
         }
+        for path in &deny {
+            if !path.exists() {
+                std::fs::create_dir_all(path)
+                    .with_context(|| format!("create deny-write path {}", path.display()))?;
+            }
+        }
         if let Some(readonly_sid) = acl_sids.readonly_sid {
             for p in &allow {
                 let _ = add_allow_ace(p, readonly_sid.as_ptr());

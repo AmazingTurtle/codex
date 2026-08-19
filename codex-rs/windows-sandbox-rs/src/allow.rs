@@ -32,6 +32,9 @@ pub(crate) fn compute_allow_paths_for_permissions(
 
     for writable_root in permissions.writable_roots_for_cwd(command_cwd, env_map) {
         let canonical = canonicalize(&writable_root.root).unwrap_or(writable_root.root);
+        for name in writable_root.protected_metadata_names {
+            deny.insert(canonical.join(name));
+        }
         add_allow_path(canonical);
         for read_only_subpath in writable_root.read_only_subpaths {
             add_deny_path(read_only_subpath);
@@ -47,6 +50,7 @@ mod tests {
     use codex_protocol::models::PermissionProfile;
     use codex_protocol::permissions::NetworkSandboxPolicy;
     use codex_utils_absolute_path::AbsolutePathBuf;
+    use pretty_assertions::assert_eq;
     use std::fs;
     use tempfile::TempDir;
 
@@ -353,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn skips_protected_subdirs_when_missing() {
+    fn denies_missing_protected_subdirs() {
         let tmp = TempDir::new().expect("tempdir");
         let command_cwd = tmp.path().join("workspace");
         let _ = fs::create_dir_all(&command_cwd);
@@ -371,10 +375,15 @@ mod tests {
             &command_cwd,
             &HashMap::new(),
         );
-        assert_eq!(paths.allow.len(), 1);
-        assert!(
-            paths.deny.is_empty(),
-            "no deny when protected dirs are absent"
-        );
+        let expected_allow: HashSet<PathBuf> = [dunce::canonicalize(&command_cwd).unwrap()]
+            .into_iter()
+            .collect();
+        let expected_deny: HashSet<PathBuf> = [".git", ".agents", ".codex"]
+            .into_iter()
+            .map(|name| command_cwd.join(name))
+            .collect();
+
+        assert_eq!(expected_allow, paths.allow);
+        assert_eq!(expected_deny, paths.deny);
     }
 }
