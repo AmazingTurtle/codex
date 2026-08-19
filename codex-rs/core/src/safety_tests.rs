@@ -64,6 +64,74 @@ fn test_writable_roots_constraint() {
 }
 
 #[test]
+#[cfg(unix)]
+fn existing_hardlink_target_is_not_constrained_to_writable_paths() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().join("workspace");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let outside_path = tmp.path().join("outside.txt");
+    std::fs::write(&outside_path, "unchanged").unwrap();
+    let link_path = cwd.join("hardlinked-victim.txt");
+    std::fs::hard_link(outside_path, link_path.as_path()).unwrap();
+
+    let action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&link_path), "".to_string());
+    let file_system_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &action,
+        &file_system_policy,
+        &cwd_uri,
+    ));
+    assert_eq!(
+        assess_patch_safety(
+            &action,
+            AskForApproval::Never,
+            &PermissionProfile::workspace_write_with(
+                &[],
+                NetworkSandboxPolicy::Restricted,
+                /*exclude_tmpdir_env_var*/ true,
+                /*exclude_slash_tmp*/ true,
+            ),
+            &file_system_policy,
+            &cwd_uri,
+            WindowsSandboxLevel::Disabled,
+        ),
+        SafetyCheck::Reject {
+            reason: PATCH_REJECTED_OUTSIDE_PROJECT_REASON.to_string(),
+        },
+    );
+}
+
+#[test]
+fn existing_single_link_target_is_constrained_to_writable_paths() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let target = cwd.join("single-link.txt");
+    std::fs::write(target.as_path(), "unchanged").unwrap();
+    let action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&target), "".to_string());
+    let file_system_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+
+    assert!(is_write_patch_constrained_to_writable_paths(
+        &action,
+        &file_system_policy,
+        &cwd_uri,
+    ));
+}
+
+#[test]
 fn external_sandbox_auto_approves_in_on_request() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().abs();

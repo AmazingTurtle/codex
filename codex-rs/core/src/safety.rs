@@ -170,16 +170,16 @@ fn is_write_patch_constrained_to_writable_paths(
     for (path, change) in action.changes() {
         match change {
             ApplyPatchFileChange::Add { .. } | ApplyPatchFileChange::Delete { .. } => {
-                if !is_path_writable(path) {
+                if !is_path_writable(path) || existing_path_has_multiple_hard_links(path) {
                     return false;
                 }
             }
             ApplyPatchFileChange::Update { move_path, .. } => {
-                if !is_path_writable(path) {
+                if !is_path_writable(path) || existing_path_has_multiple_hard_links(path) {
                     return false;
                 }
                 if let Some(dest) = move_path
-                    && !is_path_writable(dest)
+                    && (!is_path_writable(dest) || existing_path_has_multiple_hard_links(dest))
                 {
                     return false;
                 }
@@ -188,6 +188,29 @@ fn is_write_patch_constrained_to_writable_paths(
     }
 
     true
+}
+
+fn existing_path_has_multiple_hard_links(path: &PathUri) -> bool {
+    let Ok(path) = path.to_abs_path() else {
+        return true;
+    };
+    match std::fs::metadata(path.as_path()) {
+        Ok(metadata) => metadata_has_multiple_hard_links(&metadata),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => true,
+    }
+}
+
+#[cfg(unix)]
+fn metadata_has_multiple_hard_links(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    metadata.nlink() > 1
+}
+
+#[cfg(not(unix))]
+fn metadata_has_multiple_hard_links(_metadata: &std::fs::Metadata) -> bool {
+    false
 }
 
 #[cfg(test)]
