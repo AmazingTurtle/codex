@@ -14,6 +14,8 @@ use codex_protocol::protocol::NetworkSandboxPolicy;
 use codex_utils_absolute_path::AbsolutePathBuf;
 #[cfg(test)]
 use pretty_assertions::assert_eq;
+#[cfg(test)]
+use std::os::unix::fs::PermissionsExt;
 
 fn read_only_permission_profile() -> PermissionProfile {
     PermissionProfile::read_only()
@@ -411,7 +413,7 @@ fn cleanup_protected_create_targets_removes_created_path_and_reports_violation()
 }
 
 #[test]
-fn cleanup_protected_create_targets_waits_for_other_active_registrations() {
+fn cleanup_protected_create_targets_removes_path_despite_active_marker() {
     let temp_dir = tempfile::TempDir::new().expect("tempdir");
     let dot_git = temp_dir.path().join(".git");
     let target = crate::bwrap::ProtectedCreateTarget::missing(&dot_git);
@@ -423,10 +425,21 @@ fn cleanup_protected_create_targets_waits_for_other_active_registrations() {
 
     let violation = cleanup_protected_create_targets(&registrations);
     assert!(violation);
-    assert!(dot_git.exists());
+    assert!(!dot_git.exists());
+}
 
-    std::fs::remove_file(active_marker).expect("remove active marker");
-    let registrations = register_protected_create_targets(std::slice::from_ref(&target));
+#[test]
+fn cleanup_protected_create_targets_removes_read_only_directory_and_reports_violation() {
+    let temp_dir = tempfile::TempDir::new().expect("tempdir");
+    let dot_git = temp_dir.path().join(".git");
+    let target = crate::bwrap::ProtectedCreateTarget::missing(&dot_git);
+
+    let registrations = register_protected_create_targets(&[target]);
+    std::fs::create_dir(&dot_git).expect("create protected path");
+    std::fs::write(dot_git.join("config"), "[core]\n").expect("write protected child");
+    std::fs::set_permissions(&dot_git, std::fs::Permissions::from_mode(0o555))
+        .expect("make protected path read-only");
+
     let violation = cleanup_protected_create_targets(&registrations);
 
     assert!(violation);

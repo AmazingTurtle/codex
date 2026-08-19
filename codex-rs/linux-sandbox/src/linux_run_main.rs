@@ -8,6 +8,7 @@ use std::io::Read;
 use std::os::fd::AsRawFd;
 use std::os::fd::FromRawFd;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -1124,12 +1125,6 @@ fn cleanup_protected_create_targets(targets: &[ProtectedCreateTargetRegistration
 
         let mut violation = false;
         for target in targets.iter().rev() {
-            if synthetic_mount_marker_dir_has_active_process(&target.marker_dir) {
-                if target.target.path().exists() {
-                    violation = true;
-                }
-                continue;
-            }
             violation |= remove_protected_create_target(&target.target);
             match fs::remove_dir(&target.marker_dir) {
                 Ok(()) => {}
@@ -1194,7 +1189,7 @@ fn try_remove_protected_create_target(
         ProtectedCreateRemoval::Other
     };
     let result = if removal == ProtectedCreateRemoval::Directory {
-        fs::remove_dir_all(path)
+        remove_protected_create_directory(path)
     } else {
         fs::remove_file(path)
     };
@@ -1208,6 +1203,35 @@ fn try_remove_protected_create_target(
         path.display()
     );
     Ok(Some(removal))
+}
+
+fn remove_protected_create_directory(path: &Path) -> std::io::Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            make_directory_tree_writable(path)?;
+            fs::remove_dir_all(path)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn make_directory_tree_writable(path: &Path) -> std::io::Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err),
+    };
+    if !metadata.is_dir() {
+        return Ok(());
+    }
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        make_directory_tree_writable(&entry.path())?;
+    }
+    Ok(())
 }
 
 fn remove_synthetic_mount_target(target: &crate::bwrap::SyntheticMountTarget) {
