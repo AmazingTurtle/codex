@@ -10,6 +10,8 @@ use pretty_assertions::assert_eq;
 #[tokio::test]
 async fn older_tool_projection_matches_initial_replay() {
     let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.tui_tool_call_display = codex_config::types::ToolCallDisplay::Summary;
+    chat.local_settings.tui.tool_call_display = codex_config::types::ToolCallDisplay::Summary;
     drain_insert_history(&mut rx);
     let command = "cargo check";
     let mut items = vec![AppServerThreadItem::CommandExecution {

@@ -13,6 +13,7 @@ use crate::wrapping::word_wrap_lines;
 use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::McpAuthStatus;
 use codex_config::types::McpServerConfig;
+use codex_config::types::ToolCallDisplay;
 use codex_otel::RuntimeMetricTotals;
 use codex_otel::RuntimeMetricsSummary;
 use codex_protocol::ThreadId;
@@ -1491,7 +1492,7 @@ fn active_mcp_tool_call_snapshot() {
 #[test]
 fn code_mode_tool_call_uses_title_and_preserves_full_transcript() {
     let output = format!("{} transcript tail", "0123456789".repeat(20));
-    let mut cell = new_active_mcp_tool_call(
+    let mut cell = new_active_mcp_tool_call_with_display(
         "call-code-mode".into(),
         McpInvocation {
             server: "node_repl".into(),
@@ -1502,6 +1503,7 @@ fn code_mode_tool_call_uses_title_and_preserves_full_transcript() {
             })),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     cell.complete(
         Duration::ZERO,
@@ -1541,7 +1543,7 @@ fn code_mode_tool_call_uses_title_and_preserves_full_transcript() {
 
 #[test]
 fn code_mode_tool_call_preserves_failure_details() {
-    let mut cell = new_active_mcp_tool_call(
+    let mut cell = new_active_mcp_tool_call_with_display(
         "call-code-mode-failed".into(),
         McpInvocation {
             server: "node_repl".into(),
@@ -1549,6 +1551,7 @@ fn code_mode_tool_call_preserves_failure_details() {
             arguments: Some(json!({"title": "Inspect workspace", "code": "throw Error('denied')"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Summary,
     );
     cell.complete(
         Duration::ZERO,
