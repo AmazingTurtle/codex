@@ -99,6 +99,8 @@ fn git_command_sanitizes_ambient_repository_environment() {
         [
             OsStr::new("-c"),
             OsStr::new(codex_git_utils::SAFE_BARE_REPOSITORY_CONFIG),
+            OsStr::new("-c"),
+            OsStr::new(DISABLE_EXT_TRANSPORT_CONFIG),
         ]
     );
 
@@ -252,6 +254,74 @@ async fn ordinary_clone_rejects_tracked_embedded_bare_repository() {
         explicit_environment.status.success(),
         "GIT_DIR must continue to permit an explicitly selected repository: {}",
         String::from_utf8_lossy(&explicit_environment.stderr)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn git_command_blocks_repository_ext_transport_rewrites() {
+    let fixture = tempdir().expect("tempdir");
+    let repository = fixture.path().join("untrusted-repository");
+    let marker = fixture.path().join("pretrust-execution-marker");
+    std::fs::create_dir_all(&repository).expect("create repository");
+    run_git(&repository, &["init", "--quiet"]);
+
+    let transport = repository.join("synthetic-transport.sh");
+    write_executable_script(
+        &transport,
+        &format!(
+            "#!/bin/sh\nprintf reproduced > '{}'\nexit 1\n",
+            marker.display()
+        ),
+    );
+    run_git(&repository, &["config", "--local", "protocol.ext.allow", "always"]);
+    let rewrite = format!("url.ext::{} %S .insteadOf", transport.display());
+    run_git(&repository, &["config", "--local", &rewrite, "https://github.com/"]);
+
+    let _ = Command::new("git")
+        .current_dir(&repository)
+        .args([
+            "-c",
+            "http.proxy=http://127.0.0.1:1",
+            "ls-remote",
+            OPENAI_PLUGINS_GIT_URL,
+            "HEAD",
+        ])
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("HTTPS_PROXY", "http://127.0.0.1:1")
+        .output()
+        .expect("run unguarded Git");
+    assert!(
+        marker.exists(),
+        "unguarded Git should honor the repository ext transport rewrite"
+    );
+    std::fs::remove_file(&marker).expect("remove unguarded marker");
+
+    let guarded = git_command(Path::new("git"))
+        .current_dir(&repository)
+        .args([
+            "-c",
+            "http.proxy=http://127.0.0.1:1",
+            "ls-remote",
+            OPENAI_PLUGINS_GIT_URL,
+            "HEAD",
+        ])
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("HTTPS_PROXY", "http://127.0.0.1:1")
+        .output()
+        .expect("run guarded Git");
+
+    assert!(
+        !guarded.status.success(),
+        "guarded Git should reject the ext transport rewrite"
+    );
+    assert!(
+        !marker.exists(),
+        "startup Git must not execute a repository-selected ext transport"
     );
 }
 
@@ -560,7 +630,7 @@ fn concurrent_syncs_serialize_fetches_without_skipping_remote_checks() {
         &git_path,
         &format!(
             r#"#!/bin/sh
-if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
+while [ "$1" = "-c" ]; do shift 2; done
 printf '%s\n' "$*" >> '{}'
 if [ "$1" = "ls-remote" ]; then
   sleep 1
@@ -975,7 +1045,7 @@ fn sync_openai_plugins_repo_via_git_cleans_up_staged_dir_on_fetch_failure() {
         &git_path,
         &format!(
             r#"#!/bin/sh
-if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
+while [ "$1" = "-c" ]; do shift 2; done
 if [ "$1" = "ls-remote" ]; then
   printf '%s\tHEAD\n' "{sha}"
   exit 0
@@ -1021,7 +1091,7 @@ fn sync_openai_plugins_repo_via_git_preserves_existing_snapshot_on_validation_fa
         &git_path,
         &format!(
             r#"#!/bin/sh
-if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
+while [ "$1" = "-c" ]; do shift 2; done
 if [ "$1" = "ls-remote" ]; then
   printf '%s\tHEAD\n' "{remote_sha}"
   exit 0

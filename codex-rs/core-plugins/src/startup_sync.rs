@@ -38,6 +38,7 @@ const CURATED_PLUGINS_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const CURATED_PLUGINS_BACKUP_ARCHIVE_TIMEOUT: Duration = Duration::from_secs(30);
 // Keep this comfortably above a normal sync attempt so we do not race another Codex process.
 const CURATED_PLUGINS_STALE_TEMP_DIR_MAX_AGE: Duration = Duration::from_secs(10 * 60);
+const DISABLE_EXT_TRANSPORT_CONFIG: &str = "protocol.ext.allow=never";
 // These variables can redirect Git away from the repository selected by `-C`,
 // or inject command-scoped configuration into the sync commands.
 const REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES: &[&str] = &[
@@ -686,6 +687,7 @@ fn git_command(git_binary: &Path) -> Command {
     let mut command = Command::new(git_binary);
     command
         .args(["-c", codex_git_utils::SAFE_BARE_REPOSITORY_CONFIG])
+        .args(["-c", DISABLE_EXT_TRANSPORT_CONFIG])
         .env("GIT_OPTIONAL_LOCKS", "0");
     for name in REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES {
         command.env_remove(name);
