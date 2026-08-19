@@ -36,6 +36,7 @@ use codex_config::sandbox_mode_requirement_for_permission_profile;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_config::types::AuthKeyringBackendKind;
+use codex_config::types::CodeModeToolCallDisplay;
 use codex_config::types::History;
 use codex_config::types::McpServerConfig;
 use codex_config::types::McpServerDisabledReason;
@@ -689,6 +690,9 @@ pub struct Config {
 
     /// Start the TUI in raw scrollback mode for copy-friendly transcript output.
     pub tui_raw_output_mode: bool,
+
+    /// Controls how code-mode tool calls are rendered in normal TUI history.
+    pub tui_code_mode_tool_call_display: CodeModeToolCallDisplay,
 
     /// Start the TUI in the specified collaboration mode (plan/default).
 
@@ -4168,6 +4172,11 @@ impl Config {
                 .as_ref()
                 .map(|t| t.raw_output_mode)
                 .unwrap_or(false),
+            tui_code_mode_tool_call_display: cfg
+                .tui
+                .as_ref()
+                .map(|t| t.code_mode_tool_call_display)
+                .unwrap_or_default(),
             tui_alternate_screen: cfg
                 .tui
                 .as_ref()

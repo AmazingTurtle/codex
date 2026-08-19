@@ -423,6 +423,25 @@
       },
       "type": "object"
     },
+    "CodeModeToolCallDisplay": {
+      "description": "Controls how code-mode tool calls are presented in normal TUI history.",
+      "oneOf": [
+        {
+          "description": "Show the complete invocation and result for each code-mode tool call.",
+          "enum": [
+            "individual"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Show the compact title and meaningful output summary introduced in 0.148.",
+          "enum": [
+            "summary"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "ConfigProfile": {
       "additionalProperties": false,
       "description": "Collection of common configuration options that a user can define as a unit in `config.toml`.",
@@ -3453,6 +3472,15 @@
           "default": true,
           "description": "Enable animations (welcome screen, shimmer effects, spinners). Defaults to `true`.",
           "type": "boolean"
+        },
+        "code_mode_tool_call_display": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/CodeModeToolCallDisplay"
+            }
+          ],
+          "default": "individual",
+          "description": "Controls how code-mode tool calls are rendered in normal conversation history. Defaults to `individual`."
         },
         "keymap": {
           "allOf": [

@@ -177,15 +177,18 @@ impl ChatWidget {
         };
         self.flush_answer_stream_with_separator();
         self.flush_active_cell();
-        self.transcript.active_cell = Some(Box::new(history_cell::new_active_mcp_tool_call(
-            id,
-            McpInvocation {
-                server,
-                tool,
-                arguments: Some(arguments),
-            },
-            self.config.animations,
-        )));
+        self.transcript.active_cell = Some(Box::new(
+            history_cell::new_active_mcp_tool_call_with_display(
+                id,
+                McpInvocation {
+                    server,
+                    tool,
+                    arguments: Some(arguments),
+                },
+                self.config.animations,
+                self.config.tui_code_mode_tool_call_display,
+            ),
+        ));
         self.bump_active_cell_revision();
         self.request_redraw();
     }
@@ -235,8 +238,12 @@ impl ChatWidget {
             Some(cell) if cell.call_id() == id => cell.complete(duration, result),
             _ => {
                 self.flush_active_cell();
-                let mut cell =
-                    history_cell::new_active_mcp_tool_call(id, invocation, self.config.animations);
+                let mut cell = history_cell::new_active_mcp_tool_call_with_display(
+                    id,
+                    invocation,
+                    self.config.animations,
+                    self.config.tui_code_mode_tool_call_display,
+                );
                 let extra_cell = cell.complete(duration, result);
                 self.transcript.active_cell = Some(Box::new(cell));
                 extra_cell

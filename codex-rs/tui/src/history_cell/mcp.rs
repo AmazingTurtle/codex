@@ -31,6 +31,7 @@ pub(crate) struct McpToolCallCell {
     duration: Option<Duration>,
     result: Option<Result<codex_protocol::mcp::CallToolResult, String>>,
     animations_enabled: bool,
+    code_mode_tool_call_display: CodeModeToolCallDisplay,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +60,7 @@ impl McpToolCallCell {
         call_id: String,
         invocation: McpInvocation,
         animations_enabled: bool,
+        code_mode_tool_call_display: CodeModeToolCallDisplay,
     ) -> Self {
         Self {
             call_id,
@@ -67,6 +69,7 @@ impl McpToolCallCell {
             duration: None,
             result: None,
             animations_enabled,
+            code_mode_tool_call_display,
         }
     }
 
@@ -134,7 +137,9 @@ impl McpToolCallCell {
         let mut lines: Vec<Line<'static>> = Vec::new();
         let status = self.success();
         let node_repl = self.invocation.server == "node_repl" && self.invocation.tool == "js";
-        let compact = node_repl && mode == McpToolCallRenderMode::Display;
+        let compact = node_repl
+            && mode == McpToolCallRenderMode::Display
+            && self.code_mode_tool_call_display == CodeModeToolCallDisplay::Summary;
         let bullet = match status {
             Some(true) => "•".green().bold(),
             Some(false) => "•".red().bold(),
@@ -322,12 +327,32 @@ impl HistoryCell for McpToolCallCell {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn new_active_mcp_tool_call(
     call_id: String,
     invocation: McpInvocation,
     animations_enabled: bool,
 ) -> McpToolCallCell {
-    McpToolCallCell::new(call_id, invocation, animations_enabled)
+    new_active_mcp_tool_call_with_display(
+        call_id,
+        invocation,
+        animations_enabled,
+        CodeModeToolCallDisplay::default(),
+    )
+}
+
+pub(crate) fn new_active_mcp_tool_call_with_display(
+    call_id: String,
+    invocation: McpInvocation,
+    animations_enabled: bool,
+    code_mode_tool_call_display: CodeModeToolCallDisplay,
+) -> McpToolCallCell {
+    McpToolCallCell::new(
+        call_id,
+        invocation,
+        animations_enabled,
+        code_mode_tool_call_display,
+    )
 }
 /// Returns an additional history cell if an MCP tool result includes a decodable image.
 ///

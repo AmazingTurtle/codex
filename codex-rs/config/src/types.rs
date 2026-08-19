@@ -697,6 +697,17 @@ pub struct ModelAvailabilityNuxConfig {
 /// Fallback resize-reflow row cap when Codex cannot identify a terminal-specific scrollback size.
 pub const DEFAULT_TERMINAL_RESIZE_REFLOW_FALLBACK_MAX_ROWS: usize = 1_000;
 
+/// Controls how code-mode tool calls are presented in normal TUI history.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum CodeModeToolCallDisplay {
+    /// Show the complete invocation and result for each code-mode tool call.
+    #[default]
+    Individual,
+    /// Show the compact title and meaningful output summary introduced in 0.148.
+    Summary,
+}
+
 /// Collection of settings that are specific to the TUI.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -723,6 +734,11 @@ pub struct Tui {
     /// Defaults to `false`.
     #[serde(default)]
     pub raw_output_mode: bool,
+
+    /// Controls how code-mode tool calls are rendered in normal conversation history.
+    /// Defaults to `individual`.
+    #[serde(default)]
+    pub code_mode_tool_call_display: CodeModeToolCallDisplay,
 
     /// Controls whether the TUI uses the terminal's alternate screen buffer.
     ///
