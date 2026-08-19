@@ -118,6 +118,13 @@ pub(crate) fn executable_name_lookup_key(raw: &str) -> Option<String> {
     }
 }
 
+pub(crate) fn bare_executable_name_lookup_key(raw: &str) -> Option<String> {
+    if Path::new(raw).components().count() != 1 {
+        return None;
+    }
+    executable_name_lookup_key(raw)
+}
+
 /// Find the first matching git subcommand, skipping known global options that
 /// may appear before it (e.g., `-C`, `-c`, `--git-dir`).
 ///
@@ -127,7 +134,7 @@ pub(crate) fn find_git_subcommand<'a>(
     subcommands: &[&str],
 ) -> Option<(usize, &'a str)> {
     let cmd0 = command.first().map(String::as_str)?;
-    if executable_name_lookup_key(cmd0).as_deref() != Some("git") {
+    if bare_executable_name_lookup_key(cmd0).as_deref() != Some("git") {
         return None;
     }
 

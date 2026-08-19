@@ -1,5 +1,5 @@
 use crate::bash::parse_shell_lc_plain_commands;
-use crate::command_safety::is_dangerous_command::executable_name_lookup_key;
+use crate::command_safety::is_dangerous_command::bare_executable_name_lookup_key;
 // Find the first matching git subcommand, skipping known global options that
 // may appear before it (e.g., `-C`, `-c`, `--git-dir`).
 // Implemented in `is_dangerous_command` and shared here.
@@ -69,7 +69,7 @@ fn is_safe_to_call_with_exec(command: &[String]) -> bool {
         return false;
     };
 
-    match executable_name_lookup_key(cmd0).as_deref() {
+    match bare_executable_name_lookup_key(cmd0).as_deref() {
         Some(cmd) if cfg!(target_os = "linux") && matches!(cmd, "numfmt" | "tac") => true,
 
         #[rustfmt::skip]
@@ -529,6 +529,35 @@ mod tests {
     #[test]
     fn cargo_check_is_not_safe() {
         assert!(!is_known_safe_command(&vec_str(&["cargo", "check"])));
+    }
+
+    #[test]
+    fn path_qualified_lookalikes_are_not_known_safe() {
+        assert!(!is_known_safe_command(&vec_str(&[
+            "/tmp/evil/cat",
+            "Cargo.toml",
+        ])));
+        assert!(!is_known_safe_command(&vec_str(&[
+            "./node_modules/.bin/cat",
+            "Cargo.toml",
+        ])));
+        assert!(!is_known_safe_command(&vec_str(&[
+            "bash",
+            "-lc",
+            "./node_modules/.bin/cat Cargo.toml",
+        ])));
+        assert!(!is_known_safe_command(&vec_str(&[
+            "/tmp/evil/git",
+            "status",
+        ])));
+
+        #[cfg(windows)]
+        {
+            assert!(!is_known_safe_command(&vec_str(&[
+                r"C:\tmp\evil\cat.exe",
+                "Cargo.toml",
+            ])));
+        }
     }
 
     #[test]
