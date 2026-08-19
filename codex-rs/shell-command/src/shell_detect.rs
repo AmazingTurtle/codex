@@ -254,7 +254,7 @@ pub fn ultimate_fallback_shell() -> DetectedShell {
 
 pub fn get_shell_by_model_provided_path(shell_path: &PathBuf) -> DetectedShell {
     detect_shell_type(shell_path)
-        .and_then(|shell_type| get_shell(shell_type, Some(shell_path)))
+        .and_then(|shell_type| get_shell(shell_type, /*path*/ None))
         .unwrap_or_else(ultimate_fallback_shell)
 }
 
@@ -364,5 +364,62 @@ mod tests {
             detect_shell_type(PathBuf::from("cmd.exe")),
             Some(ShellType::Cmd)
         );
+    }
+
+    #[test]
+    fn model_provided_shell_path_does_not_select_executable() -> std::io::Result<()> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "codex-shell-command-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&temp_dir)?;
+
+        for fake_shell_name in if cfg!(windows) {
+            ["powershell.exe", "powershell.evil"]
+        } else {
+            ["bash", "bash.evil"]
+        } {
+            let fake_shell_path = temp_dir.join(fake_shell_name);
+            std::fs::write(&fake_shell_path, "")?;
+
+            let model_shell = get_shell_by_model_provided_path(&fake_shell_path);
+
+            let _ = std::fs::remove_file(&fake_shell_path);
+
+            assert_ne!(model_shell.shell_path, fake_shell_path);
+        }
+        let _ = std::fs::remove_dir(&temp_dir);
+
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_shell_path_can_still_select_executable() -> std::io::Result<()> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "codex-shell-command-trusted-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&temp_dir)?;
+        let trusted_shell_path =
+            temp_dir.join(if cfg!(windows) { "powershell.exe" } else { "bash" });
+        std::fs::write(&trusted_shell_path, "")?;
+
+        let trusted_shell = get_shell(
+            if cfg!(windows) {
+                ShellType::PowerShell
+            } else {
+                ShellType::Bash
+            },
+            Some(&trusted_shell_path),
+        );
+
+        let _ = std::fs::remove_file(&trusted_shell_path);
+        let _ = std::fs::remove_dir(&temp_dir);
+
+        assert_eq!(
+            trusted_shell.map(|shell| shell.shell_path),
+            Some(trusted_shell_path)
+        );
+        Ok(())
     }
 }
