@@ -131,7 +131,7 @@ impl AppServerTransport {
                 let codex_home = find_codex_home().map_err(|err| {
                     AppServerTransportParseError::InvalidUnixSocketPath {
                         listen_url: listen_url.to_string(),
-                        message: format!("failed to resolve CODEX_HOME: {err}"),
+                        message: format!("failed to resolve BETTER_CODEX_HOME: {err}"),
                     }
                 })?;
                 app_server_control_socket_path(&codex_home).map_err(|err| {

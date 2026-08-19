@@ -1,15 +1,14 @@
 ---
 source: tui/src/chatwidget/tests/app_server.rs
-assertion_line: 99
 expression: rendered
 ---
-OpenAI Codex (v<VERSION>)
+Better Codex (v<VERSION>)
 model: GPT-5.6 Luna high
 directory: /tmp/thread-settings
 
   To get started, describe a task or try one of these commands:
 
-  /init - create an AGENTS.md file with instructions for Codex
+  /init - create an AGENTS.md file with instructions for Better Codex
   /status - show current session configuration
   /permissions - choose what Codex is allowed to do
   /model - choose what model and reasoning effort to use

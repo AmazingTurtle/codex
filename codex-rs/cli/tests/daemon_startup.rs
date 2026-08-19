@@ -36,7 +36,7 @@ async fn bedrock_onboarding_leaves_a_running_daemon_untouched() -> Result<()> {
 }
 
 async fn daemon_startup(command: &str) -> Result<()> {
-    let codex = codex_utils_cargo_bin::cargo_bin("codex")?.canonicalize()?;
+    let codex = codex_utils_cargo_bin::cargo_bin("better-codex")?.canonicalize()?;
     let workspace = tempfile::tempdir()?;
     let workspace_path = workspace.path().canonicalize()?;
     #[cfg(unix)]
@@ -76,7 +76,10 @@ async fn daemon_startup(command: &str) -> Result<()> {
     ] {
         env.remove(key);
     }
-    env.insert("CODEX_HOME".into(), home.path().display().to_string());
+    env.insert(
+        "BETTER_CODEX_HOME".into(),
+        home.path().display().to_string(),
+    );
     env.insert(
         "CODEX_SQLITE_HOME".into(),
         home.path().display().to_string(),

@@ -203,6 +203,14 @@ pub fn compute_keyring_account(codex_home: &Path, namespace: LocalSecretsNamespa
     }
 }
 
+/// Removes the Better Codex local-secrets passphrase for a failed migration.
+pub fn delete_local_secrets_key(codex_home: &Path) -> Result<bool> {
+    let account = compute_keyring_account(codex_home);
+    DefaultKeyringStore
+        .delete(KEYRING_SERVICE, &account)
+        .map_err(|error| anyhow::anyhow!(error.message()))
+}
+
 pub(crate) fn keyring_service() -> &'static str {
     KEYRING_SERVICE
 }

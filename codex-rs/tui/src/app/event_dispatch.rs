@@ -21,6 +21,7 @@ use codex_app_server_client::AppServerEvent;
 use codex_app_server_protocol::ThreadGoalStatus;
 #[cfg(target_os = "windows")]
 use codex_app_server_protocol::WindowsSandboxSetupMode;
+use codex_product_info::CLI_NAME;
 
 pub(super) const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
@@ -2656,8 +2657,9 @@ impl App {
             #[cfg(any(unix, windows))]
             AppEvent::AgentsDaemonStarted { result } => match result {
                 Ok(()) => self.chat_widget.add_info_message(
-                    "Background server started. Run `codex agents` in another terminal; this session remains unchanged."
-                        .to_string(),
+                    format!(
+                        "Background server started. Run `{CLI_NAME} agents` in another terminal; this session remains unchanged."
+                    ),
                     /*hint*/ None,
                 ),
                 Err(error) => self

@@ -39,7 +39,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
         } else {
             line![
                 "See ",
-                "https://github.com/openai/codex"
+                codex_product_info::REPOSITORY
                     .fg(accent_color())
                     .underlined(),
                 " for installation options."
@@ -56,7 +56,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             update_instruction,
             "",
             "See full release notes:",
-            "https://github.com/openai/codex/releases/latest"
+            "https://github.com/AmazingTurtle/codex/releases/latest"
                 .fg(accent_color())
                 .underlined(),
         ];
@@ -73,7 +73,10 @@ impl HistoryCell for UpdateAvailableHistoryCell {
         let update_instruction = if let Some(update_action) = self.update_action {
             format!("Run {} to update.", update_action.command_str())
         } else {
-            "See https://github.com/openai/codex for installation options.".to_string()
+            format!(
+                "See {} for installation options.",
+                codex_product_info::REPOSITORY
+            )
         };
         vec![
             Line::from("Update available!"),
@@ -81,7 +84,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             Line::from(update_instruction),
             Line::from(""),
             Line::from("See full release notes:"),
-            Line::from("https://github.com/openai/codex/releases/latest"),
+            Line::from("https://github.com/AmazingTurtle/codex/releases/latest"),
         ]
     }
 

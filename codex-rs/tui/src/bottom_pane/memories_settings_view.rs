@@ -137,7 +137,7 @@ impl MemoriesSettingsView {
         );
         header.push(
             Paragraph::new(Line::from(
-                "This clears local memory files and rollout summaries for the current Codex home."
+                "This clears local memory files and rollout summaries for the current Better Codex home."
                     .dim(),
             ))
             .wrap(Wrap { trim: false }),

@@ -1,6 +1,5 @@
 ---
 source: tui/src/app/composer_hints_tests.rs
-assertion_line: 87
 expression: "crate::chatwidget::tests::helpers::normalize_snapshot_paths(snapshots.join(\"\\n\\n\"))"
 ---
 80 columns, running=false
@@ -10,7 +9,7 @@ Conversation
   breakdown.
                                                   ⚠ 5h limit: 8% left · /status
 
-› Ask Codex to do anything
+› Ask Better Codex to do anything
 
   GPT-5.6-Sol default · /tmp/project
   ? for shortcuts                                      ⚠ 1 warning · f2 to view

@@ -813,7 +813,7 @@ fn spawn_server(home: &Path, socket_path: &Path) -> Result<Child> {
     Ok(Command::new(binary)
         .args(["--listen", &format!("unix://{}", socket_path.display())])
         .arg(DISABLE_PLUGIN_STARTUP_TASKS_ARG)
-        .env("CODEX_HOME", home)
+        .env("BETTER_CODEX_HOME", home)
         .arg("--managed-daemon")
         .env(
             codex_app_server_transport::DAEMON_SHUTDOWN_SOCKET_ENV,

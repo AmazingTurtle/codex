@@ -13,7 +13,8 @@ const MAX_OPEN_TABS_CHARS: usize = 20_000;
 // raw prompt before this marker, then transcript rendering strips back to the request after the last
 // marker. Keeping the same marker and stripping semantics lets threads created with IDE context in
 // one surface replay cleanly in the others.
-const PROMPT_REQUEST_BEGIN: &str = "## My request for Codex:";
+const PROMPT_REQUEST_BEGIN: &str = "## My request for Better Codex:";
+const LEGACY_PROMPT_REQUEST_BEGIN: &str = "## My request for Codex:";
 
 pub(crate) fn apply_ide_context_to_user_input(
     context: &IdeContext,
@@ -63,11 +64,16 @@ pub(crate) fn has_prompt_context(context: &IdeContext) -> bool {
 }
 
 pub(crate) fn extract_prompt_request_with_offset(message: &str) -> (&str, usize) {
-    let Some((before_request, request)) = message.rsplit_once(PROMPT_REQUEST_BEGIN) else {
+    let Some((request_start, marker)) = [PROMPT_REQUEST_BEGIN, LEGACY_PROMPT_REQUEST_BEGIN]
+        .into_iter()
+        .filter_map(|marker| message.rfind(marker).map(|start| (start, marker)))
+        .max_by_key(|(start, _)| *start)
+    else {
         return (message, 0);
     };
 
-    let request_start = before_request.len() + PROMPT_REQUEST_BEGIN.len();
+    let request = &message[request_start + marker.len()..];
+    let request_start = request_start + marker.len();
     let trimmed_request = request.trim();
     let leading_trimmed_len = request.len() - request.trim_start().len();
     (trimmed_request, request_start + leading_trimmed_len)
@@ -237,7 +243,7 @@ mod tests {
             panic!("reply text");
         };
         *text = format!(
-            "# Context from my IDE setup:\n\n## Open tabs:\n- lib.rs: src/lib.rs\n\n## My request for Codex:\n{text}"
+            "# Context from my IDE setup:\n\n## Open tabs:\n- lib.rs: src/lib.rs\n\n## My request for Better Codex:\n{text}"
         );
         assert!(apply_ide_context_to_user_input(&context, &mut items));
         assert_eq!(items, expected);
@@ -328,7 +334,7 @@ mod tests {
 
         assert!(apply_ide_context_to_user_input(&context, &mut items));
 
-        let expected_prefix = "# Context from my IDE setup:\n\n## Active file: src/lib.rs\n\n## My request for Codex:\n";
+        let expected_prefix = "# Context from my IDE setup:\n\n## Active file: src/lib.rs\n\n## My request for Better Codex:\n";
         let prefix_len = expected_prefix.len();
         assert_eq!(
             items,
@@ -353,8 +359,7 @@ mod tests {
 
     #[test]
     fn extract_prompt_request_returns_text_after_last_delimiter() {
-        let message =
-            "# Context\n## My request for Codex:\nFirst\n## My request for Codex:\n  Second\n";
+        let message = "# Context\n## My request for Better Codex:\nFirst\n## My request for Better Codex:\n  Second\n";
 
         assert_eq!(
             extract_prompt_request_with_offset(message),

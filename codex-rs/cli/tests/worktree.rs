@@ -233,9 +233,12 @@ trust_level = "trusted"
             .plan_type("enterprise"),
         codex_config::types::AuthCredentialsStoreMode::File,
     )?;
-    let program = codex_utils_cargo_bin::cargo_bin("codex")?;
+    let program = codex_utils_cargo_bin::cargo_bin(codex_product_info::CLI_NAME)?;
     let mut env: HashMap<String, String> = std::env::vars().collect();
-    env.insert("CODEX_HOME".into(), home.display().to_string());
+    env.insert(
+        codex_product_info::HOME_ENV.into(),
+        home.display().to_string(),
+    );
     env.insert("CODEX_SQLITE_HOME".into(), home.display().to_string());
     env.insert("NO_PROXY".into(), "127.0.0.1,localhost".into());
     env.insert("no_proxy".into(), "127.0.0.1,localhost".into());

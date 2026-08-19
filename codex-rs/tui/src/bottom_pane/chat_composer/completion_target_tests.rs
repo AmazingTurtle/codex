@@ -197,7 +197,9 @@ fn typed_qualified_suffix_preserves_bound_plain_mention() {
 
 #[test]
 fn dollar_query_classifies_shell_and_skill_syntax() {
-    assert!(!dollar_query_is_completable("{CODEX_HOME}/config.toml"));
+    assert!(!dollar_query_is_completable(
+        "{BETTER_CODEX_HOME}/config.toml"
+    ));
     assert!(!dollar_query_is_completable("(pwd)"));
     assert!(dollar_query_is_completable("home:search"));
     assert!(dollar_query_is_completable("home"));

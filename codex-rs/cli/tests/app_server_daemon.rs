@@ -23,7 +23,7 @@ struct TestDaemon {
 impl TestDaemon {
     fn new() -> Result<Self> {
         let home = tempfile::Builder::new().tempdir_in("/tmp")?;
-        let codex = codex_utils_cargo_bin::cargo_bin("codex")?;
+        let codex = codex_utils_cargo_bin::cargo_bin("better-codex")?;
         let codex_source = std::fs::canonicalize(&codex)?;
         let target = if cfg!(target_os = "macos") {
             format!("{}-apple-darwin", std::env::consts::ARCH)
@@ -57,7 +57,7 @@ impl TestDaemon {
 
     fn command(&self) -> Command {
         let mut command = Command::new(&self.codex);
-        command.env("CODEX_HOME", self.home.path());
+        command.env("BETTER_CODEX_HOME", self.home.path());
         command
     }
 
@@ -507,7 +507,7 @@ fn packaged_daemon_launch(action: &str, initial: InitialDaemon) -> Result<()> {
     std::fs::write(
         package.join("codex-package.json"),
         serde_json::to_vec(&serde_json::json!({
-            "version": env!("CARGO_PKG_VERSION"), "target": target, "entrypoint": "bin/codex"
+            "version": codex_product_info::VERSION, "target": target, "entrypoint": "bin/codex"
         }))?,
     )?;
     if action == "start" && initial == InitialDaemon::Missing {

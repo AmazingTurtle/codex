@@ -1,8 +1,9 @@
 ---
 source: cli/src/doctor.rs
+assertion_line: 4152
 expression: "render_human_report(&report, HumanOutputOptions\n{ show_details: true, show_all: true, ascii: true, color_enabled: false, })"
 ---
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    [!!] terminal     TERM=dumb - colors and cursor control are disabled in this non-interactive run

@@ -82,19 +82,21 @@ trust_level = "trusted"
             .mount(&server)
             .await;
 
-        let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-            .current_dir(codex_home.path())
-            .env("CODEX_HOME", codex_home.path())
-            .env("NO_PROXY", "127.0.0.1,localhost")
-            .env("no_proxy", "127.0.0.1,localhost")
-            .env_remove("CODEX_ACCESS_TOKEN")
-            .env_remove("CODEX_API_KEY")
-            .env_remove("OPENAI_API_KEY")
-            .arg("--cd")
-            .arg(workspace.path())
-            .args(["doctor", "--json"])
-            .stdin(Stdio::null())
-            .output()?;
+        let output = Command::new(codex_utils_cargo_bin::cargo_bin(
+            codex_product_info::CLI_NAME,
+        )?)
+        .current_dir(codex_home.path())
+        .env(codex_product_info::HOME_ENV, codex_home.path())
+        .env("NO_PROXY", "127.0.0.1,localhost")
+        .env("no_proxy", "127.0.0.1,localhost")
+        .env_remove("CODEX_ACCESS_TOKEN")
+        .env_remove("CODEX_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .arg("--cd")
+        .arg(workspace.path())
+        .args(["doctor", "--json"])
+        .stdin(Stdio::null())
+        .output()?;
         let report: Value = serde_json::from_slice(&output.stdout)?;
         if valid_requirements {
             let config = &report["checks"]["config.load"];
@@ -159,10 +161,12 @@ async fn invalid_custom_ca_falls_back_to_system_roots() -> Result<()> {
         ),
     )?;
     for sandbox in [None, Some("seatbelt")] {
-        let mut command = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
+        let mut command = Command::new(codex_utils_cargo_bin::cargo_bin(
+            codex_product_info::CLI_NAME,
+        )?);
         command
             .args(["doctor", "--json"])
-            .env("CODEX_HOME", codex_home.path())
+            .env(codex_product_info::HOME_ENV, codex_home.path())
             .env("CODEX_CA_CERTIFICATE", &certificate)
             .stdin(Stdio::null());
         if let Some(sandbox) = sandbox {
@@ -223,12 +227,14 @@ fn doctor_reports_macos_system_proxy_configuration_and_policy() -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn doctor_report(codex_home: &Path) -> Result<Value> {
-    let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .args(["doctor", "--json"])
-        .env("CODEX_HOME", codex_home)
-        .stdin(Stdio::null())
-        .output()
-        .context("failed to run the doctor")?;
+    let output = Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .args(["doctor", "--json"])
+    .env(codex_product_info::HOME_ENV, codex_home)
+    .stdin(Stdio::null())
+    .output()
+    .context("failed to run the doctor")?;
 
     serde_json::from_slice(&output.stdout).context("doctor did not emit a valid json report")
 }

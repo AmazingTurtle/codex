@@ -476,7 +476,7 @@ pub fn main() -> Result<()> {
     let ret = real_main(&mut setup_mode);
     if let Err(e) = &ret {
         // Best-effort: log unexpected top-level errors.
-        if let Ok(codex_home) = std::env::var("CODEX_HOME") {
+        if let Ok(codex_home) = std::env::var("BETTER_CODEX_HOME") {
             let sbx_dir = sandbox_dir(Path::new(&codex_home));
             let _ = std::fs::create_dir_all(&sbx_dir);
             // An unparsed payload must not enable writes to an existing log.

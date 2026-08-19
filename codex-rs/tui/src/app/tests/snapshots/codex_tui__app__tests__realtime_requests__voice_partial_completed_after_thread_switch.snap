@@ -1,18 +1,17 @@
 ---
 source: tui/src/app/tests/realtime_requests.rs
-assertion_line: 302
 expression: "normalize_voice_snapshot_directory(&rendered, &app.config.cwd)"
 ---
-╭────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.0.0)               │
-│                                        │
-│ model:     gpt-test   /model to change │
-│ directory: /tmp/project                │
-╰────────────────────────────────────────╯
+╭─────────────────────────────────────────╮
+│ >_ Better Codex (v0.999.0-better-codex) │
+│                                         │
+│ model:     gpt-test   /model to change  │
+│ directory: /tmp/project                 │
+╰─────────────────────────────────────────╯
 
   To get started, describe a task or try one of these commands:
 
-  /init - create an AGENTS.md file with instructions for Codex
+  /init - create an AGENTS.md file with instructions for Better Codex
   /status - show current session configuration
   /permissions - choose what Codex is allowed to do
   /model - choose what model and reasoning effort to use

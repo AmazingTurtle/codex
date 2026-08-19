@@ -2699,7 +2699,7 @@ async fn underfilled_scrollback_fetches_older_pages_without_opening_the_transcri
         overlay.set_highlight_cell(Some(0));
         let partial = render_overlay(overlay);
         assert!(partial.contains("Earlier messages available."));
-        assert!(!partial.contains("OpenAI Codex"));
+        assert!(!partial.contains("Better Codex"));
         assert!(!partial.contains("This is a test announcement"));
         assert!(!partial.contains('%'));
 
@@ -2709,7 +2709,7 @@ async fn underfilled_scrollback_fetches_older_pages_without_opening_the_transcri
         )?;
         let loading = render_overlay(overlay);
         assert!(loading.contains("Loading earlier messages…"));
-        assert!(!loading.contains("OpenAI Codex"));
+        assert!(!loading.contains("Better Codex"));
         assert!(!loading.contains('%'));
     } else {
         panic!("expected transcript overlay");

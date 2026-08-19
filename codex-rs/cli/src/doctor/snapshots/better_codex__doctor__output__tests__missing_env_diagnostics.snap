@@ -1,8 +1,9 @@
 ---
 source: cli/src/doctor/output.rs
+assertion_line: 1872
 expression: "render_human_report(&report, detailed_all_no_color_unicode_options())"
 ---
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    ⚠ mcp          missing inputs

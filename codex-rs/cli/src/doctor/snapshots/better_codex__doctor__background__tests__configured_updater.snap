@@ -1,5 +1,6 @@
 ---
 source: cli/src/doctor/background.rs
+assertion_line: 344
 expression: details
 ---
 update-loop pid file: CODEX_HOME/app-server-daemon/app-server-updater.pid (missing)

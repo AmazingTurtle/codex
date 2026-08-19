@@ -8,8 +8,10 @@ use std::path::Path;
 use tempfile::TempDir;
 
 fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
-    let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
-    cmd.env("CODEX_HOME", codex_home);
+    let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?);
+    cmd.env(codex_product_info::HOME_ENV, codex_home);
     Ok(cmd)
 }
 
