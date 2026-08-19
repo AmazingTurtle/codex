@@ -295,6 +295,7 @@ async fn new_config(
         tui_terminal_title: None,
         tui_theme: None,
         tui_raw_output_mode: false,
+        tui_tool_call_display: Default::default(),
         tui_pet: None,
         tui_pet_anchor: TuiPetAnchor::Composer,
         terminal_resize_reflow: TerminalResizeReflowConfig::default(),

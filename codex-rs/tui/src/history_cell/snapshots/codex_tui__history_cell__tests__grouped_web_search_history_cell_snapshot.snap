@@ -1,0 +1,11 @@
+---
+source: tui/src/history_cell/tests.rs
+expression: rendered
+---
+• Searched the web
+  └ Search rust ratatui wrapping
+    Open https://docs.rs/ratatui/latest/ratatui/
+    Open a web page
+    Browse web content
+    Find 'installation' in
+         https://docs.rs/ratatui/latest/ratatui/

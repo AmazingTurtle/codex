@@ -4,6 +4,7 @@ use crate::app_event::HistoryLookupResponse;
 use codex_app_server_protocol::ImageReference;
 use codex_app_server_protocol::NetworkAccess;
 use codex_app_server_protocol::SandboxPolicy;
+use codex_config::types::ToolCallDisplay;
 use codex_protocol::models::FunctionCallOutputBody;
 use codex_protocol::models::ManagedFileSystemPermissions;
 use codex_protocol::permissions::FileSystemAccessMode;
@@ -1325,6 +1326,7 @@ async fn replayed_mcp_tool_call_stays_active_until_completion() {
 async fn failed_repl_mcp_tool_call_preserves_status_and_result() {
     for server in ["node_repl", "cua_repl"] {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+        chat.local_settings.tui.tool_call_display = ToolCallDisplay::Summary;
         let _ = drain_insert_history(&mut rx);
 
         chat.handle_server_notification(

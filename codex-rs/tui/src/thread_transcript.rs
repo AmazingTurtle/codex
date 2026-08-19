@@ -19,6 +19,7 @@ use crate::legacy_core::config::Config;
 use codex_app_server_protocol::Thread;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::UserInput;
+use codex_config::types::ToolCallDisplay;
 use codex_protocol::ThreadId;
 use codex_protocol::items::UserMessageItem;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -128,6 +129,9 @@ pub(crate) fn thread_items_to_transcript_cells(
     raw_reasoning_visibility: RawReasoningVisibility,
     config: Option<&Config>,
 ) -> TranscriptCells {
+    let tool_call_display = config.map_or(ToolCallDisplay::default(), |config| {
+        config.tui_tool_call_display
+    });
     let inline_visualization_context = config.and_then(|config| {
         thread_id.and_then(|thread_id| InlineVisualizationContext::from_config(config, thread_id))
     });
@@ -142,6 +146,7 @@ pub(crate) fn thread_items_to_transcript_cells(
                 cwd,
                 raw_reasoning_visibility,
                 inline_visualization_context.clone(),
+                tool_call_display,
             ) {
                 match group {
                     PendingActivity::Computer(group) => group.group.push_detail(cell),
@@ -175,7 +180,7 @@ pub(crate) fn thread_items_to_transcript_cells(
                     }
                 } else {
                     PendingActivity::flush(&mut pending, &mut cells);
-                    let cell = call.into_cell();
+                    let cell = call.into_cell(tool_call_display);
                     cells.push(Arc::new(cell));
                 }
             }
@@ -184,7 +189,7 @@ pub(crate) fn thread_items_to_transcript_cells(
                     PendingActivity::flush(&mut pending, &mut cells);
                 }
                 if let Some(command) = tools::CommandHistory::from_item(item) {
-                    let newer = command.into_cell();
+                    let newer = command.into_cell(tool_call_display);
                     if let Some(PendingActivity::Exploration(group)) = &mut pending {
                         if let Err(newer) = group.append_completed(newer) {
                             PendingActivity::flush(&mut pending, &mut cells);
@@ -194,7 +199,8 @@ pub(crate) fn thread_items_to_transcript_cells(
                         pending = Some(PendingActivity::Exploration(newer));
                     }
                     if let Some(PendingActivity::Exploration(group)) = &pending
-                        && group.should_flush()
+                        && (group.should_flush()
+                            || tool_call_display == ToolCallDisplay::Individual)
                     {
                         PendingActivity::flush(&mut pending, &mut cells);
                     }
@@ -206,6 +212,7 @@ pub(crate) fn thread_items_to_transcript_cells(
                     cwd,
                     raw_reasoning_visibility,
                     inline_visualization_context.clone(),
+                    tool_call_display,
                 );
                 if !projected.is_empty() {
                     PendingActivity::flush(&mut pending, &mut cells);
@@ -224,6 +231,7 @@ fn item_to_cells(
     cwd: &AbsolutePathBuf,
     raw_reasoning_visibility: RawReasoningVisibility,
     inline_visualization_context: Option<InlineVisualizationContext>,
+    tool_call_display: ToolCallDisplay,
 ) -> TranscriptCells {
     let mut cells: TranscriptCells = Vec::new();
     match item {
@@ -331,7 +339,7 @@ fn item_to_cells(
         }
         item @ ThreadItem::CommandExecution { .. } => {
             if let Some(command) = tools::CommandHistory::from_item(item) {
-                cells.push(Arc::new(command.into_cell()));
+                cells.push(Arc::new(command.into_cell(tool_call_display)));
             }
         }
         other => cells.extend(other_items::cells(other, cwd)),
