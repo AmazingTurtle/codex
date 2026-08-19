@@ -173,8 +173,7 @@ fn is_safe_to_call_with_exec(command: &[String]) -> bool {
 }
 
 pub(crate) fn is_safe_git_command(command: &[String]) -> bool {
-    let Some((subcommand_idx, subcommand)) =
-        find_git_subcommand(command, &["status", "log", "diff", "show", "branch"])
+    let Some((subcommand_idx, subcommand)) = find_git_subcommand(command, &["status", "branch"])
     else {
         return false;
     };
@@ -187,7 +186,7 @@ pub(crate) fn is_safe_git_command(command: &[String]) -> bool {
     let subcommand_args = &command[subcommand_idx + 1..];
 
     match subcommand {
-        "status" | "log" | "diff" | "show" => git_subcommand_args_are_read_only(subcommand_args),
+        "status" => git_subcommand_args_are_read_only(subcommand_args),
         "branch" => {
             git_subcommand_args_are_read_only(subcommand_args)
                 && git_branch_is_read_only(subcommand_args)
@@ -438,6 +437,23 @@ mod tests {
     }
 
     #[test]
+    fn git_subcommands_that_can_run_diff_drivers_are_not_safe() {
+        for args in [
+            vec_str(&["git", "show", "HEAD"]),
+            vec_str(&["git", "diff", "HEAD~1..HEAD"]),
+            vec_str(&["git", "log", "-p", "-1"]),
+            vec_str(&["bash", "-lc", "git show HEAD"]),
+            vec_str(&["bash", "-lc", "git diff HEAD~1..HEAD"]),
+            vec_str(&["bash", "-lc", "git log -p -1"]),
+        ] {
+            assert!(
+                !is_known_safe_command(&args),
+                "expected {args:?} to require approval because git diff drivers can execute commands",
+            );
+        }
+    }
+
+    #[test]
     fn git_global_pagination_flags_are_not_safe() {
         assert!(!is_known_safe_command(&vec_str(&[
             "git",
@@ -461,13 +477,13 @@ mod tests {
     }
 
     #[test]
-    fn git_subcommand_patch_flags_remain_safe() {
-        assert!(is_known_safe_command(&vec_str(&["git", "log", "-p", "-1"])));
-        assert!(is_known_safe_command(&vec_str(&["git", "diff", "-p"])));
-        assert!(is_known_safe_command(&vec_str(&[
+    fn git_subcommand_patch_flags_are_not_safe() {
+        assert!(!is_known_safe_command(&vec_str(&["git", "log", "-p", "-1"])));
+        assert!(!is_known_safe_command(&vec_str(&["git", "diff", "-p"])));
+        assert!(!is_known_safe_command(&vec_str(&[
             "git", "show", "-p", "HEAD",
         ])));
-        assert!(is_known_safe_command(&vec_str(&[
+        assert!(!is_known_safe_command(&vec_str(&[
             "bash",
             "-lc",
             "git log -p -1",
