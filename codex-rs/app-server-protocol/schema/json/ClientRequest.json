@@ -5,6 +5,62 @@
       "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
       "type": "string"
     },
+    "AccountListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AccountReadManyParams": {
+      "properties": {
+        "accountIds": {
+          "description": "Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AccountRemoveParams": {
+      "properties": {
+        "accountId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accountId"
+      ],
+      "type": "object"
+    },
+    "AccountSwitchParams": {
+      "properties": {
+        "accountId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accountId"
+      ],
+      "type": "object"
+    },
     "AddCreditsNudgeCreditType": {
       "enum": [
         "credits",
@@ -7221,6 +7277,78 @@
         },
         "method": {
           "enum": [
+            "account/list"
+          ],
+          "title": "Account/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AccountListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Account/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "account/switch"
+          ],
+          "title": "Account/switchRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AccountSwitchParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Account/switchRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "account/remove"
+          ],
+          "title": "Account/removeRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AccountRemoveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Account/removeRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "account/rateLimits/read"
           ],
           "title": "Account/rateLimits/readRequestMethod",
@@ -7235,6 +7363,30 @@
         "method"
       ],
       "title": "Account/rateLimits/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "account/rateLimits/readMany"
+          ],
+          "title": "Account/rateLimits/readManyRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AccountReadManyParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Account/rateLimits/readManyRequest",
       "type": "object"
     },
     {
@@ -7289,6 +7441,54 @@
         "method"
       ],
       "title": "Account/usage/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "account/usage/readMany"
+          ],
+          "title": "Account/usage/readManyRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AccountReadManyParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Account/usage/readManyRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "account/models/readMany"
+          ],
+          "title": "Account/models/readManyRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AccountReadManyParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Account/models/readManyRequest",
       "type": "object"
     },
     {

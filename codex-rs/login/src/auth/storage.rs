@@ -58,6 +58,14 @@ pub struct AuthDotJson {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bedrock_api_key: Option<BedrockApiKeyAuth>,
+
+    /// Other persisted ChatGPT accounts. The top-level credential remains the
+    /// active account for backward compatibility with older Codex releases.
+    ///
+    /// Older releases ignore this field and may discard these alternate
+    /// credentials if they subsequently rewrite the auth record.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accounts: Vec<AuthDotJson>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

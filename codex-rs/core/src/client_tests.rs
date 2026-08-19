@@ -24,8 +24,10 @@ use codex_http_client::OutboundProxyPolicy;
 use codex_login::AuthCredentialsStoreMode;
 use codex_login::AuthKeyringBackendKind;
 use codex_login::AuthManager;
+use codex_login::ChatgptAccountBinding;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
+use codex_login::auth::BedrockApiKeyAuth;
 use codex_model_provider::BearerAuthProvider;
 use codex_model_provider::SharedModelProvider;
 use codex_model_provider::create_model_provider;
@@ -108,6 +110,45 @@ fn test_model_client_with_thread_id(
         /*attestation_provider*/ None,
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
+}
+
+#[tokio::test]
+async fn bedrock_endpoint_resolution_ignores_chatgpt_account_binding() {
+    let region = "eu-central-1";
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
+            api_key: "bedrock-api-key".to_string(),
+            region: region.to_string(),
+        }));
+    let client = ModelClient::new(
+        Some(auth_manager),
+        AgentIdentityAuthPolicy::JwtOnly,
+        ThreadId::new(),
+        ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
+        SessionSource::Exec,
+        "test_originator".to_string(),
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*concurrent_reasoning_summaries_enabled*/ false,
+        /*attestation_provider*/ None,
+        HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+    )
+    .with_chatgpt_account_binding(Some(ChatgptAccountBinding {
+        account_id: "retained-chatgpt-account".to_string(),
+        manual_switch_revision: 0,
+    }));
+
+    let setup = client
+        .current_client_setup()
+        .await
+        .expect("Bedrock client setup should resolve");
+
+    assert_eq!(
+        setup.api_provider.base_url,
+        format!("https://bedrock-mantle.{region}.api.aws/openai/v1")
+    );
 }
 
 #[tokio::test]
@@ -332,6 +373,7 @@ async fn chatgpt_auth_manager(
     .await;
     let auth = auth_manager.auth().await.expect("auth should load");
     AuthManager::from_auth_for_testing_with_agent_identity_authapi_base_url(
+        codex_home.path().to_path_buf(),
         auth,
         agent_identity_authapi_base_url,
     )

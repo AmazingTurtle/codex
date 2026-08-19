@@ -33,6 +33,7 @@ use codex_extension_api::UserInstructionsProvider;
 use codex_extension_api::empty_extension_registry;
 use codex_features::Feature;
 use codex_home::CodexHomeUserInstructionsProvider;
+use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::built_in_model_providers;
@@ -304,6 +305,7 @@ pub fn turn_permission_fields(
 pub struct TestCodexBuilder {
     config_mutators: Vec<Box<ConfigMutator>>,
     auth: CodexAuth,
+    auth_manager: Option<Arc<AuthManager>>,
     pre_build_hooks: Vec<Box<PreBuildHook>>,
     workspace_setups: Vec<Box<WorkspaceSetup>>,
     home: Option<Arc<TempDir>>,
@@ -330,6 +332,11 @@ impl TestCodexBuilder {
 
     pub fn with_auth(mut self, auth: CodexAuth) -> Self {
         self.auth = auth;
+        self
+    }
+
+    pub fn with_auth_manager(mut self, auth_manager: Arc<AuthManager>) -> Self {
+        self.auth_manager = Some(auth_manager);
         self
     }
 
@@ -656,7 +663,12 @@ impl TestCodexBuilder {
                     config.codex_home.clone(),
                 ))
             });
-        let auth_manager = codex_core::test_support::auth_manager_from_auth(auth.clone());
+        let auth_manager = self.auth_manager.clone().unwrap_or_else(|| {
+            codex_core::test_support::auth_manager_from_auth_with_home(
+                auth.clone(),
+                config.codex_home.to_path_buf(),
+            )
+        });
         let models_manager = self
             .models_manager
             .clone()
@@ -1278,6 +1290,7 @@ pub fn test_codex() -> TestCodexBuilder {
                 .expect("test config should allow ShellSnapshot override");
         })],
         auth: CodexAuth::from_api_key("dummy"),
+        auth_manager: None,
         pre_build_hooks: vec![],
         workspace_setups: vec![],
         home: None,

@@ -227,8 +227,27 @@ impl ConfigManager {
         &self,
         cli_overrides: &[(String, TomlValue)],
         request_overrides: Option<HashMap<String, serde_json::Value>>,
+        typesafe_overrides: ConfigOverrides,
+        fallback_cwd: Option<PathBuf>,
+    ) -> std::io::Result<Config> {
+        self.load_with_cli_overrides_and_cloud_config_bundle(
+            cli_overrides,
+            request_overrides,
+            typesafe_overrides,
+            fallback_cwd,
+            self.current_cloud_config_bundle(),
+        )
+        .await
+    }
+
+    #[instrument(level = "trace", skip_all)]
+    pub(crate) async fn load_with_cli_overrides_and_cloud_config_bundle(
+        &self,
+        cli_overrides: &[(String, TomlValue)],
+        request_overrides: Option<HashMap<String, serde_json::Value>>,
         mut typesafe_overrides: ConfigOverrides,
         fallback_cwd: Option<PathBuf>,
+        cloud_config_bundle: CloudConfigBundleLoader,
     ) -> std::io::Result<Config> {
         let mut request_overrides = request_overrides.unwrap_or_default();
         if let Some(value) = request_overrides.remove("bypass_hook_trust") {
@@ -255,7 +274,7 @@ impl ConfigManager {
             .strict_config(self.strict_config)
             .harness_overrides(typesafe_overrides)
             .fallback_cwd(fallback_cwd)
-            .cloud_config_bundle(self.current_cloud_config_bundle())
+            .cloud_config_bundle(cloud_config_bundle)
             .thread_config_loader(self.current_thread_config_loader())
             .build()
             .await?;

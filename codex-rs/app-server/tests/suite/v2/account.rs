@@ -6,21 +6,35 @@ use app_test_support::to_response;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::ChatGptIdTokenClaims;
 use app_test_support::DEFAULT_CLIENT_NAME;
+use app_test_support::create_fake_rollout;
 use app_test_support::encode_id_token;
 use app_test_support::write_chatgpt_auth;
 use app_test_support::write_models_cache;
 use chrono::Duration as ChronoDuration;
 use chrono::Utc;
 use codex_app_server_protocol::Account;
+use codex_app_server_protocol::AccountListParams;
+use codex_app_server_protocol::AccountListResponse;
 use codex_app_server_protocol::AccountLoginCompletedNotification;
+use codex_app_server_protocol::AccountModelsReadManyResponse;
+use codex_app_server_protocol::AccountRateLimitsReadManyResponse;
+use codex_app_server_protocol::AccountReadManyParams;
+use codex_app_server_protocol::AccountRemoveParams;
+use codex_app_server_protocol::AccountRemoveResponse;
+use codex_app_server_protocol::AccountSwitchParams;
+use codex_app_server_protocol::AccountSwitchResponse;
 use codex_app_server_protocol::AccountUpdatedNotification;
+use codex_app_server_protocol::AccountUsageReadManyResponse;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::CancelLoginAccountParams;
 use codex_app_server_protocol::CancelLoginAccountResponse;
 use codex_app_server_protocol::CancelLoginAccountStatus;
+use codex_app_server_protocol::ChatgptAccountSummary;
 use codex_app_server_protocol::ChatgptAuthTokensRefreshReason;
 use codex_app_server_protocol::ChatgptAuthTokensRefreshResponse;
 use codex_app_server_protocol::ClientInfo;
+use codex_app_server_protocol::ClientRequest;
+use codex_app_server_protocol::ConfigRequirementsReadResponse;
 use codex_app_server_protocol::DesktopOnboardingEntrypoint;
 use codex_app_server_protocol::GetAccountParams;
 use codex_app_server_protocol::GetAccountResponse;
@@ -35,6 +49,7 @@ use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::LogoutAccountResponse;
 use codex_app_server_protocol::RequestId;
+use codex_app_server_protocol::ResidencyRequirement;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::TurnCompletedNotification;
@@ -44,10 +59,13 @@ use codex_login::AuthDotJson;
 use codex_login::AuthKeyringBackendKind;
 use codex_login::CLIENT_ID_OVERRIDE_ENV_VAR;
 use codex_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
+use codex_login::REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR;
 use codex_login::auth::BedrockApiKeyAuth;
+use codex_login::default_client::RESIDENCY_HEADER_NAME;
 use codex_login::load_auth_dot_json;
 use codex_login::login_with_api_key;
 use codex_login::login_with_bedrock_api_key;
+use codex_login::save_auth;
 use codex_protocol::account::PlanType as AccountPlanType;
 use codex_protocol::auth::AuthMode as DomainAuthMode;
 use core_test_support::responses;
@@ -62,6 +80,7 @@ use url::Url;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
+use wiremock::matchers::header;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
@@ -87,6 +106,7 @@ struct CreateConfigTomlParams {
     base_url: Option<String>,
     chatgpt_base_url: Option<String>,
     model_provider_id: Option<String>,
+    chatgpt_account_selection: Option<String>,
     extra_provider_config: Option<String>,
 }
 
@@ -121,6 +141,10 @@ fn create_config_toml(codex_home: &Path, params: CreateConfigTomlParams) -> std:
         .chatgpt_base_url
         .map(|url| format!("chatgpt_base_url = \"{url}\"\n"))
         .unwrap_or_default();
+    let chatgpt_account_selection_line = params
+        .chatgpt_account_selection
+        .map(|selection| format!("chatgpt_account_selection = \"{selection}\"\n"))
+        .unwrap_or_default();
     let model_provider_id = params
         .model_provider_id
         .unwrap_or_else(|| "mock_provider".to_string());
@@ -144,6 +168,7 @@ model = "mock-model"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 {chatgpt_base_url_line}
+{chatgpt_account_selection_line}
 {forced_line}
 {forced_workspace_line}
 
@@ -193,6 +218,1201 @@ async fn read_account(mcp: &mut TestAppServer) -> Result<GetAccountResponse> {
         })
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await?
+}
+
+#[tokio::test]
+async fn account_list_and_switch_manage_persisted_chatgpt_accounts() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    create_config_toml(codex_home.path(), CreateConfigTomlParams::default())?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .email("active@example.com")
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .email("alternate@example.com")
+            .plan_type("free"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let list_id = mcp
+        .send_account_list_request(AccountListParams {
+            cursor: None,
+            limit: None,
+        })
+        .await?;
+    let listed: AccountListResponse = mcp.read_response(list_id).await?;
+    assert_eq!(
+        listed
+            .data
+            .iter()
+            .map(|account| (
+                account.account_id.clone(),
+                account.is_active,
+                account.plan_type
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("active-account".to_string(), true, AccountPlanType::Pro),
+            (
+                "alternate-account".to_string(),
+                false,
+                AccountPlanType::Free
+            ),
+        ]
+    );
+    let first_page_id = mcp
+        .send_account_list_request(AccountListParams {
+            cursor: None,
+            limit: Some(1),
+        })
+        .await?;
+    let first_page: AccountListResponse = mcp.read_response(first_page_id).await?;
+    assert_eq!(
+        first_page
+            .data
+            .iter()
+            .map(|account| account.account_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["active-account"]
+    );
+    assert_eq!(first_page.next_cursor.as_deref(), Some("active-account"));
+
+    let switch_id = mcp
+        .send_account_switch_request(AccountSwitchParams {
+            account_id: "alternate-account".to_string(),
+        })
+        .await?;
+    let switched: AccountSwitchResponse = mcp.read_response(switch_id).await?;
+    assert_eq!(switched.account.account_id, "alternate-account");
+    assert!(switched.account.is_active);
+    assert_eq!(
+        load_file_auth(codex_home.path())?.and_then(|auth| auth.chatgpt_account_id()),
+        Some("alternate-account".to_string())
+    );
+    let second_page_id = mcp
+        .send_account_list_request(AccountListParams {
+            cursor: first_page.next_cursor,
+            limit: Some(1),
+        })
+        .await?;
+    let second_page: AccountListResponse = mcp.read_response(second_page_id).await?;
+    assert_eq!(
+        second_page
+            .data
+            .iter()
+            .map(|account| account.account_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alternate-account"]
+    );
+    assert_eq!(second_page.next_cursor, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn account_models_read_many_preserves_requested_order_and_errors() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            base_url: Some(format!("{}/v1", server.uri())),
+            chatgpt_base_url: Some(format!("{}/backend-api", server.uri())),
+            ..Default::default()
+        },
+    )?;
+    let config_path = codex_home.path().join("config.toml");
+    let config_contents = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        config_contents.replace("Mock provider for test", "OpenAI"),
+    )?;
+    write_models_cache(codex_home.path())?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .plan_type("free"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let mut active_catalog = codex_models_manager::bundled_models_response()?;
+    active_catalog
+        .models
+        .retain(|model| model.slug == "gpt-5.6-sol");
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(active_catalog))
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let response: AccountModelsReadManyResponse = mcp
+        .request(|id| ClientRequest::AccountModelsReadMany {
+            request_id: id,
+            params: AccountReadManyParams {
+                account_ids: Some(vec![
+                    "alternate-account".to_string(),
+                    "active-account".to_string(),
+                ]),
+            },
+        })
+        .await?;
+
+    assert_eq!(
+        response
+            .data
+            .iter()
+            .map(|result| (
+                result.account.account_id.as_str(),
+                result.models.as_ref().map(Vec::len),
+                result.error.is_some(),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("alternate-account", None, true),
+            ("active-account", Some(1), false)
+        ]
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn account_rate_limits_read_many_preserves_requested_order_and_partial_errors() -> Result<()>
+{
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            chatgpt_base_url: Some(format!("{}/backend-api", server.uri())),
+            ..Default::default()
+        },
+    )?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .plan_type("free"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/usage"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "plan_type": "pro",
+            "rate_limit": {
+                "allowed": true,
+                "limit_reached": false,
+                "primary_window": {
+                    "used_percent": 42,
+                    "limit_window_seconds": 3600,
+                    "reset_after_seconds": 120,
+                    "reset_at": 1735689720
+                }
+            },
+            "rate_limit_reset_credits": { "available_count": 0 }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/usage"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&server)
+        .await;
+    for (token, account_id) in [
+        ("active-token", "active-account"),
+        ("alternate-token", "alternate-account"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path("/backend-api/wham/rate-limit-reset-credits"))
+            .and(header("authorization", format!("Bearer {token}")))
+            .and(header("chatgpt-account-id", account_id))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "credits": [],
+                "available_count": 0,
+                "total_earned_count": 0
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let response: AccountRateLimitsReadManyResponse = mcp
+        .request(|id| ClientRequest::AccountRateLimitsReadMany {
+            request_id: id,
+            params: AccountReadManyParams {
+                account_ids: Some(vec![
+                    "alternate-account".to_string(),
+                    "active-account".to_string(),
+                ]),
+            },
+        })
+        .await?;
+
+    assert_eq!(
+        response
+            .data
+            .iter()
+            .map(|result| (
+                result.account.account_id.as_str(),
+                result.rate_limits.is_some(),
+                result.error.is_some(),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("alternate-account", false, true),
+            ("active-account", true, false),
+        ]
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn account_usage_read_many_defaults_to_eligible_accounts() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            forced_workspace_ids: Some(vec![WORKSPACE_ID_ALLOWED.to_string()]),
+            chatgpt_base_url: Some(format!("{}/backend-api", server.uri())),
+            ..Default::default()
+        },
+    )?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id(WORKSPACE_ID_ALLOWED)
+            .chatgpt_account_id(WORKSPACE_ID_ALLOWED)
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id(WORKSPACE_ID_DISALLOWED)
+            .chatgpt_account_id(WORKSPACE_ID_DISALLOWED)
+            .plan_type("free"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/profiles/me"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", WORKSPACE_ID_ALLOWED))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "stats": {
+                "lifetime_tokens": 123,
+                "peak_daily_tokens": 45,
+                "longest_running_turn_sec": null,
+                "current_streak_days": 2,
+                "longest_streak_days": 3,
+                "daily_usage_buckets": []
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let response: AccountUsageReadManyResponse = mcp
+        .request(|id| ClientRequest::AccountUsageReadMany {
+            request_id: id,
+            params: AccountReadManyParams { account_ids: None },
+        })
+        .await?;
+
+    assert_eq!(response.data.len(), 1);
+    let result = &response.data[0];
+    assert_eq!(result.account.account_id, WORKSPACE_ID_ALLOWED);
+    assert_eq!(
+        result
+            .usage
+            .as_ref()
+            .map(|usage| usage.summary.lifetime_tokens),
+        Some(Some(123))
+    );
+    assert_eq!(result.error, None);
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn account_switch_resyncs_default_client_residency_requirement() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            base_url: Some(format!("{}/v1", server.uri())),
+            chatgpt_base_url: Some(format!("{}/backend-api", server.uri())),
+            ..Default::default()
+        },
+    )?;
+    write_models_cache(codex_home.path())?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .chatgpt_user_id("active-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .chatgpt_user_id("alternate-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "requirements_toml": {
+                "enterprise_managed": [{
+                    "id": "alternate-residency",
+                    "name": "Alternate account residency",
+                    "contents": "enforce_residency = \"us\"",
+                }],
+            },
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    mount_disabled_attribution_settings(&server).await;
+    let response = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_response_created("resp-residency"),
+            responses::ev_assistant_message("msg-residency", "done"),
+            responses::ev_completed("resp-residency"),
+        ]),
+    )
+    .await;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let switch_id = mcp
+        .send_account_switch_request(AccountSwitchParams {
+            account_id: "alternate-account".to_string(),
+        })
+        .await?;
+    let _: AccountSwitchResponse = mcp.read_response(switch_id).await?;
+    let _: AccountUpdatedNotification = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_notification("account/updated"),
+    )
+    .await??;
+    let requirements_id = mcp.send_config_requirements_read_request().await?;
+    let requirements: ConfigRequirementsReadResponse = mcp.read_response(requirements_id).await?;
+    server.verify().await;
+    assert_eq!(
+        requirements
+            .requirements
+            .and_then(|requirements| requirements.enforce_residency),
+        Some(ResidencyRequirement::Us)
+    );
+
+    let thread = mcp
+        .start_thread(codex_app_server_protocol::ThreadStartParams {
+            model: Some("mock-model".to_string()),
+            ..Default::default()
+        })
+        .await?;
+    let completed = mcp
+        .start_turn_and_wait_for_completion(codex_app_server_protocol::TurnStartParams {
+            thread_id: thread.thread.id,
+            input: vec![codex_app_server_protocol::UserInput::Text {
+                text: "Hello".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+
+    assert_eq!(completed.turn.status, TurnStatus::Completed);
+    assert_eq!(
+        response.single_request().header(RESIDENCY_HEADER_NAME),
+        Some("us".to_string())
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn account_remove_reports_no_active_account_when_only_ineligible_credentials_remain()
+-> Result<()> {
+    let codex_home = TempDir::new()?;
+    let disallowed_home = TempDir::new()?;
+    let revoke_server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            forced_workspace_ids: Some(vec![WORKSPACE_ID_ALLOWED.to_string()]),
+            ..Default::default()
+        },
+    )?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id(WORKSPACE_ID_ALLOWED)
+            .chatgpt_account_id(WORKSPACE_ID_ALLOWED)
+            .email("active@example.com")
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        disallowed_home.path(),
+        ChatGptAuthFixture::new("disallowed-token")
+            .account_id(WORKSPACE_ID_DISALLOWED)
+            .chatgpt_account_id(WORKSPACE_ID_DISALLOWED)
+            .email("disallowed@example.com")
+            .plan_type("free"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let disallowed_auth = load_file_auth(disallowed_home.path())?.expect("disallowed auth");
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts.push(disallowed_auth.clone());
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+    Mock::given(method("POST"))
+        .and(path("/oauth/revoke"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&revoke_server)
+        .await;
+    let revoke_url = format!("{}/oauth/revoke", revoke_server.uri());
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[
+            ("OPENAI_API_KEY", None),
+            (REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR, Some(revoke_url.as_str())),
+        ])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+
+    let remove_id = mcp
+        .send_account_remove_request(AccountRemoveParams {
+            account_id: WORKSPACE_ID_ALLOWED.to_string(),
+        })
+        .await?;
+    let removed: AccountRemoveResponse = mcp.read_response(remove_id).await?;
+    assert_eq!(
+        removed,
+        AccountRemoveResponse {
+            active_account_id: None,
+        }
+    );
+    let updated: AccountUpdatedNotification = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_notification("account/updated"),
+    )
+    .await??;
+    assert_eq!(
+        updated,
+        AccountUpdatedNotification {
+            auth_mode: None,
+            plan_type: None,
+        }
+    );
+    assert_eq!(load_file_auth(codex_home.path())?, Some(disallowed_auth));
+    revoke_server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn round_robin_session_selection_notifies_account_updated() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let model_server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            base_url: Some(format!("{}/v1", model_server.uri())),
+            chatgpt_base_url: Some(format!("{}/backend-api", model_server.uri())),
+            chatgpt_account_selection: Some("round-robin".to_string()),
+            ..Default::default()
+        },
+    )?;
+    let config_path = codex_home.path().join("config.toml");
+    let config_contents = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        config_contents.replace("Mock provider for test", "OpenAI"),
+    )?;
+    write_models_cache(codex_home.path())?;
+    let mut model_catalog = codex_models_manager::bundled_models_response()?;
+    model_catalog.models.retain(|model| model.slug == "gpt-5.5");
+    assert_eq!(model_catalog.models.len(), 1);
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(model_catalog))
+        .expect(4)
+        .mount(&model_server)
+        .await;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .plan_type("free"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let thread_id = mcp
+        .send_thread_start_request_with_auto_env(codex_app_server_protocol::ThreadStartParams {
+            model: Some("gpt-5.5".to_string()),
+            ..Default::default()
+        })
+        .await?;
+    let _: codex_app_server_protocol::ThreadStartResponse =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(thread_id)).await??;
+    let payload: AccountUpdatedNotification = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_notification("account/updated"),
+    )
+    .await??;
+
+    assert_eq!(
+        payload,
+        AccountUpdatedNotification {
+            auth_mode: Some(AuthMode::Chatgpt),
+            plan_type: Some(AccountPlanType::Free),
+        }
+    );
+    assert_eq!(
+        load_file_auth(codex_home.path())?.and_then(|auth| auth.chatgpt_account_id()),
+        Some("alternate-account".to_string())
+    );
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum ThreadLifecycle {
+    Start,
+    Resume,
+    Fork,
+}
+
+#[tokio::test]
+async fn round_robin_thread_start_uses_selected_accounts_residency_requirement() -> Result<()> {
+    assert_round_robin_lifecycle_uses_selected_accounts_residency_requirement(
+        ThreadLifecycle::Start,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn round_robin_thread_resume_uses_selected_accounts_residency_requirement() -> Result<()> {
+    assert_round_robin_lifecycle_uses_selected_accounts_residency_requirement(
+        ThreadLifecycle::Resume,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn round_robin_thread_fork_uses_selected_accounts_residency_requirement() -> Result<()> {
+    assert_round_robin_lifecycle_uses_selected_accounts_residency_requirement(ThreadLifecycle::Fork)
+        .await
+}
+
+async fn assert_round_robin_lifecycle_uses_selected_accounts_residency_requirement(
+    lifecycle: ThreadLifecycle,
+) -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            base_url: Some(format!("{}/v1", server.uri())),
+            chatgpt_base_url: Some(format!("{}/backend-api", server.uri())),
+            chatgpt_account_selection: Some("round-robin".to_string()),
+            ..Default::default()
+        },
+    )?;
+    let config_path = codex_home.path().join("config.toml");
+    let config_contents = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        config_contents.replace("Mock provider for test", "OpenAI"),
+    )?;
+    write_models_cache(codex_home.path())?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .chatgpt_user_id("active-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .chatgpt_user_id("alternate-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+    let conversation_id = create_fake_rollout(
+        codex_home.path(),
+        "2025-01-05T12-00-00",
+        "2025-01-05T12:00:00Z",
+        "Saved user message",
+        Some("mock_provider"),
+        /*git_info*/ None,
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(codex_models_manager::bundled_models_response()?),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "requirements_toml": {
+                "enterprise_managed": [{
+                    "id": "alternate-residency",
+                    "name": "Alternate account residency",
+                    "contents": "enforce_residency = \"us\"",
+                }],
+            },
+        })))
+        .mount(&server)
+        .await;
+    mount_disabled_attribution_settings(&server).await;
+    let response = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_response_created("resp-residency"),
+            responses::ev_assistant_message("msg-residency", "done"),
+            responses::ev_completed("resp-residency"),
+        ]),
+    )
+    .await;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let thread_id = match lifecycle {
+        ThreadLifecycle::Start => {
+            mcp.start_thread(codex_app_server_protocol::ThreadStartParams {
+                model: Some("gpt-5.5".to_string()),
+                ..Default::default()
+            })
+            .await?
+            .thread
+            .id
+        }
+        ThreadLifecycle::Resume => {
+            let request_id = mcp
+                .send_thread_resume_request(codex_app_server_protocol::ThreadResumeParams {
+                    thread_id: conversation_id,
+                    model: Some("gpt-5.5".to_string()),
+                    ..Default::default()
+                })
+                .await?;
+            let response: codex_app_server_protocol::ThreadResumeResponse =
+                mcp.read_response(request_id).await?;
+            response.thread.id
+        }
+        ThreadLifecycle::Fork => {
+            let request_id = mcp
+                .send_thread_fork_request(codex_app_server_protocol::ThreadForkParams {
+                    thread_id: conversation_id,
+                    model: Some("gpt-5.5".to_string()),
+                    ..Default::default()
+                })
+                .await?;
+            let response: codex_app_server_protocol::ThreadForkResponse =
+                mcp.read_response(request_id).await?;
+            response.thread.id
+        }
+    };
+    let completed = mcp
+        .start_turn_and_wait_for_completion(codex_app_server_protocol::TurnStartParams {
+            thread_id,
+            input: vec![codex_app_server_protocol::UserInput::Text {
+                text: "Hello".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+
+    assert_eq!(completed.turn.status, TurnStatus::Completed);
+    let request = response.single_request();
+    assert_eq!(
+        request.header("chatgpt-account-id"),
+        Some("alternate-account".to_string())
+    );
+    assert_eq!(
+        request.header(RESIDENCY_HEADER_NAME),
+        Some("us".to_string())
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn round_robin_selection_ignores_active_accounts_cloud_model() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            base_url: Some(format!("{}/v1", server.uri())),
+            chatgpt_base_url: Some(format!("{}/backend-api", server.uri())),
+            chatgpt_account_selection: Some("round-robin".to_string()),
+            ..Default::default()
+        },
+    )?;
+    let config_path = codex_home.path().join("config.toml");
+    let config_contents = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        config_contents
+            .replace("model = \"mock-model\"", "model = \"gpt-5.5\"")
+            .replace("Mock provider for test", "OpenAI"),
+    )?;
+    write_models_cache(codex_home.path())?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .chatgpt_user_id("active-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .chatgpt_user_id("alternate-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let mut active_catalog = codex_models_manager::bundled_models_response()?;
+    active_catalog
+        .models
+        .retain(|model| model.slug == "gpt-5.6-sol");
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(active_catalog))
+        .mount(&server)
+        .await;
+    let mut alternate_catalog = codex_models_manager::bundled_models_response()?;
+    alternate_catalog
+        .models
+        .retain(|model| model.slug == "gpt-5.5");
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(alternate_catalog))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "config_toml": {
+                "enterprise_managed": [{
+                    "id": "active-model",
+                    "name": "Active model",
+                    "contents": "model = \"gpt-5.6-sol\"",
+                }],
+            },
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "config_toml": {
+                "enterprise_managed": [{
+                    "id": "alternate-model",
+                    "name": "Alternate model",
+                    "contents": "model = \"gpt-5.5\"",
+                }],
+            },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let request_id = mcp
+        .send_thread_start_request_with_auto_env(
+            codex_app_server_protocol::ThreadStartParams::default(),
+        )
+        .await?;
+    let _: codex_app_server_protocol::ThreadStartResponse =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await??;
+
+    assert_eq!(
+        load_file_auth(codex_home.path())?.and_then(|auth| auth.chatgpt_account_id()),
+        Some("alternate-account".to_string())
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn round_robin_rejects_account_when_managed_config_changes_to_unsupported_model() -> Result<()>
+{
+    let codex_home = TempDir::new()?;
+    let alternate_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            base_url: Some(format!("{}/v1", server.uri())),
+            chatgpt_base_url: Some(format!("{}/backend-api", server.uri())),
+            chatgpt_account_selection: Some("round-robin".to_string()),
+            ..Default::default()
+        },
+    )?;
+    let config_path = codex_home.path().join("config.toml");
+    let config_contents = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        config_contents
+            .replace("model = \"mock-model\"\n", "")
+            .replace("Mock provider for test", "OpenAI"),
+    )?;
+    write_models_cache(codex_home.path())?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("active-token")
+            .account_id("active-account")
+            .chatgpt_account_id("active-account")
+            .chatgpt_user_id("active-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    write_chatgpt_auth(
+        alternate_home.path(),
+        ChatGptAuthFixture::new("alternate-token")
+            .account_id("alternate-account")
+            .chatgpt_account_id("alternate-account")
+            .chatgpt_user_id("alternate-user")
+            .plan_type("business"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    let mut auth = load_file_auth(codex_home.path())?.expect("active auth");
+    auth.accounts
+        .push(load_file_auth(alternate_home.path())?.expect("alternate auth"));
+    save_auth(
+        codex_home.path(),
+        &auth,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let mut active_catalog = codex_models_manager::bundled_models_response()?;
+    active_catalog
+        .models
+        .retain(|model| model.slug == "gpt-5.6-sol");
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(active_catalog))
+        .mount(&server)
+        .await;
+    let mut alternate_catalog = codex_models_manager::bundled_models_response()?;
+    alternate_catalog
+        .models
+        .retain(|model| model.slug == "gpt-5.6-sol");
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(alternate_catalog))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer active-token"))
+        .and(header("chatgpt-account-id", "active-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "config_toml": {
+                "enterprise_managed": [{
+                    "id": "active-model",
+                    "name": "Active model",
+                    "contents": "model = \"gpt-5.6-sol\"",
+                }],
+            },
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("authorization", "Bearer alternate-token"))
+        .and(header("chatgpt-account-id", "alternate-account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "config_toml": {
+                "enterprise_managed": [{
+                    "id": "managed-model",
+                    "name": "Managed model",
+                    "contents": "model = \"gpt-5.5\"",
+                }],
+            },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    let request_id = mcp
+        .send_thread_start_request_with_auto_env(
+            codex_app_server_protocol::ThreadStartParams::default(),
+        )
+        .await?;
+    let error: JSONRPCError = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+
+    assert!(
+        error.error.message.contains(
+            "selected ChatGPT account `alternate-account` does not support model `gpt-5.5`"
+        ),
+        "unexpected error: {}",
+        error.error.message
+    );
+    assert_eq!(load_file_auth(codex_home.path())?, Some(auth));
+    let maybe_updated = timeout(
+        Duration::from_millis(500),
+        mcp.read_stream_until_notification_message("account/updated"),
+    )
+    .await;
+    assert!(
+        maybe_updated.is_err(),
+        "account/updated should not be emitted when thread configuration validation fails"
+    );
+    Ok(())
 }
 
 async fn assert_account_updated(
@@ -397,6 +1617,42 @@ async fn startup_enforces_local_auth_requirements_before_cloud_fetch() -> Result
     );
 
     assert_eq!(read_account(&mut mcp).await?.account, None);
+
+    let list_id = mcp
+        .send_account_list_request(AccountListParams {
+            cursor: None,
+            limit: None,
+        })
+        .await?;
+    let listed: AccountListResponse = mcp.read_response(list_id).await?;
+    assert_eq!(
+        listed,
+        AccountListResponse {
+            data: vec![ChatgptAccountSummary {
+                account_id: "account-123".to_string(),
+                email: None,
+                plan_type: AccountPlanType::Enterprise,
+                is_active: true,
+                is_eligible: false,
+            }],
+            next_cursor: None,
+        }
+    );
+
+    let switch_id = mcp
+        .send_account_switch_request(AccountSwitchParams {
+            account_id: "account-123".to_string(),
+        })
+        .await?;
+    let switch_error = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(switch_id)),
+    )
+    .await??;
+    assert_eq!(
+        switch_error.error.message,
+        "ChatGPT account `account-123` is not allowed by the current configuration"
+    );
 
     Ok(())
 }
@@ -1143,6 +2399,7 @@ async fn login_amazon_bedrock_replaces_primary_auth_and_persists_provider() -> R
                 api_key: "managed-bedrock-api-key".to_string(),
                 region: "us-west-2".to_string(),
             }),
+            accounts: Vec::new(),
         })
     );
     assert_eq!(read_config_toml(codex_home.path())?, expected_config);
@@ -1274,6 +2531,7 @@ async fn login_amazon_bedrock_allows_bedrock_provider_override() -> Result<()> {
                 api_key: "managed-bedrock-api-key".to_string(),
                 region: "us-west-2".to_string(),
             }),
+            accounts: Vec::new(),
         })
     );
     assert_eq!(read_config_toml(codex_home.path())?, expected_config);

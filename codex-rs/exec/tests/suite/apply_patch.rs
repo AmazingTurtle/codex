@@ -208,6 +208,7 @@ async fn shutdown_flushes_completed_turn_and_file_diff() -> anyhow::Result<()> {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            accounts: Vec::new(),
         },
         codex_login::AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),

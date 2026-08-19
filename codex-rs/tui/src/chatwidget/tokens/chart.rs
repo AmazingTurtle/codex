@@ -58,6 +58,14 @@ impl TokenActivityView {
             Self::Cumulative => "Cumulative",
         }
     }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Cumulative => "cumulative",
+        }
+    }
 }
 
 pub(super) fn loaded_lines(

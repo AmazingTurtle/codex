@@ -15,6 +15,9 @@ use tokio::process::ChildStdout;
 
 use anyhow::Context;
 use anyhow::ensure;
+use codex_app_server_protocol::AccountListParams;
+use codex_app_server_protocol::AccountRemoveParams;
+use codex_app_server_protocol::AccountSwitchParams;
 use codex_app_server_protocol::AppsInstalledParams;
 use codex_app_server_protocol::AppsListParams;
 use codex_app_server_protocol::AppsReadParams;
@@ -414,6 +417,30 @@ impl TestAppServer {
     /// Send an `account/rateLimits/read` JSON-RPC request.
     pub async fn send_get_account_rate_limits_request(&mut self) -> anyhow::Result<i64> {
         self.send_request("account/rateLimits/read", /*params*/ None)
+            .await
+    }
+
+    pub async fn send_account_list_request(
+        &mut self,
+        params: AccountListParams,
+    ) -> anyhow::Result<i64> {
+        self.send_request("account/list", Some(serde_json::to_value(params)?))
+            .await
+    }
+
+    pub async fn send_account_switch_request(
+        &mut self,
+        params: AccountSwitchParams,
+    ) -> anyhow::Result<i64> {
+        self.send_request("account/switch", Some(serde_json::to_value(params)?))
+            .await
+    }
+
+    pub async fn send_account_remove_request(
+        &mut self,
+        params: AccountRemoveParams,
+    ) -> anyhow::Result<i64> {
+        self.send_request("account/remove", Some(serde_json::to_value(params)?))
             .await
     }
 

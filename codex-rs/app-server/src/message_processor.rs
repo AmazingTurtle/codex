@@ -1449,6 +1449,15 @@ impl MessageProcessor {
                     .logout_account(request_id.clone())
                     .await
             }
+            ClientRequest::AccountList { params, .. } => {
+                self.account_processor.account_list(params).await
+            }
+            ClientRequest::AccountSwitch { params, .. } => {
+                self.account_processor.account_switch(params).await
+            }
+            ClientRequest::AccountRemove { params, .. } => {
+                self.account_processor.account_remove(params).await
+            }
             ClientRequest::CancelLoginAccount { params, .. } => {
                 self.account_processor.cancel_login_account(params).await
             }
@@ -1461,6 +1470,11 @@ impl MessageProcessor {
             ClientRequest::GetAccountRateLimits { .. } => {
                 self.account_processor.get_account_rate_limits().await
             }
+            ClientRequest::AccountRateLimitsReadMany { params, .. } => {
+                self.account_processor
+                    .get_account_rate_limits_many(params)
+                    .await
+            }
             ClientRequest::ConsumeAccountRateLimitResetCredit { params, .. } => {
                 self.account_processor
                     .consume_account_rate_limit_reset_credit(params)
@@ -1468,6 +1482,14 @@ impl MessageProcessor {
             }
             ClientRequest::GetAccountTokenUsage { params, .. } => {
                 self.account_processor.get_account_token_usage(params).await
+            }
+            ClientRequest::AccountUsageReadMany { params, .. } => {
+                self.account_processor
+                    .get_account_token_usage_many(params)
+                    .await
+            }
+            ClientRequest::AccountModelsReadMany { params, .. } => {
+                self.account_processor.get_account_models_many(params).await
             }
             ClientRequest::GetWorkspaceMessages { .. } => {
                 self.account_processor.get_workspace_messages().await

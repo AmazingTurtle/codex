@@ -31,6 +31,7 @@ pub struct ProviderAuthScope {
     pub agent_identity_policy: AgentIdentityAuthPolicy,
     pub session_source: SessionSource,
     pub agent_identity_session_fallback: AgentIdentitySessionFallback,
+    pub chatgpt_account_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -52,6 +53,7 @@ impl AgentIdentitySessionFallback {
 #[derive(Clone)]
 pub struct ResolvedProviderAuth {
     pub auth: SharedAuthProvider,
+    pub source_auth: Option<CodexAuth>,
     pub agent_identity_telemetry: Option<AgentIdentityTelemetry>,
 }
 
@@ -59,6 +61,7 @@ impl ResolvedProviderAuth {
     pub(crate) fn new(auth: SharedAuthProvider) -> Self {
         Self {
             auth,
+            source_auth: None,
             agent_identity_telemetry: None,
         }
     }
@@ -67,6 +70,7 @@ impl ResolvedProviderAuth {
         let agent_identity_telemetry = agent_identity_telemetry(&auth);
         Self {
             auth: Arc::new(AgentIdentityAuthProvider { auth }),
+            source_auth: None,
             agent_identity_telemetry: Some(agent_identity_telemetry),
         }
     }
@@ -224,6 +228,7 @@ pub(crate) async fn resolve_provider_auth_for_scope(
         agent_identity_policy,
         session_source,
         agent_identity_session_fallback,
+        chatgpt_account_id,
     } = scope;
     if let Some(CodexAuth::AgentIdentity(agent_identity_auth)) = auth {
         return Ok(ResolvedProviderAuth::for_agent_identity(
@@ -241,10 +246,23 @@ pub(crate) async fn resolve_provider_auth_for_scope(
         return resolve_provider_auth(auth, provider).map(ResolvedProviderAuth::new);
     };
 
-    match auth_manager
-        .agent_identity_auth(agent_identity_policy, session_source)
-        .await
-    {
+    let agent_identity_auth = match chatgpt_account_id.as_deref() {
+        Some(account_id) => {
+            auth_manager
+                .agent_identity_auth_for_chatgpt_account(
+                    account_id,
+                    agent_identity_policy,
+                    session_source,
+                )
+                .await
+        }
+        None => {
+            auth_manager
+                .agent_identity_auth(agent_identity_policy, session_source)
+                .await
+        }
+    };
+    match agent_identity_auth {
         Ok(Some(agent_identity_auth)) => Ok(ResolvedProviderAuth::for_agent_identity(
             agent_identity_auth,
         )),
@@ -332,6 +350,7 @@ pub fn auth_provider_from_auth_manager(
 
 #[cfg(test)]
 mod tests {
+    use base64::Engine;
     use codex_agent_identity::generate_agent_key_material;
     use codex_login::AuthCredentialsStoreMode;
     use codex_login::AuthKeyringBackendKind;
@@ -388,6 +407,7 @@ mod tests {
             agent_identity_policy: policy,
             session_source: SessionSource::Cli,
             agent_identity_session_fallback: fallback,
+            chatgpt_account_id: None,
         }
     }
 
@@ -436,6 +456,7 @@ mod tests {
         .await;
         let auth = auth_manager.auth().await.expect("auth should load");
         let auth_manager = AuthManager::from_auth_for_testing_with_agent_identity_authapi_base_url(
+            codex_home.clone(),
             auth.clone(),
             agent_identity_authapi_base_url,
         );
@@ -455,6 +476,24 @@ mod tests {
             })
             .mount(server)
             .await;
+    }
+
+    fn chatgpt_id_token(account_id: &str, user_id: &str) -> String {
+        let encode = |bytes: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+        let payload = json!({
+            "email": format!("{user_id}@example.com"),
+            "https://api.openai.com/auth": {
+                "chatgpt_user_id": user_id,
+                "chatgpt_plan_type": "pro",
+                "chatgpt_account_id": account_id,
+            }
+        });
+        format!(
+            "{}.{}.{}",
+            encode(br#"{"alg":"none","typ":"JWT"}"#),
+            encode(&serde_json::to_vec(&payload).expect("serialize id token")),
+            encode(b"sig")
+        )
     }
 
     #[test]
@@ -622,6 +661,115 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("true")
         );
+    }
+
+    #[tokio::test]
+    async fn scoped_agent_identity_bootstrap_uses_the_pinned_chatgpt_account() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/agent/register"))
+            .and(wiremock::matchers::header(
+                "authorization",
+                "Bearer secondary-access",
+            ))
+            .respond_with(ResponseTemplate::new(/*status*/ 200).set_body_json(json!({
+                "agent_runtime_id": "agent-secondary",
+            })))
+            .expect(/*requests*/ 1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/agent/agent-secondary/task/register"))
+            .respond_with(ResponseTemplate::new(/*status*/ 200).set_body_json(json!({
+                "task_id": "task-secondary",
+            })))
+            .expect(/*requests*/ 1)
+            .mount(&server)
+            .await;
+
+        let codex_home = test_codex_home();
+        let account = |account_id: &str, user_id: &str, access_token: &str| {
+            json!({
+                "auth_mode": "chatgpt",
+                "OPENAI_API_KEY": null,
+                "tokens": {
+                    "id_token": chatgpt_id_token(account_id, user_id),
+                    "access_token": access_token,
+                    "refresh_token": format!("refresh-{account_id}"),
+                    "account_id": account_id,
+                },
+                "last_refresh": "2099-01-01T00:00:00Z",
+            })
+        };
+        let mut stored = account("account-active", "user-active", "active-access");
+        stored["accounts"] = json!([account(
+            "account-secondary",
+            "user-secondary",
+            "secondary-access"
+        )]);
+        std::fs::write(
+            codex_home.join("auth.json"),
+            serde_json::to_vec_pretty(&stored).expect("serialize auth"),
+        )
+        .expect("write auth");
+        let manager = AuthManager::shared(
+            codex_home.clone(),
+            /*enable_codex_api_key_env*/ false,
+            AuthCredentialsStoreMode::File,
+            /*forced_chatgpt_workspace_id*/ None,
+            /*chatgpt_base_url*/ None,
+            AuthKeyringBackendKind::default(),
+            codex_login::test_support::transport_default_auth_route_config(),
+        )
+        .await;
+        let active_auth = manager.auth().await.expect("active auth");
+        let manager = AuthManager::from_auth_for_testing_with_agent_identity_authapi_base_url(
+            codex_home,
+            active_auth,
+            server.uri(),
+        );
+        let scoped_auth = manager
+            .auth_for_chatgpt_account("account-secondary")
+            .await
+            .expect("load scoped auth")
+            .expect("secondary auth");
+        let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+
+        let resolved = resolve_provider_auth_for_scope(
+            Some(manager),
+            Some(&scoped_auth),
+            &provider,
+            ProviderAuthScope {
+                agent_identity_policy: AgentIdentityAuthPolicy::ChatGptAuth,
+                session_source: SessionSource::Cli,
+                agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
+                chatgpt_account_id: Some("account-secondary".to_string()),
+            },
+        )
+        .await
+        .expect("resolve scoped agent identity");
+
+        assert_eq!(
+            resolved.agent_identity_telemetry,
+            Some(AgentIdentityTelemetry {
+                agent_id: "agent-secondary".to_string(),
+                task_id: "task-secondary".to_string(),
+            })
+        );
+        let headers = resolved.auth.to_auth_headers();
+        assert_eq!(
+            headers
+                .get("ChatGPT-Account-ID")
+                .and_then(|value| value.to_str().ok()),
+            Some("account-secondary")
+        );
+        assert!(
+            headers
+                .get(http::header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok())
+                .is_some_and(|value| value.starts_with("AgentAssertion "))
+        );
+        server.verify().await;
     }
 
     #[tokio::test]

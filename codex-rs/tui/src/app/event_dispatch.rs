@@ -6,6 +6,7 @@
 use super::resize_reflow::trailing_run_start;
 use super::session_lifecycle::ThreadAttachPresentation;
 use super::*;
+use crate::app_event::ChatgptLoginMethod;
 use crate::app_server_session::ForkGoalContinuation;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration::flow::ExternalAgentConfigMigrationFlowOutcome;
@@ -15,6 +16,33 @@ use codex_config::types::WindowsSandboxModeToml;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
+fn resolve_chatgpt_account_selector(
+    accounts: &[codex_app_server_protocol::ChatgptAccountSummary],
+    selector: &str,
+) -> Result<String, String> {
+    if let Some(account) = accounts
+        .iter()
+        .find(|account| account.account_id == selector)
+    {
+        return Ok(account.account_id.clone());
+    }
+    let mut matches = accounts.iter().filter(|account| {
+        account
+            .email
+            .as_deref()
+            .is_some_and(|email| email.eq_ignore_ascii_case(selector))
+    });
+    let Some(account) = matches.next() else {
+        return Err(format!("No ChatGPT account matched `{selector}`."));
+    };
+    if matches.next().is_some() {
+        return Err(format!(
+            "More than one ChatGPT account matched `{selector}`; use an account ID."
+        ));
+    }
+    Ok(account.account_id.clone())
+}
+
 impl App {
     pub(super) async fn handle_event(
         &mut self,
@@ -23,6 +51,277 @@ impl App {
         event: AppEvent,
     ) -> Result<AppRunControl> {
         match event {
+            AppEvent::OpenAccountManager => match app_server.list_chatgpt_accounts().await {
+                Ok(accounts) => {
+                    let eligible_account_ids = accounts
+                        .data
+                        .iter()
+                        .filter(|account| account.is_eligible)
+                        .map(|account| account.account_id.clone())
+                        .collect::<Vec<_>>();
+                    let model_results = if eligible_account_ids.is_empty() {
+                        Vec::new()
+                    } else {
+                        match app_server
+                            .read_chatgpt_account_models(Some(eligible_account_ids))
+                            .await
+                        {
+                            Ok(response) => response.data,
+                            Err(err) => {
+                                self.chat_widget.add_error_message(format!(
+                                    "Failed to list ChatGPT accounts: {err}"
+                                ));
+                                return Ok(AppRunControl::Continue);
+                            }
+                        }
+                    };
+                    let mut model_results_by_account = model_results
+                        .into_iter()
+                        .map(|result| (result.account.account_id.clone(), result))
+                        .collect::<HashMap<_, _>>();
+                    let results = accounts
+                        .data
+                        .into_iter()
+                        .filter_map(|account| {
+                            if account.is_eligible {
+                                model_results_by_account.remove(&account.account_id)
+                            } else {
+                                Some(codex_app_server_protocol::AccountModelsReadResult {
+                                    account,
+                                    models: None,
+                                    error: Some(
+                                        "not allowed by the current configuration".to_string(),
+                                    ),
+                                })
+                            }
+                        })
+                        .collect();
+                    self.chat_widget.show_account_manager(results);
+                }
+                Err(err) => self
+                    .chat_widget
+                    .add_error_message(format!("Failed to list ChatGPT accounts: {err}")),
+            },
+            AppEvent::OpenRemoveAccountManager => match app_server.list_chatgpt_accounts().await {
+                Ok(response) => self.chat_widget.show_remove_account_picker(response.data),
+                Err(err) => self
+                    .chat_widget
+                    .add_error_message(format!("Failed to list ChatGPT accounts: {err}")),
+            },
+            AppEvent::SwitchChatgptAccount { account_id } => {
+                let accounts = app_server.list_chatgpt_accounts().await;
+                let resolved_account_id = accounts.as_ref().ok().and_then(|response| {
+                    response
+                        .data
+                        .iter()
+                        .find(|account| account.account_id == account_id)
+                        .or_else(|| {
+                            let mut matches = response.data.iter().filter(|account| {
+                                account
+                                    .email
+                                    .as_deref()
+                                    .is_some_and(|email| email.eq_ignore_ascii_case(&account_id))
+                            });
+                            let matched = matches.next()?;
+                            matches.next().is_none().then_some(matched)
+                        })
+                        .map(|account| account.account_id.clone())
+                });
+                let Some(resolved_account_id) = resolved_account_id else {
+                    let message = match accounts {
+                        Ok(_) => format!("No unique ChatGPT account matched `{account_id}`."),
+                        Err(err) => format!("Failed to list ChatGPT accounts: {err}"),
+                    };
+                    self.chat_widget.add_error_message(message);
+                    return Ok(AppRunControl::Continue);
+                };
+                let current_model = self.chat_widget.current_model().to_string();
+                if let Ok(response) = app_server
+                    .read_chatgpt_account_models(Some(vec![resolved_account_id.clone()]))
+                    .await
+                    && let Some(result) = response.data.into_iter().next()
+                    && let Some(models) = result.models
+                    && !models.iter().any(|model| model.model == current_model)
+                {
+                    self.chat_widget.show_account_model_fallback(
+                        result.account,
+                        models,
+                        current_model,
+                    );
+                    return Ok(AppRunControl::Continue);
+                }
+                match app_server.switch_chatgpt_account(resolved_account_id).await {
+                    Ok(response) => {
+                        let label = response
+                            .account
+                            .email
+                            .unwrap_or(response.account.account_id);
+                        self.chat_widget.add_info_message(
+                            format!("Switched to ChatGPT account {label}."),
+                            /*hint*/ None,
+                        );
+                    }
+                    Err(err) => self
+                        .chat_widget
+                        .add_error_message(format!("Failed to switch ChatGPT account: {err}")),
+                }
+            }
+            AppEvent::ApplyChatgptAccountModelFallback {
+                account_id,
+                model,
+                effort,
+            } => match app_server.switch_chatgpt_account(account_id).await {
+                Ok(response) => {
+                    let label = response
+                        .account
+                        .email
+                        .unwrap_or(response.account.account_id);
+                    self.chat_widget.add_info_message(
+                        format!("Switched to ChatGPT account {label}."),
+                        /*hint*/ None,
+                    );
+                    self.app_event_tx.send(AppEvent::UpdateModel(model.clone()));
+                    self.app_event_tx.send(AppEvent::PersistModelSelection {
+                        model,
+                        effort: Some(effort),
+                    });
+                }
+                Err(err) => self
+                    .chat_widget
+                    .add_error_message(format!("Failed to switch ChatGPT account: {err}")),
+            },
+            AppEvent::AddChatgptAccount { method } => {
+                let response = match method {
+                    ChatgptLoginMethod::Browser => app_server.start_browser_chatgpt_login().await,
+                    ChatgptLoginMethod::DeviceCode => {
+                        app_server.start_device_code_chatgpt_login().await
+                    }
+                };
+                match response {
+                    Ok(codex_app_server_protocol::LoginAccountResponse::Chatgpt {
+                        auth_url,
+                        ..
+                    }) => {
+                        self.open_url_in_browser(auth_url.clone());
+                        self.chat_widget.add_info_message(
+                            format!("Complete the ChatGPT login in your browser: {auth_url}"),
+                            /*hint*/ None,
+                        );
+                    }
+                    Ok(codex_app_server_protocol::LoginAccountResponse::ChatgptDeviceCode {
+                        verification_url,
+                        user_code,
+                        ..
+                    }) => {
+                        self.open_url_in_browser(verification_url.clone());
+                        self.chat_widget.add_info_message(
+                            format!("Open {verification_url} and enter device code {user_code}."),
+                            /*hint*/ None,
+                        );
+                    }
+                    Ok(_) => self.chat_widget.add_error_message(
+                        "The account service returned an unexpected login method.".to_string(),
+                    ),
+                    Err(err) => self
+                        .chat_widget
+                        .add_error_message(format!("Failed to start ChatGPT login: {err}")),
+                }
+            }
+            AppEvent::OpenAccountModelFallback {
+                account,
+                models,
+                requested_model,
+            } => self
+                .chat_widget
+                .show_account_model_fallback(account, models, requested_model),
+            AppEvent::ShowChatgptAccountStatus { request } => {
+                let account_ids = match &request {
+                    ChatgptAccountStatusRequest::AllAccountsStatusCard { .. } => None,
+                    ChatgptAccountStatusRequest::SelectedAccount { selector } => {
+                        match app_server.list_chatgpt_accounts().await {
+                            Ok(response) => {
+                                match resolve_chatgpt_account_selector(&response.data, selector) {
+                                    Ok(account_id) => Some(vec![account_id]),
+                                    Err(err) => {
+                                        self.chat_widget.add_error_message(err);
+                                        return Ok(AppRunControl::Continue);
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                self.chat_widget.add_error_message(err.to_string());
+                                return Ok(AppRunControl::Continue);
+                            }
+                        }
+                    }
+                };
+                let result = app_server
+                    .read_chatgpt_account_rate_limits(account_ids)
+                    .await;
+                match request {
+                    ChatgptAccountStatusRequest::AllAccountsStatusCard { request_id } => {
+                        self.chat_widget.finish_all_account_status_refresh(
+                            request_id,
+                            result.map_err(|err| format!("Failed to load account status: {err}")),
+                        );
+                    }
+                    ChatgptAccountStatusRequest::SelectedAccount { .. } => match result {
+                        Ok(response) => self.chat_widget.add_account_status_output(response),
+                        Err(err) => self
+                            .chat_widget
+                            .add_error_message(format!("Failed to load account status: {err}")),
+                    },
+                }
+            }
+            AppEvent::ShowChatgptAccountUsage { view, selector } => {
+                let account_ids = if let Some(selector) = selector {
+                    match app_server.list_chatgpt_accounts().await {
+                        Ok(response) => {
+                            match resolve_chatgpt_account_selector(&response.data, &selector) {
+                                Ok(account_id) => Some(vec![account_id]),
+                                Err(err) => {
+                                    self.chat_widget.add_error_message(err);
+                                    return Ok(AppRunControl::Continue);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            self.chat_widget.add_error_message(err.to_string());
+                            return Ok(AppRunControl::Continue);
+                        }
+                    }
+                } else {
+                    None
+                };
+                match app_server.read_chatgpt_account_usage(account_ids).await {
+                    Ok(response) => self.chat_widget.add_account_usage_output(view, response),
+                    Err(err) => self
+                        .chat_widget
+                        .add_error_message(format!("Failed to load account usage: {err}")),
+                }
+            }
+            AppEvent::ConfirmRemoveChatgptAccount { account } => {
+                self.chat_widget.show_remove_account_confirmation(account);
+            }
+            AppEvent::RemoveChatgptAccount { account_id } => {
+                match app_server.remove_chatgpt_account(account_id).await {
+                    Ok(response) => {
+                        if response.active_account_id.is_none() {
+                            self.show_shutdown_feedback(tui)?;
+                            return Ok(self
+                                .handle_exit_mode(app_server, ExitMode::ShutdownFirst)
+                                .await);
+                        }
+                        self.chat_widget.add_info_message(
+                            "ChatGPT account removed.".to_string(),
+                            /*hint*/ None,
+                        );
+                    }
+                    Err(err) => self
+                        .chat_widget
+                        .add_error_message(format!("Failed to remove ChatGPT account: {err}")),
+                }
+            }
             AppEvent::NewSession { name } => {
                 self.start_fresh_session_with_summary_hint(
                     tui, app_server, /*session_start_source*/ None,

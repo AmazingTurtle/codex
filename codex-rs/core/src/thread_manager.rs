@@ -26,6 +26,7 @@ use codex_app_server_protocol::TurnStatus;
 use codex_code_mode::CodeModeSessionProvider;
 use codex_code_mode::DisabledCodeModeSessionProvider;
 use codex_code_mode::ProcessOwnedCodeModeSessionProvider;
+use codex_config::types::ChatgptAccountSelection;
 use codex_core_plugins::PluginsManager;
 use codex_exec_server::EnvironmentManager;
 use codex_extension_api::ExtensionDataInit;
@@ -38,7 +39,9 @@ use codex_history::InitialHistory;
 use codex_history::ResumedHistory;
 use codex_history::RolloutItem;
 use codex_login::AuthManager;
+use codex_login::ChatgptAccountBinding;
 use codex_login::CodexAuth;
+use codex_login::PendingChatgptAccountSelection;
 use codex_login::default_client::CODEX_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR;
 use codex_login::default_client::originator;
 use codex_model_provider::create_model_provider;
@@ -742,6 +745,100 @@ impl ThreadManager {
 
     pub fn get_models_manager(&self) -> SharedModelsManager {
         self.state.models_manager.clone()
+    }
+
+    /// Selects and reserves the ChatGPT account used to resolve a new session's configuration.
+    pub async fn select_chatgpt_account_for_config(
+        &self,
+        config: &Config,
+        allow_provider_model_fallback: bool,
+    ) -> std::io::Result<Option<PendingChatgptAccountSelection>> {
+        if !config.model_provider.is_openai() || !config.model_provider.requires_openai_auth {
+            return Ok(None);
+        }
+        if config.chatgpt_account_selection != ChatgptAccountSelection::RoundRobin
+            || !self.state.auth_manager.has_multiple_chatgpt_accounts()
+        {
+            return self
+                .state
+                .auth_manager
+                .select_chatgpt_account_for_session()
+                .await
+                .map(|binding| binding.map(PendingChatgptAccountSelection::Binding));
+        }
+
+        let model = self
+            .model_for_chatgpt_account_selection(config, allow_provider_model_fallback)
+            .await;
+        let eligible_account_ids =
+            crate::chatgpt_account_selection::compatible_chatgpt_account_ids(
+                &self.state.auth_manager,
+                &self.state.models_manager,
+                &model,
+                config.http_client_factory(),
+            )
+            .await?;
+        self.state
+            .auth_manager
+            .reserve_compatible_chatgpt_account_for_session(&eligible_account_ids)
+            .await?
+            .ok_or_else(|| {
+                std::io::Error::other(format!(
+                    "no eligible ChatGPT account supports model `{model}`"
+                ))
+            })
+            .map(PendingChatgptAccountSelection::Reservation)
+            .map(Some)
+    }
+
+    /// Validates that a reserved ChatGPT account supports the fully resolved session model.
+    pub async fn validate_chatgpt_account_for_config(
+        &self,
+        config: &Config,
+        binding: &ChatgptAccountBinding,
+        allow_provider_model_fallback: bool,
+    ) -> std::io::Result<()> {
+        if !config.model_provider.is_openai()
+            || !config.model_provider.requires_openai_auth
+            || config.chatgpt_account_selection != ChatgptAccountSelection::RoundRobin
+            || !self.state.auth_manager.has_multiple_chatgpt_accounts()
+        {
+            return Ok(());
+        }
+
+        let model = self
+            .model_for_chatgpt_account_selection(config, allow_provider_model_fallback)
+            .await;
+        let models = self
+            .state
+            .models_manager
+            .list_models_for_account(&binding.account_id, config.http_client_factory())
+            .await
+            .map_err(std::io::Error::other)?;
+        if models.iter().any(|preset| preset.model == model) {
+            return Ok(());
+        }
+
+        Err(std::io::Error::other(format!(
+            "selected ChatGPT account `{}` does not support model `{model}`",
+            binding.account_id
+        )))
+    }
+
+    async fn model_for_chatgpt_account_selection(
+        &self,
+        config: &Config,
+        allow_provider_model_fallback: bool,
+    ) -> String {
+        self.state
+            .models_manager
+            .get_default_model(
+                &config.model,
+                allow_provider_model_fallback,
+                RefreshStrategy::OnlineIfUncached,
+                config.http_client_factory(),
+            )
+            .await
     }
 
     pub async fn list_models(

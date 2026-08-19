@@ -76,6 +76,7 @@ use codex_http_client::OutboundProxyPolicy;
 use codex_install_context::InstallContext;
 use codex_login::AuthManagerConfig;
 use codex_login::AuthRouteConfig;
+use codex_login::ChatgptAccountBinding;
 use codex_mcp::McpConfig;
 use codex_mcp::McpPluginAttribution;
 use codex_mcp::McpProtocolMode;
@@ -773,6 +774,12 @@ pub struct Config {
     /// auto: Use the OS-specific keyring service if available, otherwise use a file.
     pub cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
 
+    /// Policy for selecting among persisted ChatGPT accounts.
+    pub chatgpt_account_selection: codex_config::types::ChatgptAccountSelection,
+
+    #[doc(hidden)]
+    pub session_chatgpt_account_binding: Option<ChatgptAccountBinding>,
+
     /// Definition for MCP servers that Codex can reach out to for tool calls.
     pub mcp_servers: Constrained<HashMap<String, McpServerConfig>>,
 
@@ -1280,6 +1287,10 @@ impl AuthManagerConfig for Config {
         self.cli_auth_credentials_store_mode
     }
 
+    fn chatgpt_account_selection(&self) -> codex_config::types::ChatgptAccountSelection {
+        self.chatgpt_account_selection
+    }
+
     fn auth_keyring_backend_kind(&self) -> AuthKeyringBackendKind {
         Config::auth_keyring_backend_kind(self)
     }
@@ -1446,6 +1457,16 @@ impl ConfigBuilder {
 }
 
 impl Config {
+    /// Pins the ChatGPT account selected while resolving this session's configuration.
+    pub fn with_session_chatgpt_account_binding(mut self, binding: ChatgptAccountBinding) -> Self {
+        self.session_chatgpt_account_binding = Some(binding);
+        self
+    }
+
+    pub(crate) fn session_chatgpt_account_binding(&self) -> Option<ChatgptAccountBinding> {
+        self.session_chatgpt_account_binding.clone()
+    }
+
     pub fn sqlite_config(&self) -> &codex_state::SqliteConfig {
         &self.sqlite
     }
@@ -4010,6 +4031,8 @@ impl Config {
                 cfg.cli_auth_credentials_store.unwrap_or_default(),
                 env!("CARGO_PKG_VERSION"),
             ),
+            chatgpt_account_selection: cfg.chatgpt_account_selection,
+            session_chatgpt_account_binding: None,
             mcp_servers,
             non_prefixed_mcp_tool_servers,
             // The config.toml omits "_mode" because it's a config file. However, "_mode"

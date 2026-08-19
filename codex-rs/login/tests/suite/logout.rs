@@ -9,6 +9,8 @@ use codex_login::CLIENT_ID;
 use codex_login::CLIENT_ID_OVERRIDE_ENV_VAR;
 use codex_login::CODEX_ACCESS_TOKEN_ENV_VAR;
 use codex_login::REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR;
+use codex_login::load_auth_dot_json;
+use codex_login::logout_account_with_revoke;
 use codex_login::logout_with_revoke;
 use codex_login::save_auth;
 use codex_login::token_data::IdTokenInfo;
@@ -19,7 +21,9 @@ use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
 use std::ffi::OsString;
+use std::time::Duration;
 use tempfile::TempDir;
+use tokio::time::Instant;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
@@ -82,6 +86,237 @@ async fn logout_with_revoke_revokes_refresh_token_then_removes_auth() -> Result<
             "token_type_hint": "refresh_token",
             "client_id": "staging-client",
         })
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[serial_test::serial(auth_env)]
+#[tokio::test]
+async fn logout_with_revoke_revokes_stored_accounts_in_parallel() -> Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/revoke"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(100)))
+        .expect(3)
+        .mount(&server)
+        .await;
+    let _env_guard = EnvGuard::set(
+        REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR,
+        format!("{}/oauth/revoke", server.uri()),
+    );
+
+    let codex_home = TempDir::new()?;
+    for (account_id, email, refresh_token) in [
+        ("account-a", "a@example.com", "refresh-a"),
+        ("account-b", "b@example.com", "refresh-b"),
+        ("account-c", "c@example.com", "refresh-c"),
+    ] {
+        save_auth(
+            codex_home.path(),
+            &chatgpt_auth_for_account(account_id, email, refresh_token),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )?;
+    }
+
+    let started_at = Instant::now();
+    let removed = logout_with_revoke(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+        &codex_login::test_support::transport_default_auth_route_config(),
+    )
+    .await?;
+
+    assert!(removed);
+    assert!(
+        started_at.elapsed() < Duration::from_millis(250),
+        "stored account revocations should overlap"
+    );
+    assert!(!codex_home.path().join("auth.json").exists());
+    server.verify().await;
+    Ok(())
+}
+
+#[serial_test::serial(auth_env)]
+#[tokio::test]
+async fn logout_account_with_revoke_promotes_the_remaining_account() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/revoke"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let _revoke_env_guard = EnvGuard::set(
+        REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR,
+        format!("{}/oauth/revoke", server.uri()),
+    );
+
+    let codex_home = TempDir::new()?;
+    let first = chatgpt_auth_for_account("account-a", "first@example.com", "refresh-a");
+    let second = chatgpt_auth_for_account("account-b", "second@example.com", "refresh-b");
+    save_auth(
+        codex_home.path(),
+        &first,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+    save_auth(
+        codex_home.path(),
+        &second,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let removed = logout_account_with_revoke(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+        "SECOND@example.com",
+        &codex_login::test_support::transport_default_auth_route_config(),
+    )
+    .await?;
+
+    assert!(removed);
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )?,
+        Some(first)
+    );
+    let requests = server
+        .received_requests()
+        .await
+        .context("failed to fetch revoke requests")?;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0]
+            .body_json::<Value>()
+            .context("revoke request should be JSON")?,
+        json!({
+            "token": "refresh-b",
+            "token_type_hint": "refresh_token",
+            "client_id": CLIENT_ID,
+        })
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn logout_account_rejects_ambiguous_email_without_changing_storage() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    for (account_id, refresh_token) in [
+        ("account-a", "refresh-a"),
+        ("account-b", "refresh-b"),
+        ("account-c", "refresh-c"),
+    ] {
+        let email = if account_id == "account-a" {
+            "unique@example.com"
+        } else {
+            "shared@example.com"
+        };
+        save_auth(
+            codex_home.path(),
+            &chatgpt_auth_for_account(account_id, email, refresh_token),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )?;
+    }
+    let before = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let err = logout_account_with_revoke(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+        "SHARED@example.com",
+        &codex_login::test_support::transport_default_auth_route_config(),
+    )
+    .await
+    .expect_err("ambiguous email must be rejected");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )?,
+        before
+    );
+    Ok(())
+}
+
+#[serial_test::serial(auth_env)]
+#[tokio::test]
+async fn logout_account_prefers_account_id_over_matching_email() -> Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/revoke"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let _revoke_env_guard = EnvGuard::set(
+        REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR,
+        format!("{}/oauth/revoke", server.uri()),
+    );
+    let codex_home = TempDir::new()?;
+    let account_id_match =
+        chatgpt_auth_for_account("selector", "first@example.com", "refresh-id-match");
+    let email_match =
+        chatgpt_auth_for_account("remaining-account", "selector", "refresh-email-match");
+    save_auth(
+        codex_home.path(),
+        &account_id_match,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+    save_auth(
+        codex_home.path(),
+        &email_match,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let removed = logout_account_with_revoke(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+        "selector",
+        &codex_login::test_support::transport_default_auth_route_config(),
+    )
+    .await?;
+
+    assert!(removed);
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )?,
+        Some(email_match)
+    );
+    let requests = server
+        .received_requests()
+        .await
+        .context("failed to fetch revoke requests")?;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0]
+            .body_json::<Value>()
+            .context("revoke request should be JSON")?["token"],
+        "refresh-id-match"
     );
     server.verify().await;
     Ok(())
@@ -247,29 +482,42 @@ fn chatgpt_auth() -> AuthDotJson {
 }
 
 fn chatgpt_auth_with_refresh_token(refresh_token: &str) -> AuthDotJson {
+    chatgpt_auth_for_account("account-id", "user@example.com", refresh_token)
+}
+
+fn chatgpt_auth_for_account(account_id: &str, email: &str, refresh_token: &str) -> AuthDotJson {
     AuthDotJson {
         auth_mode: Some(AuthMode::Chatgpt),
         openai_api_key: None,
         tokens: Some(TokenData {
             id_token: IdTokenInfo {
-                raw_jwt: minimal_jwt(),
+                email: Some(email.to_string()),
+                chatgpt_account_id: Some(account_id.to_string()),
+                raw_jwt: minimal_jwt(account_id, email),
                 ..Default::default()
             },
             access_token: ACCESS_TOKEN.to_string(),
             refresh_token: refresh_token.to_string(),
-            account_id: Some("account-id".to_string()),
+            account_id: Some(account_id.to_string()),
         }),
         last_refresh: None,
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        accounts: Vec::new(),
     }
 }
 
-fn minimal_jwt() -> String {
+fn minimal_jwt(account_id: &str, email: &str) -> String {
     let b64 = |b: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
     let header_b64 = b64(br#"{"alg":"none"}"#);
-    let payload_b64 = b64(br#"{"sub":"user-123"}"#);
+    let payload = json!({
+        "email": email,
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": account_id,
+        },
+    });
+    let payload_b64 = b64(&serde_json::to_vec(&payload).expect("serialize ID token payload"));
     let signature_b64 = b64(b"sig");
     format!("{header_b64}.{payload_b64}.{signature_b64}")
 }

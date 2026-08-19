@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ChatgptAccountSummary": {
+      "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "isEligible": {
+          "type": "boolean"
+        },
+        "planType": {
+          "$ref": "#/definitions/PlanType"
+        }
+      },
+      "required": [
+        "accountId",
+        "isActive",
+        "isEligible",
+        "planType"
+      ],
+      "type": "object"
+    },
+    "PlanType": {
+      "enum": [
+        "free",
+        "go",
+        "plus",
+        "pro",
+        "prolite",
+        "team",
+        "self_serve_business_prolite",
+        "self_serve_business_usage_based",
+        "business",
+        "ent26",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "enterprise",
+        "edu",
+        "unknown"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "account": {
+      "$ref": "#/definitions/ChatgptAccountSummary"
+    }
+  },
+  "required": [
+    "account"
+  ],
+  "title": "AccountSwitchResponse",
+  "type": "object"
+}

@@ -249,23 +249,53 @@ pub fn create_client_for_route(
     request_url: &str,
     route_class: ClientRouteClass,
 ) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+    create_client_for_route_with_headers(
+        http_client_factory,
+        request_url,
+        route_class,
+        default_headers(),
+    )
+}
+
+/// Creates a route-aware client with an explicit session residency requirement.
+pub fn create_client_for_route_with_residency(
+    http_client_factory: &HttpClientFactory,
+    request_url: &str,
+    route_class: ClientRouteClass,
+    enforce_residency: Option<ResidencyRequirement>,
+) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+    create_client_for_route_with_headers(
+        http_client_factory,
+        request_url,
+        route_class,
+        default_headers_for_residency(enforce_residency),
+    )
+}
+
+fn create_client_for_route_with_headers(
+    http_client_factory: &HttpClientFactory,
+    request_url: &str,
+    route_class: ClientRouteClass,
+    default_headers: HeaderMap,
+) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
     if matches!(
         http_client_factory.outbound_proxy_policy(),
         OutboundProxyPolicy::ReqwestDefault
     ) {
-        return Ok(create_client());
+        return Ok(build_default_client(
+            default_http_client_builder_with_headers(default_headers),
+        ));
     }
     if is_sandboxed() {
         // Preserve the sandbox's existing no-proxy policy; sandboxed command egress is routed
         // separately through network-proxy.
-        return Ok(create_client());
+        return Ok(build_default_client(
+            default_http_client_builder_with_headers(default_headers),
+        ));
     }
 
-    default_http_client_builder().build_respecting_outbound_proxy_policy(
-        http_client_factory,
-        request_url,
-        route_class,
-    )
+    default_http_client_builder_with_headers(default_headers)
+        .build_respecting_outbound_proxy_policy(http_client_factory, request_url, route_class)
 }
 
 /// Builds the default Codex HTTP client for a concrete outbound route without blocking the
@@ -289,8 +319,12 @@ pub async fn create_client_for_route_async(
 }
 
 fn default_http_client_builder() -> HttpClientBuilder {
+    default_http_client_builder_with_headers(default_headers())
+}
+
+fn default_http_client_builder_with_headers(default_headers: HeaderMap) -> HttpClientBuilder {
     HttpClientBuilder::new()
-        .default_headers(default_headers())
+        .default_headers(default_headers)
         .with_chatgpt_cloudflare_cookie_store()
 }
 
@@ -328,15 +362,21 @@ pub(crate) fn create_default_auth_client(
 }
 
 pub fn default_headers() -> HeaderMap {
+    let enforce_residency = REQUIREMENTS_RESIDENCY
+        .read()
+        .ok()
+        .and_then(|guard| guard.as_ref().copied());
+    default_headers_for_residency(enforce_residency)
+}
+
+/// Builds the standard Codex headers with an explicit residency requirement.
+pub fn default_headers_for_residency(enforce_residency: Option<ResidencyRequirement>) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert("originator", originator().header_value);
     if let Ok(user_agent) = HeaderValue::from_str(&get_codex_user_agent()) {
         headers.insert(USER_AGENT, user_agent);
     }
-    if let Ok(guard) = REQUIREMENTS_RESIDENCY.read()
-        && let Some(requirement) = guard.as_ref()
-        && !headers.contains_key(RESIDENCY_HEADER_NAME)
-    {
+    if let Some(requirement) = enforce_residency {
         let value = match requirement {
             ResidencyRequirement::Us => HeaderValue::from_static("us"),
         };

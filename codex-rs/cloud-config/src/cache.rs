@@ -14,6 +14,7 @@ use hmac::Hmac;
 use hmac::Mac;
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::Digest;
 use sha2::Sha256;
 use std::path::Path;
 use std::time::Duration;
@@ -39,6 +40,16 @@ impl CloudConfigBundleCache {
     pub(super) fn new(codex_home: AbsolutePathBuf) -> Self {
         Self {
             path: codex_home.join(CLOUD_CONFIG_BUNDLE_CACHE_FILENAME),
+        }
+    }
+
+    pub(super) fn new_for_chatgpt_account(
+        codex_home: AbsolutePathBuf,
+        chatgpt_account_id: &str,
+    ) -> Self {
+        let account_digest = format!("{:x}", Sha256::digest(chatgpt_account_id.as_bytes()));
+        Self {
+            path: codex_home.join(format!("cloud-config-bundle-cache-{account_digest}.json")),
         }
     }
 

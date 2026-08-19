@@ -2,11 +2,13 @@ use super::input_queue::InputQueue;
 use super::mcp_refresh::McpRefresh;
 use super::*;
 use crate::agents_md_manager::AgentsMdManager;
+use crate::chatgpt_account_selection::compatible_chatgpt_account_ids;
 use crate::config::ConstraintError;
 use crate::environment_selection::ThreadEnvironments;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::shell_snapshot::ShellSnapshot;
 use crate::state::ActiveTurn;
+use codex_config::types::ChatgptAccountSelection;
 use codex_extension_api::ExtensionDataInit;
 use codex_http_client::ClientRouteClass;
 use codex_http_client::RouteAwareClientPool;
@@ -641,6 +643,39 @@ impl Session {
             Some(BaseInstructionsProvenance::Model {
                 model: model_info.slug.clone(),
             })
+        };
+        let provider_info = session_configuration.provider.info();
+        let uses_first_party_chatgpt_auth =
+            provider_info.is_openai() && provider_info.requires_openai_auth;
+        let chatgpt_account_binding = if uses_first_party_chatgpt_auth {
+            if let Some(binding) = config.session_chatgpt_account_binding() {
+                Some(binding)
+            } else if config.chatgpt_account_selection == ChatgptAccountSelection::RoundRobin
+                && auth_manager.has_multiple_chatgpt_accounts()
+            {
+                let session_model = session_configuration.collaboration_mode.model();
+                let eligible_account_ids = compatible_chatgpt_account_ids(
+                    &auth_manager,
+                    &models_manager,
+                    session_model,
+                    config.http_client_factory(),
+                )
+                .await?;
+                Some(
+                    auth_manager
+                        .select_compatible_chatgpt_account_for_session(&eligible_account_ids)
+                        .await?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "no eligible ChatGPT account supports model `{session_model}`"
+                            )
+                        })?,
+                )
+            } else {
+                auth_manager.select_chatgpt_account_for_session().await?
+            }
+        } else {
+            None
         };
         let forked_from_id = session_configuration
             .forked_from_thread_id
@@ -1290,6 +1325,9 @@ impl Session {
                     attestation_provider,
                     config.http_client_factory(),
                 )
+                .with_models_manager(Arc::clone(&models_manager))
+                .with_chatgpt_account_binding(chatgpt_account_binding)
+                .with_residency_requirement(config.enforce_residency.value())
                 .with_prompt_cache_key_override(
                     crate::guardian::prompt_cache_key_override_for_review_session(
                         &session_configuration.session_source,

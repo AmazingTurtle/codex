@@ -74,6 +74,7 @@ enum UnauthorizedRecoveryAction {
 
 pub(crate) struct CloudConfigBundleService<C> {
     auth_manager: Arc<AuthManager>,
+    chatgpt_account_id: Option<String>,
     client: Arc<C>,
     cache: CloudConfigBundleCache,
     codex_home: AbsolutePathBuf,
@@ -91,14 +92,60 @@ where
         codex_home: PathBuf,
         timeout: Duration,
     ) -> Self {
+        Self::new_with_chatgpt_account(
+            auth_manager,
+            /*chatgpt_account_id*/ None,
+            client,
+            codex_home,
+            timeout,
+        )
+    }
+
+    pub(crate) fn new_for_chatgpt_account(
+        auth_manager: Arc<AuthManager>,
+        chatgpt_account_id: String,
+        client: Arc<C>,
+        codex_home: PathBuf,
+        timeout: Duration,
+    ) -> Self {
+        Self::new_with_chatgpt_account(
+            auth_manager,
+            Some(chatgpt_account_id),
+            client,
+            codex_home,
+            timeout,
+        )
+    }
+
+    fn new_with_chatgpt_account(
+        auth_manager: Arc<AuthManager>,
+        chatgpt_account_id: Option<String>,
+        client: Arc<C>,
+        codex_home: PathBuf,
+        timeout: Duration,
+    ) -> Self {
         let codex_home = AbsolutePathBuf::resolve_path_against_base(codex_home, "/");
+        let cache = match chatgpt_account_id.as_deref() {
+            Some(account_id) => {
+                CloudConfigBundleCache::new_for_chatgpt_account(codex_home.clone(), account_id)
+            }
+            None => CloudConfigBundleCache::new(codex_home.clone()),
+        };
         Self {
             auth_manager,
+            chatgpt_account_id,
             client,
-            cache: CloudConfigBundleCache::new(codex_home.clone()),
+            cache,
             codex_home,
             timeout,
             latest_bundle: OnceCell::new(),
+        }
+    }
+
+    async fn auth(&self) -> Result<Option<CodexAuth>, std::io::Error> {
+        match self.chatgpt_account_id.as_deref() {
+            Some(account_id) => self.auth_manager.auth_for_chatgpt_account(account_id).await,
+            None => Ok(self.auth_manager.auth().await),
         }
     }
 
@@ -173,7 +220,14 @@ where
     async fn load_startup_bundle(
         &self,
     ) -> Result<Option<CloudConfigBundle>, CloudConfigBundleLoadError> {
-        let Some(auth) = self.auth_manager.auth().await else {
+        let Some(auth) = self.auth().await.map_err(|err| {
+            CloudConfigBundleLoadError::new(
+                CloudConfigBundleLoadErrorCode::Auth,
+                /*status_code*/ None,
+                format!("failed to load account-scoped authentication: {err}"),
+            )
+        })?
+        else {
             return Ok(None);
         };
         if !cloud_config_eligible_auth(&auth) {
@@ -233,7 +287,12 @@ where
     ) -> Result<Option<CloudConfigBundle>, CloudConfigBundleLoadError> {
         let mut attempt = 1;
         let mut last_status_code: Option<u16> = None;
-        let mut auth_recovery = self.auth_manager.unauthorized_recovery();
+        let mut auth_recovery = if self.chatgpt_account_id.is_some() {
+            self.auth_manager
+                .unauthorized_recovery_for_auth(auth.clone())
+        } else {
+            self.auth_manager.unauthorized_recovery()
+        };
 
         while attempt <= CLOUD_CONFIG_BUNDLE_MAX_ATTEMPTS {
             match self.client.get_bundle(&auth).await {
@@ -382,7 +441,14 @@ where
             );
             match auth_recovery.next().await {
                 Ok(_) => {
-                    let Some(refreshed_auth) = self.auth_manager.auth().await else {
+                    let Some(refreshed_auth) = self.auth().await.map_err(|err| {
+                        CloudConfigBundleLoadError::new(
+                            CloudConfigBundleLoadErrorCode::Auth,
+                            status_code,
+                            format!("failed to reload account-scoped authentication: {err}"),
+                        )
+                    })?
+                    else {
                         tracing::error!(
                             "Auth recovery succeeded but no auth is available for cloud config bundle"
                         );
@@ -473,7 +539,7 @@ where
     }
 
     async fn refresh_cache_once(&self) -> bool {
-        let Some(auth) = self.auth_manager.auth().await else {
+        let Some(auth) = self.auth().await.ok().flatten() else {
             return false;
         };
         if !cloud_config_eligible_auth(&auth) {

@@ -43,6 +43,7 @@ use codex_config::permissions_toml::WorkspaceRootsToml;
 use codex_config::types::AppToolApproval;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::BundledSkillsConfig;
+use codex_config::types::ChatgptAccountSelection;
 use codex_config::types::FeedbackConfigToml;
 use codex_config::types::HistoryPersistence;
 use codex_config::types::McpServerEnvVar;
@@ -5702,6 +5703,28 @@ async fn config_defaults_to_file_cli_auth_store_mode() -> std::io::Result<()> {
         AuthCredentialsStoreMode::File,
     );
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn config_resolves_round_robin_chatgpt_account_selection() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let cfg = ConfigToml {
+        chatgpt_account_selection: ChatgptAccountSelection::RoundRobin,
+        ..Default::default()
+    };
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        codex_home.abs(),
+    )
+    .await?;
+
+    assert_eq!(
+        config.chatgpt_account_selection,
+        ChatgptAccountSelection::RoundRobin
+    );
     Ok(())
 }
 

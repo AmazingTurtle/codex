@@ -27,6 +27,16 @@ use codex_app_server_client::AppServerPath;
 use codex_app_server_client::AppServerRequestHandle;
 use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::Account;
+use codex_app_server_protocol::AccountListParams;
+use codex_app_server_protocol::AccountListResponse;
+use codex_app_server_protocol::AccountModelsReadManyResponse;
+use codex_app_server_protocol::AccountRateLimitsReadManyResponse;
+use codex_app_server_protocol::AccountReadManyParams;
+use codex_app_server_protocol::AccountRemoveParams;
+use codex_app_server_protocol::AccountRemoveResponse;
+use codex_app_server_protocol::AccountSwitchParams;
+use codex_app_server_protocol::AccountSwitchResponse;
+use codex_app_server_protocol::AccountUsageReadManyResponse;
 use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::ClientRequest;
@@ -42,6 +52,8 @@ use codex_app_server_protocol::GetAccountParams;
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::JSONRPCErrorError;
+use codex_app_server_protocol::LoginAccountParams;
+use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::LogoutAccountResponse;
 use codex_app_server_protocol::MemoryResetResponse;
 use codex_app_server_protocol::Model as ApiModel;
@@ -1242,6 +1254,118 @@ impl AppServerSession {
             .await
             .wrap_err("account/logout failed in TUI")?;
         Ok(())
+    }
+
+    pub(crate) async fn list_chatgpt_accounts(&mut self) -> Result<AccountListResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::AccountList {
+                request_id,
+                params: AccountListParams {
+                    cursor: None,
+                    limit: None,
+                },
+            })
+            .await
+            .wrap_err("account/list failed in TUI")
+    }
+
+    pub(crate) async fn start_browser_chatgpt_login(&mut self) -> Result<LoginAccountResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::LoginAccount {
+                request_id,
+                params: LoginAccountParams::Chatgpt {
+                    codex_streamlined_login: false,
+                    use_hosted_login_success_page: false,
+                    app_brand: None,
+                },
+            })
+            .await
+            .wrap_err("account/login/start browser flow failed in TUI")
+    }
+
+    pub(crate) async fn start_device_code_chatgpt_login(&mut self) -> Result<LoginAccountResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::LoginAccount {
+                request_id,
+                params: LoginAccountParams::ChatgptDeviceCode,
+            })
+            .await
+            .wrap_err("account/login/start device-code flow failed in TUI")
+    }
+
+    pub(crate) async fn read_chatgpt_account_rate_limits(
+        &mut self,
+        account_ids: Option<Vec<String>>,
+    ) -> Result<AccountRateLimitsReadManyResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed::<AccountRateLimitsReadManyResponse>(
+                ClientRequest::AccountRateLimitsReadMany {
+                    request_id,
+                    params: AccountReadManyParams { account_ids },
+                },
+            )
+            .await
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn read_chatgpt_account_usage(
+        &mut self,
+        account_ids: Option<Vec<String>>,
+    ) -> Result<AccountUsageReadManyResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed::<AccountUsageReadManyResponse>(ClientRequest::AccountUsageReadMany {
+                request_id,
+                params: AccountReadManyParams { account_ids },
+            })
+            .await
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn read_chatgpt_account_models(
+        &mut self,
+        account_ids: Option<Vec<String>>,
+    ) -> Result<AccountModelsReadManyResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed::<AccountModelsReadManyResponse>(ClientRequest::AccountModelsReadMany {
+                request_id,
+                params: AccountReadManyParams { account_ids },
+            })
+            .await
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn switch_chatgpt_account(
+        &mut self,
+        account_id: String,
+    ) -> Result<AccountSwitchResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::AccountSwitch {
+                request_id,
+                params: AccountSwitchParams { account_id },
+            })
+            .await
+            .wrap_err("account/switch failed in TUI")
+    }
+
+    pub(crate) async fn remove_chatgpt_account(
+        &mut self,
+        account_id: String,
+    ) -> Result<AccountRemoveResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::AccountRemove {
+                request_id,
+                params: AccountRemoveParams { account_id },
+            })
+            .await
+            .wrap_err("account/remove failed in TUI")
     }
 
     pub(crate) async fn thread_unsubscribe(&mut self, thread_id: ThreadId) -> Result<()> {

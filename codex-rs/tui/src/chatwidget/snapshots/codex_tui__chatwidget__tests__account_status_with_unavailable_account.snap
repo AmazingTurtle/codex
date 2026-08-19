@@ -1,0 +1,10 @@
+---
+source: tui/src/chatwidget/tests/accounts.rs
+expression: rendered
+---
+ChatGPT account status
+  pro@example.com — Pro · active
+    Primary: 25% used / 300m window
+    Secondary: 60% used / 10080m window
+  free@example.com — Free
+    unavailable: catalog unavailable

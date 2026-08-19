@@ -58,6 +58,693 @@ fn header_auth_exposes_a_valid_chatgpt_account_id() {
     }
 }
 
+fn stored_chatgpt_auth(account_id: &str, access_token: &str) -> AuthDotJson {
+    AuthDotJson {
+        auth_mode: Some(AuthMode::Chatgpt),
+        openai_api_key: None,
+        tokens: Some(TokenData {
+            id_token: IdTokenInfo {
+                raw_jwt: "e30.e30.c2ln".to_string(),
+                chatgpt_account_id: Some(account_id.to_string()),
+                ..Default::default()
+            },
+            access_token: access_token.to_string(),
+            refresh_token: format!("refresh-{account_id}"),
+            account_id: Some(account_id.to_string()),
+        }),
+        last_refresh: Some(Utc::now()),
+        agent_identity: None,
+        personal_access_token: None,
+        bedrock_api_key: None,
+        accounts: Vec::new(),
+    }
+}
+
+#[test]
+fn account_scoped_storage_updates_only_selected_credentials() {
+    let codex_home = tempdir().expect("temporary Codex home");
+    let mut root = stored_chatgpt_auth("account-a", "access-a");
+    root.accounts
+        .push(stored_chatgpt_auth("account-b", "access-b"));
+    let storage: Arc<dyn AuthStorageBackend> =
+        Arc::new(FileAuthStorage::new(codex_home.path().to_path_buf()));
+    storage.save(&root).expect("store accounts");
+    let selected = ChatgptAccountStorage {
+        account_id: "account-b".to_string(),
+        storage: storage.clone(),
+    };
+    let mut updated = selected
+        .load()
+        .expect("load selected account")
+        .expect("selected account");
+    updated
+        .tokens
+        .as_mut()
+        .expect("selected tokens")
+        .access_token = "refreshed-b".to_string();
+    selected.save(&updated).expect("save selected account");
+
+    let stored = storage.load().expect("load root").expect("stored root");
+    assert_eq!(
+        (
+            stored.chatgpt_account_id(),
+            stored
+                .tokens
+                .as_ref()
+                .map(|tokens| tokens.access_token.clone()),
+            stored.accounts[0].chatgpt_account_id(),
+            stored.accounts[0]
+                .tokens
+                .as_ref()
+                .map(|tokens| tokens.access_token.clone()),
+        ),
+        (
+            Some("account-a".to_string()),
+            Some("access-a".to_string()),
+            Some("account-b".to_string()),
+            Some("refreshed-b".to_string()),
+        )
+    );
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn account_scoped_auth_returns_existing_credentials_when_proactive_refresh_fails() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let _refresh_url_guard = EnvVarGuard::set(
+        REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR,
+        &format!("{}/oauth/token", server.uri()),
+    );
+    let codex_home = tempdir().expect("temporary Codex home");
+    let mut stored = stored_chatgpt_auth(WORKSPACE_ID_ALLOWED, "access-active");
+    let mut scoped = stored_chatgpt_auth(WORKSPACE_ID_SECOND_ALLOWED, "access-scoped");
+    scoped.last_refresh = Some(Utc::now() - chrono::Duration::days(9));
+    stored.accounts.push(scoped.clone());
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let stored = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load normalized accounts")
+    .expect("stored accounts should exist");
+    let scoped = stored.accounts[0].clone();
+    let config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+
+    let auth = manager
+        .auth_for_chatgpt_account(WORKSPACE_ID_SECOND_ALLOWED)
+        .await
+        .expect("proactive refresh failure should not fail scoped auth")
+        .expect("scoped auth should remain available");
+
+    assert_eq!(auth.get_current_auth_json(), Some(scoped));
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load stored accounts"),
+        Some(stored)
+    );
+    server.verify().await;
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn account_scoped_unauthorized_recovery_refreshes_once_after_reload() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "refreshed-access",
+            "refresh_token": "refreshed-refresh",
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let _refresh_url_guard = EnvVarGuard::set(
+        REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR,
+        &format!("{}/oauth/token", server.uri()),
+    );
+    let codex_home = tempdir().expect("temporary Codex home");
+    let mut stored = stored_chatgpt_auth(WORKSPACE_ID_ALLOWED, "access-active");
+    let mut scoped = stored_chatgpt_auth(WORKSPACE_ID_SECOND_ALLOWED, "access-scoped");
+    let stale_refresh = Utc::now() - chrono::Duration::days(9);
+    scoped.last_refresh = Some(stale_refresh);
+    stored.accounts.push(scoped.clone());
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let stored = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load normalized accounts")
+    .expect("stored accounts should exist");
+    let scoped = stored.accounts[0].clone();
+    let config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+    let scoped_auth = manager
+        .reload_chatgpt_account_auth(WORKSPACE_ID_SECOND_ALLOWED)
+        .await
+        .expect("load scoped auth")
+        .expect("scoped auth should exist");
+    let mut recovery = manager.unauthorized_recovery_for_auth(scoped_auth);
+
+    let reload_result = recovery.next().await.expect("reload should succeed");
+
+    assert_eq!(reload_result.auth_state_changed(), Some(false));
+    assert_eq!(
+        server
+            .received_requests()
+            .await
+            .expect("inspect refresh requests")
+            .len(),
+        0
+    );
+
+    let refresh_result = recovery.next().await.expect("refresh should succeed");
+
+    assert_eq!(refresh_result.auth_state_changed(), Some(true));
+    assert_eq!(
+        server
+            .received_requests()
+            .await
+            .expect("inspect refresh requests")
+            .len(),
+        1
+    );
+    let refreshed = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load refreshed accounts")
+    .expect("stored accounts should exist");
+    let refreshed_at = refreshed.accounts[0]
+        .last_refresh
+        .expect("last_refresh should be recorded");
+    let mut expected_scoped = scoped;
+    let expected_tokens = expected_scoped.tokens.as_mut().expect("scoped tokens");
+    expected_tokens.access_token = "refreshed-access".to_string();
+    expected_tokens.refresh_token = "refreshed-refresh".to_string();
+    expected_scoped.last_refresh = Some(refreshed_at);
+    let mut expected = stored;
+    expected.accounts = vec![expected_scoped];
+    assert_eq!(refreshed, expected);
+    assert!(refreshed_at > stale_refresh);
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn chatgpt_logins_are_merged_and_can_rotate() {
+    let codex_home = tempdir().expect("temporary Codex home");
+    let first = stored_chatgpt_auth("account-a", "access-a");
+    let second = stored_chatgpt_auth("account-b", "access-b");
+    let third = stored_chatgpt_auth("account-c", "access-c");
+    save_auth(
+        codex_home.path(),
+        &first,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store first account");
+    save_auth(
+        codex_home.path(),
+        &second,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store second account");
+    save_auth(
+        codex_home.path(),
+        &third,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store third account");
+
+    let stored = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load accounts")
+    .expect("stored auth");
+    assert_eq!(stored.chatgpt_account_id().as_deref(), Some("account-c"));
+    assert_eq!(
+        stored
+            .accounts
+            .iter()
+            .filter_map(AuthDotJson::chatgpt_account_id)
+            .collect::<Vec<_>>(),
+        vec!["account-a".to_string(), "account-b".to_string()]
+    );
+
+    let mut config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    config.chatgpt_account_selection = ChatgptAccountSelection::RoundRobin;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+
+    assert!(
+        manager
+            .select_chatgpt_account_for_session()
+            .await
+            .expect("rotate to first account")
+            .is_some()
+    );
+    assert_eq!(
+        manager.auth_cached().and_then(|auth| auth.get_account_id()),
+        Some("account-a".to_string())
+    );
+    assert!(
+        manager
+            .rotate_chatgpt_account_after_limit(
+                "account-a",
+                &["account-a".to_string()],
+                Some(&["account-c".to_string()]),
+            )
+            .await
+            .expect("skip an account that cannot use the requested model")
+            .is_some()
+    );
+    assert_eq!(
+        manager.auth_cached().and_then(|auth| auth.get_account_id()),
+        Some("account-c".to_string())
+    );
+    assert!(
+        manager
+            .rotate_chatgpt_account_after_limit(
+                "account-c",
+                &["account-a".to_string(), "account-c".to_string()],
+                Some(&[]),
+            )
+            .await
+            .expect("all accounts were attempted")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn single_account_round_robin_selection_is_a_noop() {
+    let codex_home = tempdir().expect("temporary Codex home");
+    let stored = stored_chatgpt_auth("account-a", "access-a");
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store account");
+    let mut config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    config.chatgpt_account_selection = ChatgptAccountSelection::RoundRobin;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+    let account_changes = manager.active_account_change_receiver();
+    let stored_before = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load account before selection");
+
+    let binding = manager
+        .select_chatgpt_account_for_session()
+        .await
+        .expect("select account");
+
+    assert_eq!(
+        binding,
+        Some(ChatgptAccountBinding {
+            account_id: "account-a".to_string(),
+            manual_switch_revision: 0,
+        })
+    );
+    assert!(!account_changes.has_changed().expect("account watch open"));
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load account"),
+        stored_before
+    );
+}
+
+#[tokio::test]
+async fn compatible_round_robin_selection_is_a_noop_when_only_active_account_matches() {
+    let codex_home = tempdir().expect("temporary Codex home");
+    let mut stored = stored_chatgpt_auth("account-a", "access-a");
+    stored
+        .accounts
+        .push(stored_chatgpt_auth("account-b", "access-b"));
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let mut config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    config.chatgpt_account_selection = ChatgptAccountSelection::RoundRobin;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+    let account_changes = manager.active_account_change_receiver();
+    let stored_before = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load accounts before selection");
+
+    let binding = manager
+        .select_compatible_chatgpt_account_for_session(&["account-a".to_string()])
+        .await
+        .expect("select compatible account");
+
+    assert_eq!(
+        binding,
+        Some(ChatgptAccountBinding {
+            account_id: "account-a".to_string(),
+            manual_switch_revision: 0,
+        })
+    );
+    assert!(!account_changes.has_changed().expect("account watch open"));
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load accounts"),
+        stored_before
+    );
+}
+
+#[tokio::test]
+async fn session_selection_uses_eligible_stored_account_when_active_account_is_blocked() {
+    let codex_home = tempdir().expect("temporary Codex home");
+    let mut stored = stored_chatgpt_auth("blocked-account", "blocked-access");
+    stored
+        .accounts
+        .push(stored_chatgpt_auth("allowed-account", "allowed-access"));
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let stored_before = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load accounts before selection");
+    let config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        Some(vec!["allowed-account".to_string()]),
+    )
+    .await;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+
+    assert!(manager.auth_cached().is_none());
+    assert_eq!(
+        manager
+            .select_chatgpt_account_for_session()
+            .await
+            .expect("select eligible stored account"),
+        Some(ChatgptAccountBinding {
+            account_id: "allowed-account".to_string(),
+            manual_switch_revision: 0,
+        })
+    );
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load accounts"),
+        stored_before
+    );
+}
+
+#[tokio::test]
+async fn round_robin_reservation_only_rotates_when_committed() {
+    let codex_home = tempdir().expect("temporary Codex home");
+    let mut stored = stored_chatgpt_auth("account-a", "access-a");
+    stored
+        .accounts
+        .push(stored_chatgpt_auth("account-b", "access-b"));
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let stored_before = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load accounts before reservation");
+    let mut config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    config.chatgpt_account_selection = ChatgptAccountSelection::RoundRobin;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+    let account_changes = manager.active_account_change_receiver();
+
+    let reservation = manager
+        .reserve_compatible_chatgpt_account_for_session(&["account-b".to_string()])
+        .await
+        .expect("reserve account")
+        .expect("compatible account");
+    assert_eq!(reservation.binding().account_id, "account-b");
+    drop(reservation);
+
+    assert!(!account_changes.has_changed().expect("account watch open"));
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load accounts"),
+        stored_before
+    );
+
+    let binding = manager
+        .reserve_compatible_chatgpt_account_for_session(&["account-b".to_string()])
+        .await
+        .expect("reserve account")
+        .expect("compatible account")
+        .commit()
+        .await
+        .expect("commit account");
+
+    assert_eq!(binding.account_id, "account-b");
+    assert!(account_changes.has_changed().expect("account watch open"));
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load accounts")
+        .and_then(|auth| auth.chatgpt_account_id()),
+        Some("account-b".to_string())
+    );
+}
+
+#[tokio::test]
+async fn concurrent_session_selections_reserve_distinct_round_robin_accounts() {
+    let codex_home = tempdir().expect("temporary Codex home");
+    for (account_id, access_token) in [
+        ("account-a", "access-a"),
+        ("account-b", "access-b"),
+        ("account-c", "access-c"),
+    ] {
+        save_auth(
+            codex_home.path(),
+            &stored_chatgpt_auth(account_id, access_token),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("store account");
+    }
+    let mut config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    config.chatgpt_account_selection = ChatgptAccountSelection::RoundRobin;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+
+    let (first, second) = tokio::join!(
+        manager.select_chatgpt_account_for_session(),
+        manager.select_chatgpt_account_for_session(),
+    );
+    let mut selected = vec![
+        first
+            .expect("first selection")
+            .expect("first account")
+            .account_id,
+        second
+            .expect("second selection")
+            .expect("second account")
+            .account_id,
+    ];
+    selected.sort();
+
+    assert_eq!(
+        selected,
+        vec!["account-a".to_string(), "account-b".to_string()]
+    );
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn removing_active_account_promotes_allowed_workspace() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/revoke"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let _revoke_url_guard = EnvVarGuard::set(
+        REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR,
+        &format!("{}/oauth/revoke", server.uri()),
+    );
+    let codex_home = tempdir().expect("temporary Codex home");
+    let mut active = stored_chatgpt_auth(WORKSPACE_ID_ALLOWED, "access-active");
+    let disallowed = stored_chatgpt_auth(WORKSPACE_ID_DISALLOWED, "access-disallowed");
+    let allowed = stored_chatgpt_auth(WORKSPACE_ID_SECOND_ALLOWED, "access-allowed");
+    active.accounts = vec![disallowed.clone(), allowed.clone()];
+    save_auth(
+        codex_home.path(),
+        &active,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        Some(vec![
+            WORKSPACE_ID_ALLOWED.to_string(),
+            WORKSPACE_ID_SECOND_ALLOWED.to_string(),
+        ]),
+    )
+    .await;
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+
+    assert!(
+        manager
+            .logout_chatgpt_account(WORKSPACE_ID_ALLOWED)
+            .await
+            .expect("remove active account")
+    );
+
+    let mut expected = allowed;
+    expected.accounts = vec![disallowed];
+    let expected = serde_json::from_value(
+        serde_json::to_value(expected).expect("serialize expected promoted account"),
+    )
+    .expect("normalize expected promoted account");
+    assert_eq!(
+        load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load promoted account"),
+        Some(expected)
+    );
+    assert_eq!(
+        manager.auth_cached().and_then(|auth| auth.get_account_id()),
+        Some(WORKSPACE_ID_SECOND_ALLOWED.to_string())
+    );
+    server.verify().await;
+}
+
 #[tokio::test]
 async fn refresh_without_id_token() {
     let codex_home = tempdir().unwrap();
@@ -370,6 +1057,7 @@ async fn stored_agent_identity_jwt_keeps_auth_json_unchanged() -> anyhow::Result
             agent_identity: Some(AgentIdentityStorage::Jwt(agent_identity.clone())),
             personal_access_token: None,
             bedrock_api_key: None,
+            accounts: Vec::new(),
         },
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::Direct,
@@ -449,6 +1137,7 @@ async fn login_with_access_token_writes_only_personal_access_token() {
             agent_identity: None,
             personal_access_token: Some("at-login-test".to_string()),
             bedrock_api_key: None,
+            accounts: Vec::new(),
         }
     );
     assert_eq!(auth.resolved_mode(), AuthMode::PersonalAccessToken);
@@ -1068,6 +1757,7 @@ async fn pro_account_with_no_api_key_uses_chatgpt_auth() {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            accounts: Vec::new(),
         },
         auth_dot_json
     );
@@ -1116,6 +1806,7 @@ fn logout_removes_auth_file() -> Result<(), std::io::Error> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        accounts: Vec::new(),
     };
     super::save_auth(
         dir.path(),
@@ -1153,6 +1844,7 @@ async fn unauthorized_recovery_reports_mode_and_step_names() {
         step: UnauthorizedRecoveryStep::Reload,
         expected_account_id: None,
         mode: UnauthorizedRecoveryMode::Managed,
+        scoped_auth: None,
     };
     assert_eq!(managed.mode_name(), "managed");
     assert_eq!(managed.step_name(), "reload");
@@ -1162,6 +1854,7 @@ async fn unauthorized_recovery_reports_mode_and_step_names() {
         step: UnauthorizedRecoveryStep::ExternalRefresh,
         expected_account_id: None,
         mode: UnauthorizedRecoveryMode::External,
+        scoped_auth: None,
     };
     assert_eq!(external.mode_name(), "external");
     assert_eq!(external.step_name(), "external_refresh");
@@ -1718,6 +2411,7 @@ async fn build_config(
         managed_auth_policy: ManagedAuthPolicy::default(),
         chatgpt_base_url: None,
         auth_route_config: crate::test_support::transport_default_auth_route_config(),
+        chatgpt_account_selection: ChatgptAccountSelection::Sticky,
     }
 }
 
@@ -1821,6 +2515,7 @@ fn test_auth_manager_config(codex_home: &Path) -> TestAuthManagerConfig {
         auth_route_config: AuthRouteConfig::from_http_client_factory(HttpClientFactory::new(
             OutboundProxyPolicy::RespectSystemProxy,
         )),
+        chatgpt_account_selection: ChatgptAccountSelection::Sticky,
     })
 }
 
@@ -2189,6 +2884,93 @@ async fn auth_manager_rejects_disallowed_stored_and_external_auth() {
 
 #[tokio::test]
 #[serial(codex_auth_env)]
+async fn account_scoped_chatgpt_auth_respects_login_method_policy() {
+    let _access_token_guard = remove_access_token_env_var();
+
+    for (forced_login_method, managed_allowed_login_methods) in [
+        (Some(ForcedLoginMethod::Api), None),
+        (None, Some(vec![ForcedLoginMethod::Api])),
+    ] {
+        let codex_home = tempdir().unwrap();
+        let mut stored = stored_chatgpt_auth(WORKSPACE_ID_ALLOWED, "access-allowed");
+        stored.accounts.push(stored_chatgpt_auth(
+            WORKSPACE_ID_SECOND_ALLOWED,
+            "access-second-allowed",
+        ));
+        save_auth(
+            codex_home.path(),
+            &stored,
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("store accounts");
+        let stored = load_auth_dot_json(
+            codex_home.path(),
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::Direct,
+        )
+        .expect("load stored accounts")
+        .expect("stored auth");
+        let mut config = build_config(
+            codex_home.path(),
+            forced_login_method,
+            /*forced_chatgpt_workspace_id*/ None,
+        )
+        .await;
+        config.managed_auth_policy.allowed_login_methods = managed_allowed_login_methods;
+        let manager =
+            AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+                .await
+                .expect("build auth manager");
+
+        assert_eq!(
+            manager.chatgpt_accounts().expect("list accounts"),
+            vec![
+                ChatgptAccount {
+                    account_id: WORKSPACE_ID_ALLOWED.to_string(),
+                    email: None,
+                    plan_type: AccountPlanType::Unknown,
+                    is_active: true,
+                    is_eligible: false,
+                },
+                ChatgptAccount {
+                    account_id: WORKSPACE_ID_SECOND_ALLOWED.to_string(),
+                    email: None,
+                    plan_type: AccountPlanType::Unknown,
+                    is_active: false,
+                    is_eligible: false,
+                },
+            ]
+        );
+        let auth_error = manager
+            .auth_for_chatgpt_account(WORKSPACE_ID_SECOND_ALLOWED)
+            .await
+            .expect_err("account-scoped auth must reject ChatGPT credentials");
+        let switch_error = manager
+            .switch_chatgpt_account(WORKSPACE_ID_ALLOWED)
+            .await
+            .expect_err("account switching must reject ChatGPT credentials");
+        assert_eq!(
+            (auth_error.kind(), switch_error.kind()),
+            (
+                std::io::ErrorKind::PermissionDenied,
+                std::io::ErrorKind::PermissionDenied,
+            )
+        );
+        assert_eq!(
+            load_auth_dot_json(
+                codex_home.path(),
+                AuthCredentialsStoreMode::File,
+                AuthKeyringBackendKind::Direct,
+            )
+            .expect("load accounts"),
+            Some(stored)
+        );
+    }
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
 async fn api_only_policy_rejects_access_tokens_before_hydration() {
     let codex_home = tempdir().unwrap();
     let server = MockServer::start().await;
@@ -2258,6 +3040,7 @@ async fn workspace_policy_rejects_agent_identity_before_hydration() {
                 agent_identity: Some(stored_agent_identity),
                 personal_access_token: None,
                 bedrock_api_key: None,
+                accounts: Vec::new(),
             },
             AuthCredentialsStoreMode::File,
             AuthKeyringBackendKind::Direct,
@@ -2354,6 +3137,187 @@ async fn enforce_login_restrictions_logs_out_for_workspace_mismatch() {
 
 #[tokio::test]
 #[serial(codex_auth_env)]
+async fn enforce_login_restrictions_promotes_an_allowed_stored_account() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let mut stored = stored_chatgpt_auth(WORKSPACE_ID_DISALLOWED, "access-disallowed");
+    stored
+        .accounts
+        .push(stored_chatgpt_auth(WORKSPACE_ID_ALLOWED, "access-allowed"));
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        Some(vec![WORKSPACE_ID_ALLOWED.to_string()]),
+    )
+    .await;
+
+    super::enforce_login_restrictions(&config)
+        .await
+        .expect("allowed stored account should satisfy policy");
+
+    let stored = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load accounts")
+    .expect("stored auth");
+    assert_eq!(
+        (
+            stored.chatgpt_account_id(),
+            stored
+                .accounts
+                .iter()
+                .filter_map(AuthDotJson::chatgpt_account_id)
+                .collect::<Vec<_>>(),
+        ),
+        (
+            Some(WORKSPACE_ID_ALLOWED.to_string()),
+            vec![WORKSPACE_ID_DISALLOWED.to_string()],
+        )
+    );
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn enforce_login_restrictions_promotes_an_account_allowed_by_managed_policy() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let mut stored = stored_chatgpt_auth(WORKSPACE_ID_DISALLOWED, "access-disallowed");
+    stored
+        .accounts
+        .push(stored_chatgpt_auth(WORKSPACE_ID_ALLOWED, "access-allowed"));
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let mut config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    config.managed_auth_policy.allowed_chatgpt_workspaces =
+        Some(vec![WORKSPACE_ID_ALLOWED.to_string()]);
+
+    super::enforce_login_restrictions(&config)
+        .await
+        .expect("managed policy should promote the allowed stored account");
+    let manager =
+        AuthManager::shared_from_auth_config(config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("build auth manager");
+
+    let stored = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("load accounts")
+    .expect("stored auth");
+    assert_eq!(
+        (
+            manager.auth().await.and_then(|auth| auth.get_account_id()),
+            stored.chatgpt_account_id(),
+            stored
+                .accounts
+                .iter()
+                .filter_map(AuthDotJson::chatgpt_account_id)
+                .collect::<Vec<_>>(),
+        ),
+        (
+            Some(WORKSPACE_ID_ALLOWED.to_string()),
+            Some(WORKSPACE_ID_ALLOWED.to_string()),
+            vec![WORKSPACE_ID_DISALLOWED.to_string()],
+        )
+    );
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn multiple_chatgpt_accounts_counts_only_accounts_allowed_by_policy() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let mut stored = stored_chatgpt_auth(WORKSPACE_ID_ALLOWED, "access-allowed");
+    stored.accounts.push(stored_chatgpt_auth(
+        WORKSPACE_ID_SECOND_ALLOWED,
+        "access-second-allowed",
+    ));
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+
+    let unrestricted = AuthManager::shared_from_auth_config(
+        build_config(
+            codex_home.path(),
+            /*forced_login_method*/ None,
+            /*forced_chatgpt_workspace_id*/ None,
+        )
+        .await,
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await
+    .expect("build auth manager");
+    let mut one_allowed_config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    one_allowed_config
+        .managed_auth_policy
+        .allowed_chatgpt_workspaces = Some(vec![WORKSPACE_ID_ALLOWED.to_string()]);
+    let one_allowed = AuthManager::shared_from_auth_config(
+        one_allowed_config,
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await
+    .expect("build auth manager");
+    let mut both_allowed_config = build_config(
+        codex_home.path(),
+        /*forced_login_method*/ None,
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+    both_allowed_config
+        .managed_auth_policy
+        .allowed_chatgpt_workspaces = Some(vec![
+        WORKSPACE_ID_ALLOWED.to_string(),
+        WORKSPACE_ID_SECOND_ALLOWED.to_string(),
+    ]);
+    let both_allowed = AuthManager::shared_from_auth_config(
+        both_allowed_config,
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await
+    .expect("build auth manager");
+
+    assert_eq!(
+        (
+            unrestricted.has_multiple_chatgpt_accounts(),
+            one_allowed.has_multiple_chatgpt_accounts(),
+            both_allowed.has_multiple_chatgpt_accounts(),
+        ),
+        (true, false, true)
+    );
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
 async fn enforce_login_restrictions_logs_out_for_personal_access_token_workspace_mismatch() {
     let codex_home = tempdir().unwrap();
     let server = MockServer::start().await;
@@ -2389,6 +3353,7 @@ async fn enforce_login_restrictions_logs_out_for_personal_access_token_workspace
         managed_auth_policy: ManagedAuthPolicy::default(),
         chatgpt_base_url: None,
         auth_route_config: crate::test_support::transport_default_auth_route_config(),
+        chatgpt_account_selection: ChatgptAccountSelection::Sticky,
     };
 
     let err = super::enforce_login_restrictions(&config)
@@ -2499,6 +3464,7 @@ async fn enforce_login_restrictions_logs_out_for_agent_identity_workspace_mismat
             agent_identity: Some(AgentIdentityStorage::Jwt(agent_identity)),
             personal_access_token: None,
             bedrock_api_key: None,
+            accounts: Vec::new(),
         },
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),
@@ -2514,6 +3480,7 @@ async fn enforce_login_restrictions_logs_out_for_agent_identity_workspace_mismat
         managed_auth_policy: ManagedAuthPolicy::default(),
         chatgpt_base_url: Some(chatgpt_base_url),
         auth_route_config: crate::test_support::transport_default_auth_route_config(),
+        chatgpt_account_selection: ChatgptAccountSelection::Sticky,
     };
 
     let err = super::enforce_login_restrictions_with_agent_identity_authapi_base_url(

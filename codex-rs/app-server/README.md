@@ -2239,12 +2239,18 @@ Codex supports these authentication modes. The current mode is surfaced in `acco
 ### API Overview
 
 - `account/read` — fetch current account info; optionally refresh tokens.
+- `account/list` — page through persisted ChatGPT accounts in account-ID order with display-safe identity, plan, active, and policy-eligibility metadata. Cursors are opaque account keys and remain stable when the active account changes.
+- `account/switch` — make one persisted ChatGPT account globally active.
+- `account/remove` — revoke and remove one persisted ChatGPT account; the response identifies the remaining authenticated, policy-eligible account, if any.
 - `account/login/start` — begin login (`apiKey`, `chatgpt`, `chatgptDeviceCode`, `amazonBedrock`).
 - `account/login/completed` (notify) — emitted when a login attempt finishes (success or error).
 - `account/login/cancel` — cancel a pending managed ChatGPT login by `loginId`.
 - `account/logout` — sign out; triggers `account/updated` on success.
 - `account/updated` (notify) — emitted whenever auth mode changes (`authMode`: `apikey`, `bedrockApiKey`, `chatgpt`, `personalAccessToken`, or `null`) and includes the current ChatGPT `planType` when available.
 - `account/rateLimits/read` — fetch ChatGPT rate limits, an optional effective monthly credit limit, whether spend control has been reached, and the earned rate-limit resets currently available, including expiry details when provided by the backend. Rate-limit updates arrive via `account/rateLimits/updated` (notify); reset-credit data is snapshot-only.
+- `account/rateLimits/readMany` — fetch rate-limit status for selected account IDs, or every eligible persisted account when `accountIds` is omitted. Each row carries its own error so partial results remain usable.
+- `account/usage/readMany` — fetch token-usage history for selected account IDs, or every eligible persisted account. Partial failures are reported per row.
+- `account/models/readMany` — fetch the backend-authoritative model catalog visible to each selected account. Clients should use this instead of inferring model access from subscription-plan names.
 - `account/rateLimitResetCredit/consume` — consume one earned reset using a caller-provided idempotency key, optionally selecting a reset-credit ID returned by `account/rateLimits/read`.
 - `account/usage/read` — fetch ChatGPT account token-activity summary and daily buckets, or pass a valid thread UUID as `threadId` to read estimated credits, optional cost, and usage breakdowns for one thread using the app-server's active account. The optional `threadUsage` response field is absent on older servers and `null` when the billing route is unavailable.
 - `account/workspaceMessages/read` — fetch active workspace messages, including workspace notification headlines when available.

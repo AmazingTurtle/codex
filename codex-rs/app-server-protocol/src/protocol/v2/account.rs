@@ -218,6 +218,137 @@ pub struct AccountSessionsResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct AccountListParams {
+    #[ts(optional = nullable)]
+    pub cursor: Option<String>,
+    #[ts(optional = nullable)]
+    pub limit: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ChatgptAccountSummary {
+    pub account_id: String,
+    pub email: Option<String>,
+    pub plan_type: PlanType,
+    pub is_active: bool,
+    pub is_eligible: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountListResponse {
+    pub data: Vec<ChatgptAccountSummary>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountSwitchParams {
+    pub account_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountSwitchResponse {
+    pub account: ChatgptAccountSummary,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountRemoveParams {
+    pub account_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountRemoveResponse {
+    pub active_account_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountReadManyParams {
+    /// Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.
+    #[ts(optional = nullable)]
+    pub account_ids: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountRateLimitsReadResult {
+    pub account: ChatgptAccountSummary,
+    pub rate_limits: Option<AccountRateLimitsSnapshot>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountRateLimitsSnapshot {
+    pub rate_limits: RateLimitSnapshot,
+    pub rate_limits_by_limit_id: Option<HashMap<String, RateLimitSnapshot>>,
+    pub rate_limit_reset_credits: Option<RateLimitResetCreditsSummary>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountRateLimitsReadManyResponse {
+    pub data: Vec<AccountRateLimitsReadResult>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountUsageReadResult {
+    pub account: ChatgptAccountSummary,
+    pub usage: Option<AccountTokenUsageSnapshot>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountTokenUsageSnapshot {
+    pub summary: AccountTokenUsageSummary,
+    pub daily_usage_buckets: Option<Vec<AccountTokenUsageDailyBucket>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountUsageReadManyResponse {
+    pub data: Vec<AccountUsageReadResult>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountModelsReadResult {
+    pub account: ChatgptAccountSummary,
+    pub models: Option<Vec<crate::protocol::v2::Model>>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AccountModelsReadManyResponse {
+    pub data: Vec<AccountModelsReadResult>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct AccountSession {
     pub session_id: String,
     pub email: Option<String>,
@@ -295,6 +426,26 @@ pub struct GetAccountRateLimitsResponse {
     /// Multi-bucket view keyed by metered `limit_id` (for example, `codex`).
     pub rate_limits_by_limit_id: Option<HashMap<String, RateLimitSnapshot>>,
     pub rate_limit_reset_credits: Option<RateLimitResetCreditsSummary>,
+}
+
+impl From<GetAccountRateLimitsResponse> for AccountRateLimitsSnapshot {
+    fn from(value: GetAccountRateLimitsResponse) -> Self {
+        Self {
+            rate_limits: value.rate_limits,
+            rate_limits_by_limit_id: value.rate_limits_by_limit_id,
+            rate_limit_reset_credits: value.rate_limit_reset_credits,
+        }
+    }
+}
+
+impl From<AccountRateLimitsSnapshot> for GetAccountRateLimitsResponse {
+    fn from(value: AccountRateLimitsSnapshot) -> Self {
+        Self {
+            rate_limits: value.rate_limits,
+            rate_limits_by_limit_id: value.rate_limits_by_limit_id,
+            rate_limit_reset_credits: value.rate_limit_reset_credits,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -405,6 +556,25 @@ pub struct GetAccountTokenUsageResponse {
     #[serde(default)]
     #[ts(optional, as = "Option<Option<ThreadUsage>>")]
     pub thread_usage: Option<ThreadUsage>,
+}
+
+impl From<GetAccountTokenUsageResponse> for AccountTokenUsageSnapshot {
+    fn from(value: GetAccountTokenUsageResponse) -> Self {
+        Self {
+            summary: value.summary,
+            daily_usage_buckets: value.daily_usage_buckets,
+        }
+    }
+}
+
+impl From<AccountTokenUsageSnapshot> for GetAccountTokenUsageResponse {
+    fn from(value: AccountTokenUsageSnapshot) -> Self {
+        Self {
+            summary: value.summary,
+            daily_usage_buckets: value.daily_usage_buckets,
+            thread_usage: None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]

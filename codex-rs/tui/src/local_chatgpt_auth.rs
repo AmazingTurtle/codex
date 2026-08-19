@@ -116,6 +116,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            accounts: Vec::new(),
         };
         save_auth(
             codex_home,
@@ -170,6 +171,7 @@ mod tests {
                 agent_identity: None,
                 personal_access_token: None,
                 bedrock_api_key: None,
+                accounts: Vec::new(),
             },
             AuthCredentialsStoreMode::File,
             AuthKeyringBackendKind::default(),

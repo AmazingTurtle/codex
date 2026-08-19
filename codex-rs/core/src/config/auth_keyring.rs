@@ -27,6 +27,7 @@ impl Config {
             forced_chatgpt_workspace_id: self.forced_chatgpt_workspace_id.clone(),
             managed_auth_policy: self.config_layer_stack.requirements().managed_auth_policy(),
             auth_route_config: self.auth_route_config(),
+            chatgpt_account_selection: self.chatgpt_account_selection,
         }
     }
 }
@@ -73,6 +74,7 @@ pub fn bootstrap_auth_config(
                 .feature_requirements
                 .as_ref(),
         )?,
+        chatgpt_account_selection: config.chatgpt_account_selection,
     };
     auth_config.validate()?;
     Ok(auth_config)

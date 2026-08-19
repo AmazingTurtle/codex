@@ -27,8 +27,12 @@ use chrono::Duration as ChronoDuration;
 use chrono::Local;
 use chrono::TimeZone;
 use chrono::Utc;
+use codex_app_server_protocol::AccountRateLimitsReadManyResponse;
+use codex_app_server_protocol::AccountRateLimitsReadResult;
 use codex_app_server_protocol::AskForApproval;
+use codex_app_server_protocol::ChatgptAccountSummary;
 use codex_app_server_protocol::CreditsSnapshot;
+use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_app_server_protocol::RateLimitSnapshot;
 use codex_app_server_protocol::RateLimitWindow;
 use codex_app_server_protocol::SpendControlLimitSnapshot;
@@ -39,6 +43,7 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_models_manager::test_support::construct_model_info_offline_for_tests;
 use codex_models_manager::test_support::get_model_offline_for_tests;
 use codex_protocol::ThreadId;
+use codex_protocol::account::PlanType;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::models::ActivePermissionProfile;
@@ -55,9 +60,71 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
 use ratatui::prelude::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::TempDir;
 use unicode_width::UnicodeWidthStr;
+
+fn account_rate_limit_result(
+    account_id: &str,
+    email: &str,
+    plan_type: PlanType,
+    is_active: bool,
+    used_percent: i32,
+    now: chrono::DateTime<Local>,
+) -> AccountRateLimitsReadResult {
+    let codex = RateLimitSnapshot {
+        limit_id: Some("codex".to_string()),
+        limit_name: Some("codex".to_string()),
+        primary: None,
+        secondary: Some(RateLimitWindow {
+            used_percent,
+            window_duration_mins: Some(10_080),
+            resets_at: Some((now + ChronoDuration::hours(3)).timestamp()),
+        }),
+        credits: None,
+        individual_limit: None,
+        spend_control_reached: None,
+        plan_type: Some(plan_type),
+        rate_limit_reached_type: None,
+    };
+    let spark = RateLimitSnapshot {
+        limit_id: Some("spark".to_string()),
+        limit_name: Some("GPT-5.3-Codex-Spark".to_string()),
+        primary: None,
+        secondary: Some(RateLimitWindow {
+            used_percent: 0,
+            window_duration_mins: Some(10_080),
+            resets_at: Some((now + ChronoDuration::hours(6)).timestamp()),
+        }),
+        credits: None,
+        individual_limit: None,
+        spend_control_reached: None,
+        plan_type: Some(plan_type),
+        rate_limit_reached_type: None,
+    };
+    AccountRateLimitsReadResult {
+        account: ChatgptAccountSummary {
+            account_id: account_id.to_string(),
+            email: Some(email.to_string()),
+            plan_type,
+            is_active,
+            is_eligible: true,
+        },
+        rate_limits: Some(
+            GetAccountRateLimitsResponse {
+                rate_limits: codex.clone(),
+                rate_limits_by_limit_id: Some(HashMap::from([
+                    ("codex".to_string(), codex),
+                    ("spark".to_string(), spark),
+                ])),
+                rate_limit_reset_credits: None,
+            }
+            .into(),
+        ),
+        error: None,
+    }
+}
 
 #[test]
 fn stale_monthly_limit_marks_fresh_rolling_snapshot_stale() {
@@ -2210,5 +2277,81 @@ async fn status_context_window_uses_last_usage() {
     assert!(
         !context_line.contains("102K"),
         "context line should not use total aggregated tokens, got: {context_line}"
+    );
+}
+
+#[tokio::test]
+async fn status_all_snapshot_groups_account_limits_inside_card() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    config.model = Some("gpt-5.1-codex".to_string());
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+    let usage = TokenUsage::default();
+    let now = Local
+        .with_ymd_and_hms(2024, 8, 15, 19, 33, 0)
+        .single()
+        .expect("timestamp");
+    let model_slug = get_model_offline_for_tests(config.model.as_deref());
+    let account_display = StatusAccountDisplay::ChatGpt {
+        email: Some("contact@turtledev.net".to_string()),
+        plan: Some("Pro".to_string()),
+    };
+    let (status, handle) = new_status_output_with_rate_limits_handle(
+        &config,
+        /*runtime_model_provider_base_url*/ None,
+        /*remote_connection*/ None,
+        Some(&account_display),
+        /*token_info*/ None,
+        &usage,
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        /*rate_limits*/ &[],
+        Some(PlanType::Pro),
+        now,
+        &model_slug,
+        Some("Default"),
+        /*reasoning_effort_override*/ None,
+        "AGENTS.md".to_string(),
+        /*refreshing_rate_limits*/ true,
+    );
+
+    handle.start_account_limits_refresh();
+    let pending = sanitize_directory(render_lines(&status.display_lines(/*width*/ 110))).join("\n");
+    assert!(pending.contains("Account Limits"));
+    assert!(pending.contains("loading…"));
+
+    handle.finish_account_limits_refresh(
+        AccountRateLimitsReadManyResponse {
+            data: vec![
+                account_rate_limit_result(
+                    "secondary",
+                    "secondary-codex@turtledev.net",
+                    PlanType::Free,
+                    /*is_active*/ false,
+                    /*used_percent*/ 25,
+                    now,
+                ),
+                account_rate_limit_result(
+                    "primary",
+                    "contact@turtledev.net",
+                    PlanType::Pro,
+                    /*is_active*/ true,
+                    /*used_percent*/ 25,
+                    now,
+                ),
+            ],
+        },
+        now,
+    );
+
+    let wide = sanitize_directory(render_lines(&status.display_lines(/*width*/ 110))).join("\n");
+    assert!(!wide.contains("ChatGPT account status"));
+    assert_snapshot!("status_all_groups_account_limits_inside_card", wide);
+
+    let narrow = sanitize_directory(render_lines(&status.display_lines(/*width*/ 60))).join("\n");
+    assert_snapshot!(
+        "status_all_groups_account_limits_inside_narrow_card",
+        narrow
     );
 }

@@ -18,6 +18,7 @@ use codex_cli::run_login_with_api_key;
 use codex_cli::run_login_with_chatgpt;
 use codex_cli::run_login_with_device_code;
 use codex_cli::run_logout;
+use codex_cli::run_logout_account;
 use codex_cloud_config::cloud_config_bundle_loader_for_storage;
 use codex_cloud_tasks::Cli as CloudTasksCli;
 use codex_exec::Cli as ExecCli;
@@ -519,6 +520,10 @@ enum LoginSubcommand {
 struct LogoutCommand {
     #[clap(skip)]
     config_overrides: CliConfigOverrides,
+
+    /// Log out only the ChatGPT account matching this account ID or email.
+    #[arg(long, value_name = "ACCOUNT_ID_OR_EMAIL")]
+    account: Option<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -1440,7 +1445,12 @@ async fn cli_main(
                 &mut logout_cli.config_overrides,
                 root_config_overrides.clone(),
             );
-            run_logout(logout_cli.config_overrides).await;
+            match logout_cli.account {
+                Some(account_selector) => {
+                    run_logout_account(logout_cli.config_overrides, account_selector).await;
+                }
+                None => run_logout(logout_cli.config_overrides).await,
+            }
         }
         Some(Subcommand::Completion(completion_cli)) => {
             reject_remote_mode_for_subcommand(

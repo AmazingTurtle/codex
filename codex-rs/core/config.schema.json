@@ -362,6 +362,25 @@
       },
       "type": "object"
     },
+    "ChatgptAccountSelection": {
+      "description": "Selects how persisted ChatGPT accounts are assigned to model requests.",
+      "oneOf": [
+        {
+          "description": "Keep using the current account until it reaches a usage limit.",
+          "enum": [
+            "sticky"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Advance to the next account when a new or resumed session is constructed.",
+          "enum": [
+            "round-robin"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "CodeModeConfigToml": {
       "additionalProperties": false,
       "properties": {
@@ -5101,6 +5120,15 @@
       "format": "uint64",
       "minimum": 0.0,
       "type": "integer"
+    },
+    "chatgpt_account_selection": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/ChatgptAccountSelection"
+        }
+      ],
+      "default": "sticky",
+      "description": "Selects persisted ChatGPT accounts when sessions are constructed. The default is sticky selection with session-scoped failover when the selected account reaches a limit."
     },
     "chatgpt_base_url": {
       "description": "Base URL for requests to ChatGPT (as opposed to the OpenAI API).",

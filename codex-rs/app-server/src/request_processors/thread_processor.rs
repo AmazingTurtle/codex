@@ -1,3 +1,4 @@
+use super::thread_config::load_thread_config;
 use super::thread_enrichment::enrich_loaded_threads;
 use super::thread_fork_goal::inherit_thread_goal_snapshot;
 use super::turn_processor::can_accept_direct_input;
@@ -1234,30 +1235,37 @@ impl ThreadRequestProcessor {
     ) -> Result<(), JSONRPCErrorError> {
         let thread_start_started_at = std::time::Instant::now();
         let requested_cwd = typesafe_overrides.cwd.clone();
-        let mut config = config_manager
-            .load_with_overrides(config_overrides.clone(), typesafe_overrides.clone())
-            .await
-            .map_err(|err| config_load_error(&err))?;
-        // Project-local config can launch host processes, so only the effective
-        // permissions after managed constraints can imply project trust.
-        let effective_permission_profile = config.permissions.effective_permission_profile();
-        let effective_permissions_trust_project = match &effective_permission_profile {
-            codex_protocol::models::PermissionProfile::Disabled
-            | codex_protocol::models::PermissionProfile::External { .. } => true,
-            codex_protocol::models::PermissionProfile::Managed { .. } => {
-                effective_permission_profile
-                    .file_system_sandbox_policy()
-                    .can_write_path_with_cwd(config.cwd.as_path(), config.cwd.as_path())
-            }
-        };
+        let mut config_resolution = load_thread_config(
+            &config_manager,
+            listener_task_context.thread_manager.as_ref(),
+            config_overrides.clone(),
+            typesafe_overrides.clone(),
+            /*fallback_cwd*/ None,
+            allow_provider_model_fallback,
+        )
+        .await?;
+        let effective_permissions_trust_project = permission_profile_trusts_project(
+            &config_resolution
+                .config
+                .permissions
+                .effective_permission_profile(),
+            config_resolution.config.cwd.as_path(),
+        );
 
         if requested_cwd.is_some()
-            && config.active_project.trust_level.is_none()
+            && config_resolution
+                .config
+                .active_project
+                .trust_level
+                .is_none()
             && effective_permissions_trust_project
         {
-            let trust_target = resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &config.cwd)
-                .await
-                .unwrap_or_else(|| config.cwd.clone());
+            let trust_target = resolve_root_git_project_for_trust(
+                LOCAL_FS.as_ref(),
+                &config_resolution.config.cwd,
+            )
+            .await
+            .unwrap_or_else(|| config_resolution.config.cwd.clone());
             let current_cli_overrides = config_manager.current_cli_overrides();
             let cli_overrides_with_trust;
             let cli_overrides_for_reload = if let Err(err) =
@@ -1293,16 +1301,38 @@ impl ThreadRequestProcessor {
                 current_cli_overrides.as_slice()
             };
 
-            config = config_manager
-                .load_with_cli_overrides(
-                    cli_overrides_for_reload,
-                    config_overrides,
-                    typesafe_overrides,
-                    /*fallback_cwd*/ None,
-                )
-                .await
-                .map_err(|err| config_load_error(&err))?;
+            config_resolution.config = match config_resolution.cloud_config_bundle.as_ref() {
+                Some(cloud_config_bundle) => {
+                    config_manager
+                        .load_with_cli_overrides_and_cloud_config_bundle(
+                            cli_overrides_for_reload,
+                            config_overrides,
+                            typesafe_overrides,
+                            /*fallback_cwd*/ None,
+                            cloud_config_bundle.clone(),
+                        )
+                        .await
+                }
+                None => {
+                    config_manager
+                        .load_with_cli_overrides(
+                            cli_overrides_for_reload,
+                            config_overrides,
+                            typesafe_overrides,
+                            /*fallback_cwd*/ None,
+                        )
+                        .await
+                }
+            }
+            .map_err(|err| config_load_error(&err))?;
         }
+
+        let config = config_resolution
+            .into_config(
+                listener_task_context.thread_manager.as_ref(),
+                allow_provider_model_fallback,
+            )
+            .await?;
 
         if let Ok(Some(err)) =
             codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
@@ -3507,15 +3537,33 @@ impl ThreadRequestProcessor {
             )
             .await;
 
-        // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let mut config = match self
-            .config_manager
-            .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
+        // Derive a Config using the same account-scoped logic as a new conversation, honoring
+        // overrides if provided.
+        let config_resolution = match load_thread_config(
+            &self.config_manager,
+            self.thread_manager.as_ref(),
+            request_overrides,
+            typesafe_overrides,
+            history_cwd,
+            /*allow_provider_model_fallback*/ false,
+        )
+        .await
+        {
+            Ok(config_resolution) => config_resolution,
+            Err(error) => {
+                self.outgoing.send_error(request_id, error).await;
+                return Ok(());
+            }
+        };
+        let mut config = match config_resolution
+            .into_config(
+                self.thread_manager.as_ref(),
+                /*allow_provider_model_fallback*/ false,
+            )
             .await
         {
             Ok(config) => config,
-            Err(err) => {
-                let error = config_load_error(&err);
+            Err(error) => {
                 self.outgoing.send_error(request_id, error).await;
                 return Ok(());
             }
@@ -4540,12 +4588,22 @@ impl ThreadRequestProcessor {
             request_overrides.as_ref(),
             &mut typesafe_overrides,
         );
-        // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let config = self
-            .config_manager
-            .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
-            .await
-            .map_err(|err| config_load_error(&err))?;
+        // Derive a Config using the same account-scoped logic as a new conversation, honoring
+        // overrides if provided.
+        let config = load_thread_config(
+            &self.config_manager,
+            self.thread_manager.as_ref(),
+            request_overrides,
+            typesafe_overrides,
+            history_cwd,
+            /*allow_provider_model_fallback*/ false,
+        )
+        .await?
+        .into_config(
+            self.thread_manager.as_ref(),
+            /*allow_provider_model_fallback*/ false,
+        )
+        .await?;
         let goals_enabled = config.features.enabled(Feature::Goals);
 
         let fallback_model_provider = config.model_provider_id.clone();
@@ -5682,6 +5740,19 @@ fn preview_from_rollout_items(items: &[RolloutItem]) -> String {
         })
         .map(|preview| strip_user_message_prefix(preview.as_str()).to_string())
         .unwrap_or_default()
+}
+
+fn permission_profile_trusts_project(
+    profile: &codex_protocol::models::PermissionProfile,
+    cwd: &Path,
+) -> bool {
+    match profile {
+        codex_protocol::models::PermissionProfile::Disabled
+        | codex_protocol::models::PermissionProfile::External { .. } => true,
+        codex_protocol::models::PermissionProfile::Managed { .. } => profile
+            .file_system_sandbox_policy()
+            .can_write_path_with_cwd(cwd, cwd),
+    }
 }
 
 fn build_thread_from_snapshot(

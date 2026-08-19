@@ -12,6 +12,7 @@ use crate::types::AnalyticsConfigToml;
 use crate::types::ApprovalsReviewer;
 use crate::types::AppsConfigToml;
 use crate::types::AuthCredentialsStoreMode;
+use crate::types::ChatgptAccountSelection;
 use crate::types::FeedbackConfigToml;
 use crate::types::History;
 use crate::types::MarketplaceConfig;
@@ -255,6 +256,11 @@ pub struct ConfigToml {
     /// auto: Use the keyring if available, otherwise use a file.
     #[serde(default)]
     pub cli_auth_credentials_store: Option<AuthCredentialsStoreMode>,
+
+    /// Selects persisted ChatGPT accounts when sessions are constructed. The default is sticky
+    /// selection with session-scoped failover when the selected account reaches a limit.
+    #[serde(default)]
+    pub chatgpt_account_selection: ChatgptAccountSelection,
 
     /// Definition for MCP servers that Codex can reach out to for tool calls.
     #[serde(default)]

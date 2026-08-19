@@ -77,9 +77,18 @@ impl OpenAiModelsEndpoint {
         client_version: &str,
         http_client_factory: HttpClientFactory,
     ) -> CoreResult<(Vec<ModelInfo>, Option<String>)> {
+        self.list_models_with_auth(self.auth().await, client_version, http_client_factory)
+            .await
+    }
+
+    async fn list_models_with_auth(
+        &self,
+        auth: Option<CodexAuth>,
+        client_version: &str,
+        http_client_factory: HttpClientFactory,
+    ) -> CoreResult<(Vec<ModelInfo>, Option<String>)> {
         let _timer =
             codex_otel::start_global_timer("codex.remote_models.fetch_update.duration_ms", &[]);
-        let auth = self.auth().await;
         let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
         let api_provider = self.provider_info.to_api_provider(auth_mode)?;
         let api_auth = resolve_provider_auth(auth.as_ref(), &self.provider_info)?;
@@ -142,6 +151,15 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
             client_version,
             http_client_factory,
         ))
+    }
+
+    fn list_models_for_auth<'a>(
+        &'a self,
+        auth: CodexAuth,
+        client_version: &'a str,
+        http_client_factory: HttpClientFactory,
+    ) -> ModelsEndpointFuture<'a, CoreResult<(Vec<ModelInfo>, Option<String>)>> {
+        Box::pin(self.list_models_with_auth(Some(auth), client_version, http_client_factory))
     }
 }
 

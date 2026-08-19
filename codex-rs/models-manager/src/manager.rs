@@ -7,6 +7,7 @@ use crate::model_info;
 use chrono::Utc;
 use codex_http_client::HttpClientFactory;
 use codex_login::AuthManager;
+use codex_login::CodexAuth;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::Result as CoreResult;
@@ -47,6 +48,17 @@ pub trait ModelsEndpointClient: fmt::Debug + Send + Sync {
         client_version: &'a str,
         http_client_factory: HttpClientFactory,
     ) -> ModelsEndpointFuture<'a, CoreResult<(Vec<ModelInfo>, Option<String>)>>;
+
+    /// Fetches the remote catalog using explicit account authentication.
+    fn list_models_for_auth<'a>(
+        &'a self,
+        auth: CodexAuth,
+        client_version: &'a str,
+        http_client_factory: HttpClientFactory,
+    ) -> ModelsEndpointFuture<'a, CoreResult<(Vec<ModelInfo>, Option<String>)>> {
+        let _ = auth;
+        self.list_models(client_version, http_client_factory)
+    }
 }
 
 pub type ModelsEndpointFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -104,6 +116,19 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         )
     }
 
+    /// Lists the backend-authoritative catalog visible to one persisted ChatGPT account.
+    fn list_models_for_account<'a>(
+        &'a self,
+        _account_id: &'a str,
+        http_client_factory: HttpClientFactory,
+    ) -> ModelsManagerFuture<'a, CoreResult<Vec<ModelPreset>>> {
+        Box::pin(async move {
+            Ok(self
+                .list_models(RefreshStrategy::Online, http_client_factory)
+                .await)
+        })
+    }
+
     /// Return the active raw model catalog, refreshing according to the specified strategy.
     fn raw_model_catalog(
         &self,
@@ -124,17 +149,10 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
 
     /// Build picker-ready presets from the active catalog snapshot.
     fn build_available_models(&self, mut remote_models: Vec<ModelInfo>) -> Vec<ModelPreset> {
-        remote_models.sort_by_key(|model| model.priority);
-
-        let mut presets: Vec<ModelPreset> = remote_models.into_iter().map(Into::into).collect();
         let uses_codex_backend = self
             .auth_manager()
             .is_some_and(AuthManager::current_auth_uses_codex_backend);
-        presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
-
-        ModelPreset::mark_default_by_picker_visibility(&mut presets);
-
-        presets
+        build_available_models_for_auth(&mut remote_models, uses_codex_backend)
     }
 
     /// List collaboration mode presets.
@@ -295,6 +313,36 @@ impl StaticModelsManager {
 }
 
 impl ModelsManager for OpenAiModelsManager {
+    fn list_models_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+        http_client_factory: HttpClientFactory,
+    ) -> ModelsManagerFuture<'a, CoreResult<Vec<ModelPreset>>> {
+        Box::pin(async move {
+            let auth_manager = self.auth_manager.as_ref().ok_or_else(|| {
+                std::io::Error::other("account-specific model discovery requires authentication")
+            })?;
+            let auth = auth_manager
+                .auth_for_chatgpt_account(account_id)
+                .await?
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("ChatGPT account `{account_id}` was not found"),
+                    )
+                })?;
+            let client_version = crate::client_version_to_whole();
+            let (mut models, _) = self
+                .endpoint_client
+                .list_models_for_auth(auth, &client_version, http_client_factory)
+                .await?;
+            Ok(build_available_models_for_auth(
+                &mut models,
+                /*uses_codex_backend*/ true,
+            ))
+        })
+    }
+
     fn raw_model_catalog(
         &self,
         refresh_strategy: RefreshStrategy,
@@ -334,6 +382,17 @@ impl ModelsManager for OpenAiModelsManager {
             http_client_factory,
         ))
     }
+}
+
+fn build_available_models_for_auth(
+    remote_models: &mut Vec<ModelInfo>,
+    uses_codex_backend: bool,
+) -> Vec<ModelPreset> {
+    remote_models.sort_by_key(|model| model.priority);
+    let mut presets: Vec<ModelPreset> = remote_models.drain(..).map(Into::into).collect();
+    presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
+    ModelPreset::mark_default_by_picker_visibility(&mut presets);
+    presets
 }
 
 impl OpenAiModelsManager {

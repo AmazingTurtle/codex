@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "accountIds": {
+      "description": "Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "AccountReadManyParams",
+  "type": "object"
+}

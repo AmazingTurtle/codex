@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "AccountTokenUsageDailyBucket": {
+      "properties": {
+        "startDate": {
+          "type": "string"
+        },
+        "tokens": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "startDate",
+        "tokens"
+      ],
+      "type": "object"
+    },
+    "AccountTokenUsageSnapshot": {
+      "properties": {
+        "dailyUsageBuckets": {
+          "items": {
+            "$ref": "#/definitions/AccountTokenUsageDailyBucket"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "summary": {
+          "$ref": "#/definitions/AccountTokenUsageSummary"
+        }
+      },
+      "required": [
+        "summary"
+      ],
+      "type": "object"
+    },
+    "AccountTokenUsageSummary": {
+      "properties": {
+        "currentStreakDays": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lifetimeTokens": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "longestRunningTurnSec": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "longestStreakDays": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "peakDailyTokens": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AccountUsageReadResult": {
+      "properties": {
+        "account": {
+          "$ref": "#/definitions/ChatgptAccountSummary"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AccountTokenUsageSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "account"
+      ],
+      "type": "object"
+    },
+    "ChatgptAccountSummary": {
+      "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "isEligible": {
+          "type": "boolean"
+        },
+        "planType": {
+          "$ref": "#/definitions/PlanType"
+        }
+      },
+      "required": [
+        "accountId",
+        "isActive",
+        "isEligible",
+        "planType"
+      ],
+      "type": "object"
+    },
+    "PlanType": {
+      "enum": [
+        "free",
+        "go",
+        "plus",
+        "pro",
+        "prolite",
+        "team",
+        "self_serve_business_prolite",
+        "self_serve_business_usage_based",
+        "business",
+        "ent26",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "enterprise",
+        "edu",
+        "unknown"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/definitions/AccountUsageReadResult"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "AccountUsageReadManyResponse",
+  "type": "object"
+}

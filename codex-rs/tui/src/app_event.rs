@@ -15,6 +15,7 @@ use std::sync::atomic::AtomicBool;
 use crate::inline_visualization::InlineVisualizationContext;
 use codex_app_server_protocol::AddCreditsNudgeCreditType;
 use codex_app_server_protocol::AddCreditsNudgeEmailStatus;
+use codex_app_server_protocol::ChatgptAccountSummary;
 use codex_app_server_protocol::ConsumeAccountRateLimitResetCreditResponse;
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_app_server_protocol::GetAccountTokenUsageResponse;
@@ -49,6 +50,7 @@ use crate::bottom_pane::StatusLineItem;
 use crate::bottom_pane::TerminalTitleItem;
 use crate::chatwidget::ConnectorScopeGeneration;
 use crate::chatwidget::ThreadUsageOutcome;
+use crate::chatwidget::TokenActivityView;
 use crate::chatwidget::UserMessage;
 use crate::goal_files::GoalDraft;
 use codex_app_server_protocol::AskForApproval;
@@ -192,9 +194,63 @@ pub(crate) enum TranscriptExportDestination {
     File(PathBuf),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChatgptLoginMethod {
+    Browser,
+    DeviceCode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ChatgptAccountStatusRequest {
+    AllAccountsStatusCard { request_id: u64 },
+    SelectedAccount { selector: String },
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(crate) enum AppEvent {
+    /// Open the persisted ChatGPT account manager.
+    OpenAccountManager,
+    /// Open the account-removal picker.
+    OpenRemoveAccountManager,
+    /// Make one persisted ChatGPT account active.
+    SwitchChatgptAccount {
+        account_id: String,
+    },
+    /// Switch accounts after the user explicitly chose an account-compatible fallback model.
+    ApplyChatgptAccountModelFallback {
+        account_id: String,
+        model: String,
+        effort: ReasoningEffort,
+    },
+    /// Start an additional persisted ChatGPT login.
+    AddChatgptAccount {
+        method: ChatgptLoginMethod,
+    },
+    /// Ask the user to choose an account-compatible model before switching.
+    OpenAccountModelFallback {
+        account: ChatgptAccountSummary,
+        models: Vec<codex_app_server_protocol::Model>,
+        requested_model: String,
+    },
+    /// Load account rate limits for a combined status card or a selected-account output.
+    ShowChatgptAccountStatus {
+        request: ChatgptAccountStatusRequest,
+    },
+    /// Render token usage for all accounts or one selected account.
+    ShowChatgptAccountUsage {
+        view: TokenActivityView,
+        selector: Option<String>,
+    },
+    /// Ask for confirmation before removing one persisted ChatGPT account.
+    ConfirmRemoveChatgptAccount {
+        account: ChatgptAccountSummary,
+    },
+    /// Remove one persisted ChatGPT account after confirmation.
+    RemoveChatgptAccount {
+        account_id: String,
+    },
+
     /// Open the agent picker for switching active threads.
     OpenAgentPicker,
     /// Merge a completed root-scoped agent-picker refresh without blocking terminal input.

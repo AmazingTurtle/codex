@@ -15,18 +15,20 @@ use codex_login::AuthRouteConfig;
 use codex_login::CLIENT_ID;
 use codex_login::ServerOptions;
 use codex_login::is_workload_identity_selected;
+use codex_login::load_auth_dot_json;
 use codex_login::login_with_access_token;
 use codex_login::login_with_api_key;
+use codex_login::logout_account_with_revoke;
 use codex_login::logout_with_revoke;
 use codex_login::run_device_code_login;
 use codex_login::run_login_server;
+use codex_protocol::account::PlanType;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
 use codex_utils_cli::CliConfigOverrides;
 use std::fs::OpenOptions;
 use std::io::IsTerminal;
 use std::io::Read;
-use std::path::Path;
 use std::path::PathBuf;
 use tracing_appender::non_blocking;
 use tracing_appender::non_blocking::WorkerGuard;
@@ -117,24 +119,6 @@ fn print_login_server_start(actual_port: u16, auth_url: &str) {
     );
 }
 
-async fn clear_existing_auth_before_login(
-    codex_home: &Path,
-    auth_credentials_store_mode: AuthCredentialsStoreMode,
-    auth_keyring_backend_kind: AuthKeyringBackendKind,
-    auth_route_config: &AuthRouteConfig,
-) {
-    if let Err(err) = logout_with_revoke(
-        codex_home,
-        auth_credentials_store_mode,
-        auth_keyring_backend_kind,
-        auth_route_config,
-    )
-    .await
-    {
-        tracing::warn!("failed to clear existing auth before login: {err}");
-    }
-}
-
 pub async fn login_with_chatgpt(
     codex_home: PathBuf,
     forced_chatgpt_workspace_id: Option<Vec<String>>,
@@ -142,14 +126,6 @@ pub async fn login_with_chatgpt(
     auth_keyring_backend_kind: AuthKeyringBackendKind,
     auth_route_config: AuthRouteConfig,
 ) -> std::io::Result<()> {
-    clear_existing_auth_before_login(
-        &codex_home,
-        cli_auth_credentials_store_mode,
-        auth_keyring_backend_kind,
-        &auth_route_config,
-    )
-    .await;
-
     let opts = ServerOptions::new(
         codex_home,
         CLIENT_ID.to_string(),
@@ -330,13 +306,6 @@ pub async fn run_login_with_device_code(
         std::process::exit(1);
     }
     let auth_route_config = config.auth_route_config();
-    clear_existing_auth_before_login(
-        &config.codex_home,
-        config.cli_auth_credentials_store_mode,
-        config.auth_keyring_backend_kind(),
-        &auth_route_config,
-    )
-    .await;
     let effective_chatgpt_workspaces = config.auth_config().effective_chatgpt_workspaces();
     let mut opts = ServerOptions::new(
         config.codex_home.to_path_buf(),
@@ -381,13 +350,6 @@ pub async fn run_login_with_device_code_fallback_to_browser(
         std::process::exit(1);
     }
     let auth_route_config = config.auth_route_config();
-    clear_existing_auth_before_login(
-        &config.codex_home,
-        config.cli_auth_credentials_store_mode,
-        config.auth_keyring_backend_kind(),
-        &auth_route_config,
-    )
-    .await;
 
     let effective_chatgpt_workspaces = config.auth_config().effective_chatgpt_workspaces();
     let mut opts = ServerOptions::new(
@@ -440,6 +402,15 @@ pub async fn run_login_with_device_code_fallback_to_browser(
 
 pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
+    let chatgpt_accounts = load_auth_dot_json(
+        &config.codex_home,
+        config.cli_auth_credentials_store_mode,
+        config.auth_keyring_backend_kind(),
+    )
+    .ok()
+    .flatten()
+    .map(|auth| auth.chatgpt_accounts())
+    .unwrap_or_default();
 
     if is_workload_identity_selected() {
         match AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await {
@@ -471,7 +442,33 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
                 }
             },
             AuthMode::Chatgpt | AuthMode::ChatgptAuthTokens => {
+                // Keep this line stable for scripts that use `codex login status`
+                // as a lightweight authentication check.
                 eprintln!("Logged in using ChatGPT");
+                let account_label = if chatgpt_accounts.len() == 1 {
+                    "account"
+                } else {
+                    "accounts"
+                };
+                eprintln!("Stored ChatGPT {} {account_label}:", chatgpt_accounts.len());
+                for account in chatgpt_accounts {
+                    let identity = account.email.map_or_else(
+                        || account.account_id.clone(),
+                        |email| format!("{email} ({})", account.account_id),
+                    );
+                    let plan = login_status_plan_name(account.plan_type);
+                    let active = account.is_active.then_some("active");
+                    let annotations = [plan, active]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if annotations.is_empty() {
+                        eprintln!("  {identity}");
+                    } else {
+                        eprintln!("  {identity} — {annotations}");
+                    }
+                }
                 std::process::exit(0);
             }
             AuthMode::Headers => {
@@ -501,26 +498,96 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     }
 }
 
+fn login_status_plan_name(plan_type: PlanType) -> Option<&'static str> {
+    match plan_type {
+        PlanType::Free => Some("Free"),
+        PlanType::Go => Some("Go"),
+        PlanType::Plus => Some("Plus"),
+        PlanType::Pro => Some("Pro"),
+        PlanType::ProLite => Some("Pro Lite"),
+        PlanType::Team
+        | PlanType::SelfServeBusinessProLite
+        | PlanType::SelfServeBusinessUsageBased => Some("Business"),
+        PlanType::Business | PlanType::Ent26 | PlanType::EnterpriseCbpUsageBased => {
+            Some("Enterprise")
+        }
+        PlanType::EnterpriseCbpAutomation => Some("Enterprise (Automation)"),
+        PlanType::Enterprise => Some("Enterprise"),
+        PlanType::Edu => Some("Edu"),
+        PlanType::EduPlus => Some("Edu Plus"),
+        PlanType::EduPro => Some("Edu Pro"),
+        PlanType::Unknown => None,
+    }
+}
+
 pub async fn run_logout(cli_config_overrides: CliConfigOverrides) -> ! {
+    run_logout_selection(cli_config_overrides, LogoutSelection::All).await
+}
+
+pub async fn run_logout_account(
+    cli_config_overrides: CliConfigOverrides,
+    account_selector: String,
+) -> ! {
+    run_logout_selection(
+        cli_config_overrides,
+        LogoutSelection::Account(account_selector),
+    )
+    .await
+}
+
+enum LogoutSelection {
+    All,
+    Account(String),
+}
+
+async fn run_logout_selection(
+    cli_config_overrides: CliConfigOverrides,
+    selection: LogoutSelection,
+) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
     let auth_route_config = config.auth_route_config();
 
-    match logout_with_revoke(
-        &config.codex_home,
-        config.cli_auth_credentials_store_mode,
-        config.auth_keyring_backend_kind(),
-        &auth_route_config,
-    )
-    .await
-    {
+    let result = match &selection {
+        LogoutSelection::All => {
+            logout_with_revoke(
+                &config.codex_home,
+                config.cli_auth_credentials_store_mode,
+                config.auth_keyring_backend_kind(),
+                &auth_route_config,
+            )
+            .await
+        }
+        LogoutSelection::Account(account_selector) => {
+            logout_account_with_revoke(
+                &config.codex_home,
+                config.cli_auth_credentials_store_mode,
+                config.auth_keyring_backend_kind(),
+                account_selector,
+                &auth_route_config,
+            )
+            .await
+        }
+    };
+    match result {
         Ok(true) => {
-            eprintln!("Successfully logged out");
+            match selection {
+                LogoutSelection::All => eprintln!("Successfully logged out"),
+                LogoutSelection::Account(account_selector) => {
+                    eprintln!("Successfully logged out account {account_selector}");
+                }
+            }
             std::process::exit(0);
         }
-        Ok(false) => {
-            eprintln!("Not logged in");
-            std::process::exit(0);
-        }
+        Ok(false) => match selection {
+            LogoutSelection::All => {
+                eprintln!("Not logged in");
+                std::process::exit(0);
+            }
+            LogoutSelection::Account(account_selector) => {
+                eprintln!("No logged-in ChatGPT account matched {account_selector}");
+                std::process::exit(1);
+            }
+        },
         Err(e) => {
             eprintln!("Error logging out: {e}");
             std::process::exit(1);
@@ -563,43 +630,9 @@ fn safe_format_key(key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use codex_config::types::AuthCredentialsStoreMode;
-    use codex_login::AuthKeyringBackendKind;
-    use codex_login::load_auth_dot_json;
-    use codex_login::login_with_api_key;
     use pretty_assertions::assert_eq;
-    use tempfile::tempdir;
 
-    use super::clear_existing_auth_before_login;
     use super::safe_format_key;
-
-    #[tokio::test]
-    async fn clears_existing_auth_before_login() {
-        let codex_home = tempdir().expect("create temporary Codex home");
-        login_with_api_key(
-            codex_home.path(),
-            "sk-existing",
-            AuthCredentialsStoreMode::File,
-            AuthKeyringBackendKind::default(),
-        )
-        .expect("save existing auth");
-
-        clear_existing_auth_before_login(
-            codex_home.path(),
-            AuthCredentialsStoreMode::File,
-            AuthKeyringBackendKind::default(),
-            &codex_login::test_support::transport_default_auth_route_config(),
-        )
-        .await;
-
-        let auth = load_auth_dot_json(
-            codex_home.path(),
-            AuthCredentialsStoreMode::File,
-            AuthKeyringBackendKind::default(),
-        )
-        .expect("load auth after cleanup");
-        assert_eq!(auth, None);
-    }
 
     #[test]
     fn formats_long_key() {

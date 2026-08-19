@@ -19,6 +19,7 @@ pub use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 pub use codex_protocol::account::ProviderAccount;
 pub use provider::ModelProvider;
 pub use provider::ModelProviderFuture;
+pub use provider::PinnedChatgptAccountUnavailable;
 pub use provider::ProviderAccountError;
 pub use provider::ProviderAccountResult;
 pub use provider::ProviderAccountState;

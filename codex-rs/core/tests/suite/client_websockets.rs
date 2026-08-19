@@ -1,6 +1,9 @@
 #![allow(clippy::unwrap_used)]
+use chrono::Utc;
 use codex_api::WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY;
 use codex_api::WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY;
+use codex_config::ManagedAuthPolicy;
+use codex_config::types::AuthCredentialsStoreMode;
 use codex_core::CodexResponsesMetadata;
 use codex_core::ModelClient;
 use codex_core::ModelClientSession;
@@ -12,8 +15,15 @@ use codex_core::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
 use codex_core::test_support::with_parent_turn;
 use codex_features::Feature;
 use codex_http_client::OutboundProxyPolicy;
+use codex_login::AuthConfig;
+use codex_login::AuthDotJson;
+use codex_login::AuthKeyringBackendKind;
+use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
+use codex_login::save_auth;
+use codex_login::token_data::IdTokenInfo;
+use codex_login::token_data::TokenData;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_otel::MetricsClient;
@@ -25,6 +35,7 @@ use codex_protocol::ResponseItemId;
 use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::account::PlanType;
+use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::models::BaseInstructions;
@@ -1562,6 +1573,84 @@ async fn responses_websocket_emits_rate_limit_events() {
     assert_eq!(saw_models_etag.as_deref(), Some("etag-123"));
     assert!(saw_reasoning_included);
 
+    server.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn responses_websocket_remains_enabled_with_one_policy_eligible_account() {
+    skip_if_no_network!();
+
+    let server = start_websocket_server(vec![vec![
+        vec![
+            ev_response_created("resp-prewarm"),
+            ev_completed("resp-prewarm"),
+        ],
+        vec![ev_response_created("resp-1"), ev_completed("resp-1")],
+    ]])
+    .await;
+    let codex_home = Arc::new(TempDir::new().expect("temporary Codex home"));
+    let account = |account_id: &str, access_token: &str| AuthDotJson {
+        auth_mode: Some(AuthMode::Chatgpt),
+        openai_api_key: None,
+        tokens: Some(TokenData {
+            id_token: IdTokenInfo {
+                raw_jwt: "e30.e30.c2ln".to_string(),
+                ..Default::default()
+            },
+            access_token: access_token.to_string(),
+            refresh_token: format!("refresh-{account_id}"),
+            account_id: Some(account_id.to_string()),
+        }),
+        last_refresh: Some(Utc::now()),
+        agent_identity: None,
+        personal_access_token: None,
+        bedrock_api_key: None,
+        accounts: Vec::new(),
+    };
+    let mut stored = account("account-allowed", "access-allowed");
+    stored
+        .accounts
+        .push(account("account-disallowed", "access-disallowed"));
+    save_auth(
+        codex_home.path(),
+        &stored,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("store accounts");
+    let auth_manager = AuthManager::shared_from_auth_config(
+        AuthConfig {
+            codex_home: codex_home.path().to_path_buf(),
+            auth_credentials_store_mode: AuthCredentialsStoreMode::File,
+            keyring_backend_kind: AuthKeyringBackendKind::Direct,
+            forced_login_method: None,
+            chatgpt_base_url: None,
+            forced_chatgpt_workspace_id: None,
+            managed_auth_policy: ManagedAuthPolicy {
+                allowed_login_methods: None,
+                allowed_chatgpt_workspaces: Some(vec!["account-allowed".to_string()]),
+            },
+            auth_route_config: codex_login::test_support::transport_default_auth_route_config(),
+            chatgpt_account_selection: Default::default(),
+        },
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await
+    .expect("build auth manager");
+    let mut builder = test_codex()
+        .with_home(Arc::clone(&codex_home))
+        .with_auth_manager(auth_manager);
+    let test = builder
+        .build_with_websocket_server(&server)
+        .await
+        .expect("build websocket Codex");
+
+    test.submit_turn("hello")
+        .await
+        .expect("WebSocket request should complete");
+
+    let total_websocket_requests: usize = server.connections().iter().map(Vec::len).sum();
+    assert_eq!(total_websocket_requests, 2);
     server.shutdown().await;
 }
 

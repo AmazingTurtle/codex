@@ -1,3 +1,4 @@
+use super::account_read_many::collect_account_reads;
 use super::bedrock_auth::clear_user_model_provider_if_bedrock;
 use super::bedrock_auth::set_user_model_provider_to_bedrock;
 use super::*;
@@ -77,6 +78,15 @@ pub(crate) struct AccountRequestProcessor {
     config: Arc<Config>,
     config_manager: ConfigManager,
     active_login: Arc<Mutex<Option<ActiveLogin>>>,
+    _account_change_task: Arc<AccountChangeTask>,
+}
+
+struct AccountChangeTask(tokio::task::JoinHandle<()>);
+
+impl Drop for AccountChangeTask {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 impl AccountRequestProcessor {
@@ -87,6 +97,42 @@ impl AccountRequestProcessor {
         config: Arc<Config>,
         config_manager: ConfigManager,
     ) -> Self {
+        let mut account_changes = auth_manager.active_account_change_receiver();
+        let task_auth_manager = Arc::clone(&auth_manager);
+        let task_thread_manager = Arc::clone(&thread_manager);
+        let task_outgoing = Arc::clone(&outgoing);
+        let task_config = Arc::clone(&config);
+        let task_config_manager = config_manager.clone();
+        let account_change_task = tokio::spawn(async move {
+            while account_changes.changed().await.is_ok() {
+                task_config_manager.replace_cloud_config_bundle_loader(
+                    Arc::clone(&task_auth_manager),
+                    task_config.chatgpt_base_url.clone(),
+                    task_config.http_client_factory(),
+                );
+                task_config_manager
+                    .sync_default_client_residency_requirement()
+                    .await;
+                Self::maybe_refresh_plugin_caches_for_current_config(
+                    &task_config_manager,
+                    &task_thread_manager,
+                    task_auth_manager.auth_cached(),
+                )
+                .await;
+                let auth = task_auth_manager.auth_cached();
+                task_outgoing
+                    .send_server_notification(ServerNotification::AccountUpdated(
+                        AccountUpdatedNotification {
+                            auth_mode: auth
+                                .as_ref()
+                                .map(CodexAuth::api_auth_mode)
+                                .map(auth_mode_to_api),
+                            plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
+                        },
+                    ))
+                    .await;
+            }
+        });
         Self {
             auth_manager,
             thread_manager,
@@ -94,6 +140,7 @@ impl AccountRequestProcessor {
             config,
             config_manager,
             active_login: Arc::new(Mutex::new(None)),
+            _account_change_task: Arc::new(AccountChangeTask(account_change_task)),
         }
     }
 
@@ -110,6 +157,32 @@ impl AccountRequestProcessor {
         request_id: ConnectionRequestId,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.logout_v2(request_id).await.map(|()| None)
+    }
+
+    pub(crate) async fn account_list(
+        &self,
+        params: AccountListParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.account_list_response(params)
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn account_switch(
+        &self,
+        params: AccountSwitchParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.account_switch_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn account_remove(
+        &self,
+        params: AccountRemoveParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.account_remove_response(params)
+            .await
+            .map(|response| Some(response.into()))
     }
 
     pub(crate) async fn cancel_login_account(
@@ -147,11 +220,38 @@ impl AccountRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn get_account_rate_limits_many(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.get_account_rate_limits_many_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn get_account_token_usage(
         &self,
         params: Option<GetAccountTokenUsageParams>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.get_account_token_usage_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn get_account_token_usage_many(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.get_account_token_usage_many_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn get_account_models_many(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.get_account_models_many_response(params)
             .await
             .map(|response| Some(response.into()))
     }
@@ -196,6 +296,108 @@ impl AccountRequestProcessor {
                 .map(auth_mode_to_api),
             plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
         }
+    }
+
+    fn chatgpt_account_summary(account: codex_login::ChatgptAccount) -> ChatgptAccountSummary {
+        ChatgptAccountSummary {
+            account_id: account.account_id,
+            email: account.email,
+            plan_type: account.plan_type,
+            is_active: account.is_active,
+            is_eligible: account.is_eligible,
+        }
+    }
+
+    fn account_list_response(
+        &self,
+        params: AccountListParams,
+    ) -> Result<AccountListResponse, JSONRPCErrorError> {
+        let mut accounts = self
+            .auth_manager
+            .chatgpt_accounts()
+            .map_err(|err| internal_error(format!("failed to list ChatGPT accounts: {err}")))?;
+        accounts.sort_unstable_by(|left, right| left.account_id.cmp(&right.account_id));
+        let total = accounts.len();
+        let start = params
+            .cursor
+            .as_deref()
+            .map(|cursor| accounts.partition_point(|account| account.account_id.as_str() <= cursor))
+            .unwrap_or(0);
+        let limit = params.limit.unwrap_or(total as u32).max(1) as usize;
+        let end = start.saturating_add(limit).min(total);
+        Ok(AccountListResponse {
+            data: accounts[start..end]
+                .iter()
+                .cloned()
+                .map(Self::chatgpt_account_summary)
+                .collect(),
+            next_cursor: (end < total).then(|| accounts[end - 1].account_id.clone()),
+        })
+    }
+
+    async fn account_switch_response(
+        &self,
+        params: AccountSwitchParams,
+    ) -> Result<AccountSwitchResponse, JSONRPCErrorError> {
+        let account_id = params.account_id;
+        let accounts = self
+            .auth_manager
+            .chatgpt_accounts()
+            .map_err(|err| internal_error(format!("failed to list ChatGPT accounts: {err}")))?;
+        let Some(account) = accounts
+            .iter()
+            .find(|account| account.account_id == account_id)
+        else {
+            return Err(invalid_request(format!(
+                "ChatGPT account `{account_id}` was not found"
+            )));
+        };
+        if !account.is_eligible {
+            return Err(invalid_request(format!(
+                "ChatGPT account `{account_id}` is not allowed by the current configuration"
+            )));
+        }
+        self.auth_manager
+            .switch_chatgpt_account(&account_id)
+            .await
+            .map_err(|err| internal_error(format!("failed to switch ChatGPT account: {err}")))?;
+        let account = self
+            .auth_manager
+            .chatgpt_accounts()
+            .map_err(|err| internal_error(format!("failed to reload ChatGPT accounts: {err}")))?
+            .into_iter()
+            .find(|account| account.account_id == account_id)
+            .ok_or_else(|| internal_error("active ChatGPT account disappeared after switching"))?;
+        Ok(AccountSwitchResponse {
+            account: Self::chatgpt_account_summary(account),
+        })
+    }
+
+    async fn account_remove_response(
+        &self,
+        params: AccountRemoveParams,
+    ) -> Result<AccountRemoveResponse, JSONRPCErrorError> {
+        let account_id = params.account_id;
+        let removed = self
+            .auth_manager
+            .logout_chatgpt_account(&account_id)
+            .await
+            .map_err(|err| internal_error(format!("failed to remove ChatGPT account: {err}")))?;
+        if !removed {
+            return Err(invalid_request(format!(
+                "ChatGPT account `{account_id}` was not found"
+            )));
+        }
+        let active_account_id = self.auth_manager.auth_cached().and_then(|auth| match auth {
+            CodexAuth::Chatgpt(_) => auth.get_account_id(),
+            CodexAuth::ApiKey(_)
+            | CodexAuth::ChatgptAuthTokens(_)
+            | CodexAuth::Headers(_)
+            | CodexAuth::AgentIdentity(_)
+            | CodexAuth::PersonalAccessToken(_)
+            | CodexAuth::BedrockApiKey(_) => None,
+        });
+        Ok(AccountRemoveResponse { active_account_id })
     }
 
     async fn load_latest_config(&self) -> Config {
@@ -1072,6 +1274,13 @@ impl AccountRequestProcessor {
             ));
         };
 
+        self.get_account_rate_limits_response_for_auth(&auth).await
+    }
+
+    async fn get_account_rate_limits_response_for_auth(
+        &self,
+        auth: &CodexAuth,
+    ) -> Result<GetAccountRateLimitsResponse, JSONRPCErrorError> {
         if !auth.uses_codex_backend() {
             return Err(invalid_request(
                 "chatgpt authentication required to read rate limits",
@@ -1080,7 +1289,7 @@ impl AccountRequestProcessor {
 
         let client = BackendClient::from_auth(
             self.config.chatgpt_base_url.clone(),
-            &auth,
+            auth,
             self.config.http_client_factory(),
         );
 
@@ -1136,6 +1345,40 @@ impl AccountRequestProcessor {
         })
     }
 
+    async fn get_account_rate_limits_many_response(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<AccountRateLimitsReadManyResponse, JSONRPCErrorError> {
+        let accounts = self.selected_chatgpt_accounts(params)?;
+        let data = collect_account_reads(accounts, |account| async move {
+            let account_id = account.account_id.clone();
+            let result = match self
+                .auth_manager
+                .auth_for_chatgpt_account(&account_id)
+                .await
+            {
+                Ok(Some(auth)) => self.get_account_rate_limits_response_for_auth(&auth).await,
+                Ok(None) => Err(invalid_request(format!(
+                    "ChatGPT account `{account_id}` was not found"
+                ))),
+                Err(err) => Err(internal_error(format!(
+                    "failed to load ChatGPT account `{account_id}`: {err}"
+                ))),
+            };
+            let (rate_limits, error) = match result {
+                Ok(rate_limits) => (Some(rate_limits), None),
+                Err(err) => (None, Some(err.message)),
+            };
+            AccountRateLimitsReadResult {
+                account: Self::chatgpt_account_summary(account),
+                rate_limits: rate_limits.map(Into::into),
+                error,
+            }
+        })
+        .await;
+        Ok(AccountRateLimitsReadManyResponse { data })
+    }
+
     async fn get_account_token_usage_response(
         &self,
         params: Option<GetAccountTokenUsageParams>,
@@ -1154,6 +1397,15 @@ impl AccountRequestProcessor {
             ));
         };
 
+        self.get_account_token_usage_response_for_auth(&auth, thread_id)
+            .await
+    }
+
+    async fn get_account_token_usage_response_for_auth(
+        &self,
+        auth: &CodexAuth,
+        thread_id: Option<ThreadId>,
+    ) -> Result<GetAccountTokenUsageResponse, JSONRPCErrorError> {
         if !auth.uses_codex_backend() {
             return Err(invalid_request(
                 "chatgpt authentication required to read token usage",
@@ -1162,7 +1414,7 @@ impl AccountRequestProcessor {
 
         let client = BackendClient::from_auth(
             self.config.chatgpt_base_url.clone(),
-            &auth,
+            auth,
             self.config.http_client_factory(),
         );
         if let Some(thread_id) = thread_id {
@@ -1228,6 +1480,118 @@ impl AccountRequestProcessor {
         .map_err(|_| internal_error("token usage profile fetch timed out"))?
         .map_err(|err| internal_error(format!("failed to fetch token usage profile: {err}")))?;
         Ok(Self::account_token_usage_response(profile))
+    }
+
+    async fn get_account_token_usage_many_response(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<AccountUsageReadManyResponse, JSONRPCErrorError> {
+        let accounts = self.selected_chatgpt_accounts(params)?;
+        let data = collect_account_reads(accounts, |account| async move {
+            let account_id = account.account_id.clone();
+            let result = match self
+                .auth_manager
+                .auth_for_chatgpt_account(&account_id)
+                .await
+            {
+                Ok(Some(auth)) => {
+                    self.get_account_token_usage_response_for_auth(&auth, /*thread_id*/ None)
+                        .await
+                }
+                Ok(None) => Err(invalid_request(format!(
+                    "ChatGPT account `{account_id}` was not found"
+                ))),
+                Err(err) => Err(internal_error(format!(
+                    "failed to load ChatGPT account `{account_id}`: {err}"
+                ))),
+            };
+            let (usage, error) = match result {
+                Ok(usage) => (Some(usage), None),
+                Err(err) => (None, Some(err.message)),
+            };
+            AccountUsageReadResult {
+                account: Self::chatgpt_account_summary(account),
+                usage: usage.map(Into::into),
+                error,
+            }
+        })
+        .await;
+        Ok(AccountUsageReadManyResponse { data })
+    }
+
+    fn selected_chatgpt_accounts(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<Vec<codex_login::ChatgptAccount>, JSONRPCErrorError> {
+        let accounts = self
+            .auth_manager
+            .chatgpt_accounts()
+            .map_err(|err| internal_error(format!("failed to list ChatGPT accounts: {err}")))?;
+        let Some(account_ids) = params.account_ids else {
+            return Ok(accounts
+                .into_iter()
+                .filter(|account| account.is_eligible)
+                .collect());
+        };
+        let mut selected = Vec::with_capacity(account_ids.len());
+        for account_id in account_ids {
+            let Some(account) = accounts
+                .iter()
+                .find(|account| account.account_id == account_id)
+            else {
+                return Err(invalid_request(format!(
+                    "ChatGPT account `{account_id}` was not found"
+                )));
+            };
+            if !account.is_eligible {
+                return Err(invalid_request(format!(
+                    "ChatGPT account `{account_id}` is not allowed by the current configuration"
+                )));
+            }
+            if !selected
+                .iter()
+                .any(|selected: &codex_login::ChatgptAccount| selected.account_id == account_id)
+            {
+                selected.push(account.clone());
+            }
+        }
+        Ok(selected)
+    }
+
+    async fn get_account_models_many_response(
+        &self,
+        params: AccountReadManyParams,
+    ) -> Result<AccountModelsReadManyResponse, JSONRPCErrorError> {
+        let accounts = self.selected_chatgpt_accounts(params)?;
+        let models_manager = self.thread_manager.get_models_manager();
+        let data = collect_account_reads(accounts, |account| {
+            let models_manager = models_manager.clone();
+            async move {
+                let account_id = account.account_id.clone();
+                let result = models_manager
+                    .list_models_for_account(&account_id, self.config.http_client_factory())
+                    .await;
+                let (models, error) = match result {
+                    Ok(models) => (
+                        Some(
+                            models
+                                .into_iter()
+                                .map(crate::models::model_from_preset)
+                                .collect(),
+                        ),
+                        None,
+                    ),
+                    Err(err) => (None, Some(err.to_string())),
+                };
+                AccountModelsReadResult {
+                    account: Self::chatgpt_account_summary(account),
+                    models,
+                    error,
+                }
+            }
+        })
+        .await;
+        Ok(AccountModelsReadManyResponse { data })
     }
 
     async fn get_workspace_messages_response(

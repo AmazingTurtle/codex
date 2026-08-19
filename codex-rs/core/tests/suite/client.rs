@@ -1,4 +1,7 @@
+use chrono::Utc;
+use codex_config::ManagedAuthPolicy;
 use codex_config::types::AuthCredentialsStoreMode;
+use codex_config::types::ChatgptAccountSelection;
 use codex_core::ModelClient;
 use codex_core::NewThread;
 use codex_core::Prompt;
@@ -13,11 +16,17 @@ use codex_extension_api::empty_extension_registry;
 use codex_features::Feature;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
+use codex_login::AuthConfig;
+use codex_login::AuthDotJson;
 use codex_login::AuthKeyringBackendKind;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_login::default_client::originator;
+use codex_login::load_auth_dot_json;
+use codex_login::save_auth;
+use codex_login::token_data::IdTokenInfo;
+use codex_login::token_data::TokenData;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
@@ -27,6 +36,7 @@ use codex_otel::SessionTelemetry;
 use codex_otel::TelemetryAuthMode;
 use codex_protocol::ResponseItemId;
 use codex_protocol::ThreadId;
+use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::ModelProviderAuthInfo;
@@ -48,6 +58,7 @@ use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::WebSearchAction;
 use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
@@ -59,6 +70,7 @@ use codex_protocol::user_input::UserInput;
 use core_test_support::TestCodexResponsesRequestKind;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::load_default_config_for_test;
+use core_test_support::responses;
 use core_test_support::responses::ResponsesRequest;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -85,6 +97,7 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::io::Write;
 use std::num::NonZeroU64;
+use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -104,6 +117,56 @@ const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
 
 fn rollout_response_item(item: ResponseItem) -> RolloutItem {
     RolloutItem::ResponseItem(item.into())
+}
+
+fn stored_chatgpt_account(account_id: &str, access_token: &str) -> AuthDotJson {
+    AuthDotJson {
+        auth_mode: Some(AuthMode::Chatgpt),
+        openai_api_key: None,
+        tokens: Some(TokenData {
+            id_token: IdTokenInfo {
+                raw_jwt: "e30.e30.c2ln".to_string(),
+                ..Default::default()
+            },
+            access_token: access_token.to_string(),
+            refresh_token: format!("refresh-{account_id}"),
+            account_id: Some(account_id.to_string()),
+        }),
+        last_refresh: Some(Utc::now()),
+        agent_identity: None,
+        personal_access_token: None,
+        bedrock_api_key: None,
+        accounts: Vec::new(),
+    }
+}
+
+async fn stored_accounts_manager(
+    codex_home: &Path,
+    account_selection: ChatgptAccountSelection,
+) -> Arc<AuthManager> {
+    AuthManager::shared_from_auth_config(
+        AuthConfig {
+            codex_home: codex_home.to_path_buf(),
+            auth_credentials_store_mode: AuthCredentialsStoreMode::File,
+            keyring_backend_kind: AuthKeyringBackendKind::Direct,
+            forced_login_method: None,
+            chatgpt_base_url: None,
+            forced_chatgpt_workspace_id: None,
+            managed_auth_policy: ManagedAuthPolicy::default(),
+            auth_route_config: codex_login::test_support::transport_default_auth_route_config(),
+            chatgpt_account_selection: account_selection,
+        },
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await
+    .expect("build auth manager")
+}
+
+fn catalog_with_model(model: &str) -> ModelsResponse {
+    let mut catalog = bundled_models_response().expect("bundled models should parse");
+    catalog.models.retain(|candidate| candidate.slug == model);
+    assert_eq!(catalog.models.len(), 1, "test model should be bundled");
+    catalog
 }
 
 fn test_turn_responses_metadata(
@@ -3334,6 +3397,446 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
         error_event.message
     );
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn round_robin_session_selects_account_that_supports_model() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let codex_home = Arc::new(TempDir::new()?);
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-a", "access-a"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-b", "access-b"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let auth_manager =
+        stored_accounts_manager(codex_home.path(), ChatgptAccountSelection::RoundRobin).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer access-a"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(ModelsResponse::default()))
+        .expect(1..)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer access-b"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(catalog_with_model("gpt-5.5")))
+        .expect(1..)
+        .mount(&server)
+        .await;
+    let response_mock = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-compatible"),
+            ev_completed("resp-compatible"),
+        ]),
+    )
+    .await;
+    let mut builder = test_codex()
+        .with_home(Arc::clone(&codex_home))
+        .with_auth_manager(auth_manager)
+        .with_config(|config| {
+            config.chatgpt_account_selection = ChatgptAccountSelection::RoundRobin;
+        });
+    let test = builder.build_with_auto_env(&server).await?;
+
+    test.submit_turn("hello").await?;
+
+    let request = response_mock.single_request();
+    assert_eq!(
+        request.header("authorization"),
+        Some("Bearer access-b".to_string())
+    );
+    assert_eq!(
+        request.header("chatgpt-account-id"),
+        Some("account-b".to_string())
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn running_session_follows_an_explicit_account_switch() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let codex_home = Arc::new(TempDir::new()?);
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-b", "access-b"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-a", "access-a"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let auth_manager =
+        stored_accounts_manager(codex_home.path(), ChatgptAccountSelection::Sticky).await;
+    let response_mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-account-a"),
+                ev_completed("resp-account-a"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-account-b"),
+                ev_completed("resp-account-b"),
+            ]),
+        ],
+    )
+    .await;
+    let mut builder = test_codex()
+        .with_home(Arc::clone(&codex_home))
+        .with_auth_manager(Arc::clone(&auth_manager));
+    let test = builder.build_with_auto_env(&server).await?;
+
+    test.submit_turn("before switch").await?;
+    assert!(auth_manager.switch_chatgpt_account("account-b").await?);
+    test.submit_turn("after switch").await?;
+
+    let requests = response_mock.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| (
+                request.header("authorization"),
+                request.header("chatgpt-account-id"),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                Some("Bearer access-a".to_string()),
+                Some("account-a".to_string()),
+            ),
+            (
+                Some("Bearer access-b".to_string()),
+                Some("account-b".to_string()),
+            ),
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn non_openai_session_does_not_rotate_chatgpt_accounts() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let codex_home = Arc::new(TempDir::new()?);
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-a", "access-a"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-b", "access-b"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let auth_manager =
+        stored_accounts_manager(codex_home.path(), ChatgptAccountSelection::RoundRobin).await;
+    let account_change_revision = auth_manager.active_account_change_receiver();
+    let mut builder = test_codex()
+        .with_home(Arc::clone(&codex_home))
+        .with_auth_manager(auth_manager)
+        .with_config(|config| {
+            config.chatgpt_account_selection = ChatgptAccountSelection::RoundRobin;
+            config.model_provider.name = "mock".to_string();
+            config.model_provider.requires_openai_auth = false;
+        });
+
+    let _test = builder.build_with_auto_env(&server).await?;
+
+    let stored = load_auth_dot_json(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?
+    .expect("stored auth");
+    assert_eq!(
+        (
+            stored.chatgpt_account_id(),
+            *account_change_revision.borrow(),
+        ),
+        (Some("account-b".to_string()), 0)
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn removed_session_account_rebinds_to_compatible_account() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let codex_home = Arc::new(TempDir::new()?);
+    let account_a = stored_chatgpt_account("account-a", "access-a");
+    save_auth(
+        codex_home.path(),
+        &account_a,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-b", "access-b"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let auth_manager =
+        stored_accounts_manager(codex_home.path(), ChatgptAccountSelection::Sticky).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer access-a"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(catalog_with_model("gpt-5.5")))
+        .expect(1..)
+        .mount(&server)
+        .await;
+    let response_mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-before-removal"),
+                ev_completed("resp-before-removal"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-after-removal"),
+                ev_completed("resp-after-removal"),
+            ]),
+        ],
+    )
+    .await;
+    let mut builder = test_codex()
+        .with_home(Arc::clone(&codex_home))
+        .with_auth_manager(Arc::clone(&auth_manager));
+    let test = builder.build_with_auto_env(&server).await?;
+    test.submit_turn("before removal").await?;
+
+    std::fs::write(
+        codex_home.path().join("auth.json"),
+        serde_json::to_vec_pretty(&account_a)?,
+    )?;
+    auth_manager.reload().await;
+    test.submit_turn("after removal").await?;
+
+    let requests = response_mock.requests();
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| request.header("authorization"))
+            .collect::<Vec<_>>(),
+        vec![
+            Some("Bearer access-b".to_string()),
+            Some("Bearer access-a".to_string()),
+        ]
+    );
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn multiple_accounts_force_http_and_retry_usage_limits() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let codex_home = Arc::new(TempDir::new()?);
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-a", "access-a"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    save_auth(
+        codex_home.path(),
+        &stored_chatgpt_account("account-b", "access-b"),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let auth = CodexAuth::from_auth_storage(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        /*chatgpt_base_url*/ None,
+        AuthKeyringBackendKind::Direct,
+        &codex_login::test_support::transport_default_auth_route_config(),
+    )
+    .await?
+    .expect("stored ChatGPT auth");
+
+    for access_token in ["access-a", "access-b"] {
+        Mock::given(method("GET"))
+            .and(path("/v1/models"))
+            .and(header("authorization", format!("Bearer {access_token}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(catalog_with_model("gpt-5.5")))
+            .expect(1..)
+            .mount(&server)
+            .await;
+    }
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .and(header("authorization", "Bearer access-b"))
+        .respond_with(ResponseTemplate::new(429).set_body_json(json!({
+            "error": {
+                "type": "usage_limit_reached",
+                "message": "limit reached",
+                "plan_type": "pro"
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .and(header("authorization", "Bearer access-a"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(sse(vec![
+                    ev_response_created("resp-rotated"),
+                    ev_assistant_message("msg-rotated", "rotated account worked"),
+                    ev_completed("resp-rotated"),
+                ])),
+        )
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let codex_fixture = test_codex()
+        .with_home(codex_home)
+        .with_auth(auth)
+        .with_config(|config| {
+            config.model_provider.supports_websockets = true;
+            config
+                .features
+                .enable(Feature::ResponsesWebsockets)
+                .expect("enable WebSocket feature");
+        })
+        .build(&server)
+        .await?;
+    codex_fixture.submit_turn("hello").await?;
+    codex_fixture
+        .submit_turn("continue on the selected account")
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn usage_limit_retries_remote_compaction_with_compatible_account() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let codex_home = Arc::new(TempDir::new()?);
+    let mut limited = stored_chatgpt_account("account-limited", "access-limited");
+    limited.accounts = vec![
+        stored_chatgpt_account("account-incompatible", "access-incompatible"),
+        stored_chatgpt_account("account-compatible", "access-compatible"),
+    ];
+    save_auth(
+        codex_home.path(),
+        &limited,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let auth_manager =
+        stored_accounts_manager(codex_home.path(), ChatgptAccountSelection::Sticky).await;
+
+    for (access_token, catalog) in [
+        ("access-limited", catalog_with_model("gpt-5.5")),
+        ("access-incompatible", ModelsResponse::default()),
+        ("access-compatible", catalog_with_model("gpt-5.5")),
+    ] {
+        Mock::given(method("GET"))
+            .and(path("/v1/models"))
+            .and(header("authorization", format!("Bearer {access_token}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(catalog))
+            .expect(1..)
+            .mount(&server)
+            .await;
+    }
+    let response_mock = responses::mount_response_sequence(
+        &server,
+        vec![
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(sse(vec![
+                    ev_response_created("resp-before-compact"),
+                    ev_assistant_message("msg-before-compact", "before compact"),
+                    ev_completed("resp-before-compact"),
+                ])),
+            ResponseTemplate::new(429).set_body_json(json!({
+                "error": {
+                    "type": "usage_limit_reached",
+                    "message": "limit reached",
+                    "plan_type": "pro"
+                }
+            })),
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(sse(vec![
+                    json!({
+                        "type": "response.output_item.done",
+                        "item": {
+                            "type": "compaction",
+                            "encrypted_content": "compacted on compatible account"
+                        }
+                    }),
+                    ev_completed("resp-compact"),
+                ])),
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(sse(vec![
+                    ev_response_created("resp-after-compact"),
+                    ev_assistant_message("msg-after-compact", "after compact"),
+                    ev_completed("resp-after-compact"),
+                ])),
+        ],
+    )
+    .await;
+    let mut builder = test_codex()
+        .with_home(Arc::clone(&codex_home))
+        .with_auth_manager(auth_manager)
+        .with_model("gpt-5.5");
+    let test = builder.build_with_auto_env(&server).await?;
+
+    test.submit_turn("before compact").await?;
+    test.codex.submit(Op::Compact).await?;
+    let compact_event = wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::ContextCompacted(_) | EventMsg::Error(_))
+    })
+    .await;
+    assert!(
+        matches!(compact_event, EventMsg::ContextCompacted(_)),
+        "remote compaction should rotate to a compatible account: {compact_event:?}"
+    );
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    test.submit_turn("after compact").await?;
+
+    assert_eq!(
+        response_mock
+            .requests()
+            .iter()
+            .map(|request| request.header("authorization"))
+            .collect::<Vec<_>>(),
+        vec![
+            Some("Bearer access-limited".to_string()),
+            Some("Bearer access-limited".to_string()),
+            Some("Bearer access-compatible".to_string()),
+            Some("Bearer access-compatible".to_string()),
+        ]
+    );
+    server.verify().await;
     Ok(())
 }
 

@@ -116,6 +116,17 @@ pub enum AuthCredentialsStoreMode {
     Ephemeral,
 }
 
+/// Selects how persisted ChatGPT accounts are assigned to model requests.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ChatgptAccountSelection {
+    /// Keep using the current account until it reaches a usage limit.
+    #[default]
+    Sticky,
+    /// Advance to the next account when a new or resumed session is constructed.
+    RoundRobin,
+}
+
 /// Determine where Codex should store and read MCP credentials.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]

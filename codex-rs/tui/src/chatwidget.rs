@@ -78,9 +78,13 @@ use crate::text_formatting::proper_join;
 use crate::token_usage::TokenUsage;
 use crate::token_usage::TokenUsageInfo;
 use crate::version::CODEX_CLI_VERSION;
+use codex_app_server_protocol::AccountModelsReadResult;
+use codex_app_server_protocol::AccountRateLimitsReadManyResponse;
+use codex_app_server_protocol::AccountUsageReadManyResponse;
 use codex_app_server_protocol::AddCreditsNudgeCreditType;
 use codex_app_server_protocol::AddCreditsNudgeEmailStatus;
 use codex_app_server_protocol::AppSummary;
+use codex_app_server_protocol::ChatgptAccountSummary;
 use codex_app_server_protocol::CodexErrorInfo as AppServerCodexErrorInfo;
 use codex_app_server_protocol::CollabAgentTool;
 use codex_app_server_protocol::CollabAgentToolCallStatus;
@@ -95,6 +99,7 @@ use codex_app_server_protocol::ItemStartedNotification;
 use codex_app_server_protocol::McpServerElicitationRequest;
 use codex_app_server_protocol::McpServerElicitationRequestParams;
 use codex_app_server_protocol::McpServerStatusDetail;
+use codex_app_server_protocol::Model as ApiModel;
 use codex_app_server_protocol::ModelVerification as AppServerModelVerification;
 use codex_app_server_protocol::RateLimitReachedType;
 use codex_app_server_protocol::RateLimitSnapshot;
@@ -263,6 +268,8 @@ fn normalize_thread_name(name: &str) -> Option<String> {
 }
 
 use crate::app_event::AppEvent;
+use crate::app_event::ChatgptAccountStatusRequest;
+use crate::app_event::ChatgptLoginMethod;
 use crate::app_event::ExitMode;
 use crate::app_event::PermissionProfileSelection;
 use crate::app_event::RateLimitRefreshOrigin;
@@ -386,6 +393,8 @@ use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
 mod model_popups;
 mod notifications;
 use self::notifications::Notification;
+mod account_status;
+mod accounts;
 mod permission_popups;
 mod permissions_menu;
 pub(crate) use self::permissions_menu::auto_review_available;
@@ -571,6 +580,7 @@ pub(crate) struct ChatWidget {
     token_usage_pending: bool,
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
+    refreshing_all_account_status_outputs: Vec<(u64, StatusHistoryHandle)>,
     next_status_refresh_request_id: u64,
     refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
     completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,

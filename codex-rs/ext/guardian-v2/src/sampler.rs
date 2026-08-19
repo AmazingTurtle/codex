@@ -180,6 +180,7 @@ impl LunaSampler {
                 agent_identity_policy: self.config.agent_identity_policy,
                 session_source: self.config.session_source.clone(),
                 agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
+                chatgpt_account_id: None,
             })
             .await
             .map_err(LunaSamplerError::Provider)?

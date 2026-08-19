@@ -1,0 +1,27 @@
+---
+source: tui/src/status/tests.rs
+expression: wide
+---
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.0.0)                                                                      │
+│                                                                                                │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                                  │
+│ information on rate limits and credits                                                         │
+│                                                                                                │
+│  Model:                              gpt-5.1-codex (reasoning none, summaries auto)            │
+│  Directory: [[workspace]]                                                                      │
+│  Permissions:                        Custom (workspace with network access, Ask for approval)  │
+│  Agents.md:                          AGENTS.md                                                 │
+│  Account:                            contact@turtledev.net (Pro)                               │
+│  Collaboration mode:                 Default                                                   │
+│                                                                                                │
+│  Account Limits:                     contact@turtledev.net — Pro · active                      │
+│  Weekly limit:                       [███████████████░░░░░] 75% left (resets 22:33)            │
+│  GPT-5.3-Codex-Spark Weekly limit:   [████████████████████] 100% left (resets 01:33 on 16 Aug) │
+│                                                                                                │
+│  secondary-codex@turtledev.net — Free                                                          │
+│  Weekly limit:                       [███████████████░░░░░] 75% left (resets 22:33)            │
+│  GPT-5.3-Codex-Spark Weekly limit:   [████████████████████] 100% left (resets 01:33 on 16 Aug) │
+╰────────────────────────────────────────────────────────────────────────────────────────────────╯
