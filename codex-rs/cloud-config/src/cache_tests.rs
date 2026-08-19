@@ -5,6 +5,7 @@ use codex_config::CloudConfigTomlBundle;
 use codex_config::CloudRequirementsFragment;
 use codex_config::CloudRequirementsTomlBundle;
 use pretty_assertions::assert_eq;
+use pretty_assertions::assert_ne;
 use std::path::Path;
 use tempfile::tempdir;
 
@@ -99,6 +100,54 @@ async fn save_writes_signed_payload_and_loads_for_matching_identity() {
     assert_eq!(
         cache.load(Some("user-12345"), Some("account-12345")).await,
         Ok(cache_file.signed_payload)
+    );
+}
+
+#[tokio::test]
+async fn account_scoped_caches_retain_independent_bundles() {
+    let codex_home = tempdir().expect("tempdir");
+    let absolute_home = AbsolutePathBuf::resolve_path_against_base(codex_home.path(), "/");
+    let account_a_cache =
+        CloudConfigBundleCache::new_for_chatgpt_account(absolute_home.clone(), "account/a");
+    let account_b_cache =
+        CloudConfigBundleCache::new_for_chatgpt_account(absolute_home, "account/b");
+    assert_ne!(account_a_cache.path(), account_b_cache.path());
+
+    let account_a_bundle = test_bundle();
+    let mut account_b_bundle = test_bundle();
+    account_b_bundle.config_toml.enterprise_managed[0].contents = "model = \"gpt-5.6\"".to_string();
+    account_a_cache
+        .save(
+            Some("user-a".to_string()),
+            Some("account/a".to_string()),
+            account_a_bundle.clone(),
+        )
+        .await
+        .expect("save account A cache");
+    account_b_cache
+        .save(
+            Some("user-b".to_string()),
+            Some("account/b".to_string()),
+            account_b_bundle.clone(),
+        )
+        .await
+        .expect("save account B cache");
+
+    assert_eq!(
+        account_a_cache
+            .load(Some("user-a"), Some("account/a"))
+            .await
+            .expect("load account A cache")
+            .bundle,
+        account_a_bundle
+    );
+    assert_eq!(
+        account_b_cache
+            .load(Some("user-b"), Some("account/b"))
+            .await
+            .expect("load account B cache")
+            .bundle,
+        account_b_bundle
     );
 }
 
