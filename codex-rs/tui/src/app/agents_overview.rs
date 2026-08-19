@@ -17,6 +17,7 @@ use codex_app_server_protocol::ThreadHistoryMode;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput;
+use codex_product_info::CLI_NAME;
 use codex_protocol::protocol::SubAgentSource;
 
 pub(crate) const AGENTS_OVERVIEW_VIEW_ID: &str = "agents-overview";
@@ -74,9 +75,9 @@ impl App {
                     #[cfg(unix)]
                     (!workload_identity_selected).then(|| SelectionItem {
                         name: "Start background server".to_string(),
-                        description: Some(
-                            "Open `codex agents` in another terminal afterward.".to_string(),
-                        ),
+                        description: Some(format!(
+                            "Open `{CLI_NAME} agents` in another terminal afterward."
+                        )),
                         actions: vec![Box::new(|tx| tx.send(AppEvent::StartAgentsDaemon))],
                         dismiss_on_select: true,
                         ..Default::default()

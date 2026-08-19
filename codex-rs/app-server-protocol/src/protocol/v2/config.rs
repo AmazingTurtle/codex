@@ -67,7 +67,7 @@ pub enum ConfigLayerSource {
         name: String,
     },
 
-    /// User config layer from $CODEX_HOME/config.toml. This layer is special
+    /// User config layer from $BETTER_CODEX_HOME/config.toml. This layer is special
     /// in that it is expected to be:
     /// - writable by the user
     /// - generally outside the workspace directory

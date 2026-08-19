@@ -33,25 +33,27 @@ mode = "full"
     )?;
 
     let url = format!("http://127.0.0.2:{port}/");
-    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
-        .args([
-            "sandbox",
-            "--permission-profile",
-            "network-test",
-            "--",
-            "curl",
-            "--noproxy",
-            "*",
-            "--silent",
-            "--show-error",
-            "--connect-timeout",
-            "1",
-            "--max-time",
-            "2",
-            url.as_str(),
-        ])
-        .output()?;
+    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .env(codex_product_info::HOME_ENV, codex_home.path())
+    .args([
+        "sandbox",
+        "--permission-profile",
+        "network-test",
+        "--",
+        "curl",
+        "--noproxy",
+        "*",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        "1",
+        "--max-time",
+        "2",
+        url.as_str(),
+    ])
+    .output()?;
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     if stderr.contains(BWRAP_UNAVAILABLE_ERR) {
@@ -124,24 +126,26 @@ allow_local_binding = false
     )?;
 
     let url = format!("http://127.0.0.2:{port}/");
-    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
-        .args([
-            "sandbox",
-            "--permission-profile",
-            "network-test",
-            "--",
-            "curl",
-            "--fail",
-            "--silent",
-            "--show-error",
-            "--connect-timeout",
-            "2",
-            "--max-time",
-            "4",
-            url.as_str(),
-        ])
-        .output()?;
+    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .env(codex_product_info::HOME_ENV, codex_home.path())
+    .args([
+        "sandbox",
+        "--permission-profile",
+        "network-test",
+        "--",
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        "2",
+        "--max-time",
+        "4",
+        url.as_str(),
+    ])
+    .output()?;
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     if stderr.contains(BWRAP_UNAVAILABLE_ERR) {

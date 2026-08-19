@@ -15,8 +15,7 @@ impl TestCodexExecBuilder {
                 .expect("should find binary for codex-exec"),
         );
         cmd.current_dir(self.cwd.path())
-            .env("CODEX_HOME", self.home.path())
-            .env("CODEX_SQLITE_HOME", self.home.path())
+            .env("BETTER_CODEX_HOME", self.home.path())
             .env(CODEX_API_KEY_ENV_VAR, "dummy");
         cmd
     }

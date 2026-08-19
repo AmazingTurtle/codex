@@ -79,7 +79,7 @@ pub(super) fn render_human_report(report: &DoctorReport, options: HumanOutputOpt
     let _ = writeln!(
         out,
         "{} {}",
-        bold("Codex Doctor", options),
+        bold("Better Codex Doctor", options),
         dim(&header_suffix(report), options)
     );
     out.push('\n');
@@ -1217,7 +1217,7 @@ mod tests {
                 "token expired",
             )
             .detail("OPENAI_API_KEY: present")
-            .remediation("Run `codex login`."),
+            .remediation("Run `better-codex login`."),
             DoctorCheck::new(
                 "updates.status",
                 "updates",
@@ -1263,11 +1263,11 @@ mod tests {
         let rendered = render_human_report(&sample_report(), detailed_no_color_unicode_options());
         let expected = format!(
             "\
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    ⚠ terminal     narrow terminal
-   ✗ auth         token expired - Run `codex login`.
+   ✗ auth         token expired - Run `better-codex login`.
 ─────────────────────────────────────────────────────────────
 
 Environment
@@ -1296,7 +1296,7 @@ Environment
   ✓ state        state paths inspectable
 
 Configuration
-  ✗ auth         token expired — Run `codex login`.
+  ✗ auth         token expired — Run `better-codex login`.
       OPENAI_API_KEY           present
 
 Updates
@@ -1394,11 +1394,11 @@ Background Server
         let rendered = render_human_report(&sample_report(), summary_no_color_unicode_options());
         let expected = format!(
             "\
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    ⚠ terminal     narrow terminal
-   ✗ auth         token expired - Run `codex login`.
+   ✗ auth         token expired - Run `better-codex login`.
 ─────────────────────────────────────────────────────────────
 
 Environment
@@ -1412,7 +1412,7 @@ Environment
   ✓ state        state paths inspectable
 
 Configuration
-  ✗ auth         token expired — Run `codex login`.
+  ✗ auth         token expired — Run `better-codex login`.
 
 Updates
   ✓ updates      update configuration is locally consistent
@@ -1502,11 +1502,11 @@ Run codex doctor without --summary for detailed diagnostics.
         );
         let expected = format!(
             "\
-Codex Doctor v0.0.0
+Better Codex Doctor v0.0.0
 
 Notes
    [!!] terminal     narrow terminal
-   [XX] auth         token expired - Run `codex login`.
+   [XX] auth         token expired - Run `better-codex login`.
 -------------------------------------------------------------
 
 Environment
@@ -1520,7 +1520,7 @@ Environment
   [ok] state        state paths inspectable
 
 Configuration
-  [XX] auth         token expired - Run `codex login`.
+  [XX] auth         token expired - Run `better-codex login`.
 
 Updates
   [ok] updates      update configuration is locally consistent

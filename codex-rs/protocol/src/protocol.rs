@@ -138,12 +138,17 @@ pub const CONTEXT_WINDOW_OPEN_TAG: &str = "<context_window>";
 pub const CONTEXT_WINDOW_CLOSE_TAG: &str = "</context_window>";
 pub const CONTEXT_WINDOW_GUIDANCE_OPEN_TAG: &str = "<context_window_guidance>";
 pub const CONTEXT_WINDOW_GUIDANCE_CLOSE_TAG: &str = "</context_window_guidance>";
-pub const USER_MESSAGE_BEGIN: &str = "## My request for Codex:";
+pub const USER_MESSAGE_BEGIN: &str = "## My request for Better Codex:";
+const LEGACY_USER_MESSAGE_BEGIN: &str = "## My request for Codex:";
 
 /// Removes the model-context prefix from a user message before displaying it.
 pub fn strip_user_message_prefix(text: &str) -> &str {
-    match text.find(USER_MESSAGE_BEGIN) {
-        Some(idx) => text[idx + USER_MESSAGE_BEGIN.len()..].trim(),
+    match [USER_MESSAGE_BEGIN, LEGACY_USER_MESSAGE_BEGIN]
+        .into_iter()
+        .filter_map(|marker| text.find(marker).map(|idx| (idx, marker)))
+        .min_by_key(|(idx, _)| *idx)
+    {
+        Some((idx, marker)) => text[idx + marker.len()..].trim(),
         None => text.trim(),
     }
 }

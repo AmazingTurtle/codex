@@ -24,21 +24,23 @@ prefix_rule(
 "#,
     )?;
 
-    let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
-        .args([
-            "execpolicy",
-            "check",
-            "--rules",
-            policy_path
-                .to_str()
-                .expect("policy path should be valid UTF-8"),
-            "git",
-            "push",
-            "origin",
-            "main",
-        ])
-        .output()?;
+    let output = Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .env(codex_product_info::HOME_ENV, codex_home.path())
+    .args([
+        "execpolicy",
+        "check",
+        "--rules",
+        policy_path
+            .to_str()
+            .expect("policy path should be valid UTF-8"),
+        "git",
+        "push",
+        "origin",
+        "main",
+    ])
+    .output()?;
 
     assert!(output.status.success());
     let result: serde_json::Value = serde_json::from_slice(&output.stdout)?;
@@ -81,21 +83,23 @@ prefix_rule(
 "#,
     )?;
 
-    let output = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
-        .args([
-            "execpolicy",
-            "check",
-            "--rules",
-            policy_path
-                .to_str()
-                .expect("policy path should be valid UTF-8"),
-            "git",
-            "push",
-            "origin",
-            "main",
-        ])
-        .output()?;
+    let output = Command::new(codex_utils_cargo_bin::cargo_bin(
+        codex_product_info::CLI_NAME,
+    )?)
+    .env(codex_product_info::HOME_ENV, codex_home.path())
+    .args([
+        "execpolicy",
+        "check",
+        "--rules",
+        policy_path
+            .to_str()
+            .expect("policy path should be valid UTF-8"),
+        "git",
+        "push",
+        "origin",
+        "main",
+    ])
+    .output()?;
 
     assert!(output.status.success());
     let result: serde_json::Value = serde_json::from_slice(&output.stdout)?;
