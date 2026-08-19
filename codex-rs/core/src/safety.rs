@@ -1,6 +1,4 @@
-use std::path::Component;
 use std::path::Path;
-use std::path::PathBuf;
 
 use codex_apply_patch::ApplyPatchAction;
 use codex_apply_patch::ApplyPatchFileChange;
@@ -134,21 +132,6 @@ fn is_write_patch_constrained_to_writable_paths(
     let Ok(native_cwd) = cwd.to_abs_path() else {
         return false;
     };
-    // Normalize a path by removing `.` and resolving `..` without touching the
-    // filesystem (works even if the file does not exist).
-    fn normalize(path: &Path) -> Option<PathBuf> {
-        let mut out = PathBuf::new();
-        for comp in path.components() {
-            match comp {
-                Component::ParentDir => {
-                    out.pop();
-                }
-                Component::CurDir => { /* skip */ }
-                other => out.push(other.as_os_str()),
-            }
-        }
-        Some(out)
-    }
 
     // Determine whether `path` is inside **any** writable root. Both `path`
     // and roots are converted to absolute, normalized forms before the
@@ -159,10 +142,6 @@ fn is_write_patch_constrained_to_writable_paths(
             return false;
         };
         let abs = path.into_path_buf();
-        let abs = match normalize(&abs) {
-            Some(v) => v,
-            None => return false,
-        };
 
         file_system_sandbox_policy.can_write_path_with_cwd(&abs, &native_cwd)
     };

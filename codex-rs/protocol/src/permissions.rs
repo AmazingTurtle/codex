@@ -3,6 +3,7 @@ use std::ffi::OsStr;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
 
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::canonicalize_preserving_symlinks;
@@ -24,6 +25,8 @@ use crate::protocol::WritableRoot;
 const PROTECTED_METADATA_GIT_PATH_NAME: &str = ".git";
 const PROTECTED_METADATA_AGENTS_PATH_NAME: &str = ".agents";
 const PROTECTED_METADATA_CODEX_PATH_NAME: &str = ".codex";
+const DISABLED_GIT_HOOKS_PATH: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
+const SAFE_BARE_REPOSITORY_CONFIG: &str = "safe.bareRepository=explicit";
 
 /// Top-level workspace metadata paths that stay protected under writable roots.
 pub const PROTECTED_METADATA_PATH_NAMES: &[&str] = &[
@@ -888,6 +891,7 @@ impl FileSystemSandboxPolicy {
             return true;
         }
         !self.is_metadata_write_denied(path, cwd)
+            && !self.is_configured_git_hooks_write_denied(path, cwd)
     }
 
     fn is_metadata_write_denied(&self, path: &Path, cwd: &Path) -> bool {
@@ -910,6 +914,24 @@ impl FileSystemSandboxPolicy {
             target.as_path(),
             cwd,
         )
+    }
+
+    fn is_configured_git_hooks_write_denied(&self, path: &Path, cwd: &Path) -> bool {
+        if !matches!(self.kind, FileSystemSandboxKind::Restricted) {
+            return false;
+        }
+
+        let Some(target) = resolve_candidate_path(path, cwd) else {
+            return true;
+        };
+        let Some(hooks_path) = configured_git_hooks_path_for_target(target.as_path()) else {
+            return false;
+        };
+        if !target.as_path().starts_with(hooks_path.as_path()) {
+            return false;
+        }
+
+        !has_explicit_write_entry_for_metadata_path(self, &hooks_path, target.as_path(), cwd)
     }
 
     /// Replaces symbolic `:workspace_roots` entries with absolute paths resolved
@@ -1247,6 +1269,17 @@ impl FileSystemSandboxPolicy {
                         Some(effective_path)
                     }),
             );
+            if let Some(hooks_path) = configured_git_hooks_path_for_target(root.as_path())
+                && hooks_path.as_path().starts_with(root.as_path())
+                && !has_explicit_write_entry_for_metadata_path(
+                    self,
+                    &hooks_path,
+                    hooks_path.as_path(),
+                    cwd,
+                )
+            {
+                read_only_subpaths.push(hooks_path);
+            }
             WritableRoot {
                 protected_metadata_names,
                 root,
@@ -1532,6 +1565,50 @@ fn resolve_candidate_path(path: &Path, cwd: &Path) -> Option<AbsolutePathBuf> {
     } else {
         Some(AbsolutePathBuf::from_absolute_path(cwd).ok()?.join(path))
     }
+}
+
+fn configured_git_hooks_path_for_target(target: &Path) -> Option<AbsolutePathBuf> {
+    let git_cwd = nearest_existing_path(target)?;
+    let repo_root = git_stdout(&git_cwd, &["rev-parse", "--show-toplevel"])?;
+    let hooks_path = git_stdout(&git_cwd, &["config", "--path", "--get", "core.hooksPath"])?;
+    if hooks_path.is_empty() || hooks_path == DISABLED_GIT_HOOKS_PATH {
+        return None;
+    }
+
+    let repo_root = AbsolutePathBuf::from_absolute_path(repo_root).ok()?;
+    let hooks_path = PathBuf::from(hooks_path);
+    if hooks_path.is_absolute() {
+        AbsolutePathBuf::from_absolute_path(hooks_path).ok()
+    } else {
+        Some(repo_root.join(hooks_path))
+    }
+}
+
+fn nearest_existing_path(path: &Path) -> Option<PathBuf> {
+    let mut candidate = path;
+    loop {
+        if candidate.exists() {
+            return Some(candidate.to_path_buf());
+        }
+        candidate = candidate.parent()?;
+    }
+}
+
+fn git_stdout(cwd: &Path, args: &[&str]) -> Option<String> {
+    let mut command = Command::new("git");
+    command
+        .current_dir(cwd)
+        .arg("-c")
+        .arg(SAFE_BARE_REPOSITORY_CONFIG)
+        .args(args);
+    crate::shell_environment::scrub_non_inheritable_env_vars(&mut command);
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|value| value.trim_end_matches(['\r', '\n']).to_string())
 }
 
 /// Returns true when two config paths refer to the same exact target before
@@ -2081,6 +2158,7 @@ mod tests {
     #[cfg(unix)]
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
     use tempfile::TempDir;
 
     #[cfg(unix)]
@@ -2186,6 +2264,48 @@ mod tests {
             }
         );
         Ok(())
+    }
+
+    #[test]
+    fn configured_git_hooks_path_is_read_only_under_workspace_write_policy() {
+        let cwd = TempDir::new().expect("tempdir");
+        assert!(
+            Command::new("git")
+                .args(["init", "--quiet"])
+                .current_dir(cwd.path())
+                .status()
+                .expect("git init")
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .args(["config", "core.hooksPath", "hooks/../.husky"])
+                .current_dir(cwd.path())
+                .status()
+                .expect("git config")
+                .success()
+        );
+        std::fs::create_dir_all(cwd.path().join(".husky")).expect("create hooks path");
+
+        let policy = FileSystemSandboxPolicy::workspace_write(
+            &[],
+            /*exclude_tmpdir_env_var*/ true,
+            /*exclude_slash_tmp*/ true,
+        );
+        let hook_path = cwd.path().join(".husky").join("pre-commit");
+        let ordinary_path = cwd.path().join("src").join("lib.rs");
+        let hooks_path =
+            AbsolutePathBuf::from_absolute_path(cwd.path().join(".husky")).expect("hooks path");
+
+        assert!(!policy.can_write_path_with_cwd(&hook_path, cwd.path()));
+        assert!(policy.can_write_path_with_cwd(&ordinary_path, cwd.path()));
+
+        let writable_roots = policy.get_writable_roots_with_cwd(cwd.path());
+        assert!(
+            writable_roots
+                .iter()
+                .any(|root| root.read_only_subpaths.contains(&hooks_path))
+        );
     }
 
     #[cfg(windows)]

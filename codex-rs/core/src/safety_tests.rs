@@ -10,6 +10,7 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use core_test_support::PathExt;
 use pretty_assertions::assert_eq;
+use std::process::Command;
 use tempfile::TempDir;
 
 #[test]
@@ -347,4 +348,54 @@ fn missing_project_dot_codex_config_requires_approval() {
         ),
         SafetyCheck::AskUser,
     );
+}
+
+#[test]
+fn configured_git_hooks_path_prevents_auto_approval() {
+    let tmp = TempDir::new().unwrap();
+    let cwd = tmp.path().abs();
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+
+    assert!(
+        Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&cwd)
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .args(["config", "core.hooksPath", "hooks/../.husky"])
+            .current_dir(&cwd)
+            .status()
+            .unwrap()
+            .success()
+    );
+    std::fs::create_dir_all(cwd.join(".husky")).unwrap();
+
+    let file_system_policy = FileSystemSandboxPolicy::workspace_write(
+        &[],
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+    let hook_path = cwd.join(".husky").join("pre-commit");
+    let hook_action =
+        ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&hook_path), "".to_string());
+    let ordinary_path = cwd.join("src").join("lib.rs");
+    let ordinary_action = ApplyPatchAction::new_add_for_test(
+        &PathUri::from_abs_path(&ordinary_path),
+        "".to_string(),
+    );
+
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &hook_action,
+        &file_system_policy,
+        &cwd_uri,
+    ));
+    assert!(is_write_patch_constrained_to_writable_paths(
+        &ordinary_action,
+        &file_system_policy,
+        &cwd_uri,
+    ));
 }
