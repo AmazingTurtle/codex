@@ -114,6 +114,62 @@ fn git_command_sanitizes_ambient_repository_environment() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn isolated_ls_remote_ignores_repository_local_transport_config() {
+    let fixture = tempdir().expect("tempdir");
+    let repository = fixture.path().join("untrusted-project");
+    let marker = fixture.path().join("transport-config-ran");
+    std::fs::create_dir_all(&repository).expect("create repository");
+    let init_status = Command::new("git")
+        .args(["init", "--quiet"])
+        .current_dir(&repository)
+        .status()
+        .expect("git init");
+    assert!(init_status.success());
+
+    let helper = repository.join("synthetic-transport.sh");
+    write_executable_script(
+        &helper,
+        &format!(
+            "#!/bin/sh\nprintf ran > '{}'\nprintf '{}\\tHEAD\\n'\n",
+            marker.display(),
+            TEST_CURATED_PLUGIN_SHA
+        ),
+    );
+    run_git(&repository, &["config", "--local", "protocol.ext.allow", "always"]);
+    let rewrite_key = format!("url.ext::{} %S .insteadOf", helper.display());
+    run_git(
+        &repository,
+        &["config", "--local", &rewrite_key, "https://github.com/"],
+    );
+
+    let isolated_git_dir = fixture.path().join("isolated-gitdir");
+    let output = git_command(Path::new("git"))
+        .arg("--git-dir")
+        .arg(&isolated_git_dir)
+        .arg("-c")
+        .arg("http.proxy=http://127.0.0.1:1")
+        .arg("ls-remote")
+        .arg(OPENAI_PLUGINS_GIT_URL)
+        .arg("HEAD")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .current_dir(&repository)
+        .output()
+        .expect("run isolated Git probe");
+
+    assert!(
+        !output.status.success(),
+        "isolated probe should hit the neutral HTTPS path, not the repository rewrite"
+    );
+    assert!(
+        !marker.exists(),
+        "isolated startup Git probe must not execute repository-local transport config"
+    );
+}
+
 #[tokio::test]
 async fn ordinary_clone_rejects_tracked_embedded_bare_repository() {
     let temp_dir = tempdir().expect("create temporary directory");
@@ -561,6 +617,7 @@ fn concurrent_syncs_serialize_fetches_without_skipping_remote_checks() {
         &format!(
             r#"#!/bin/sh
 if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
+if [ "$1" = "--git-dir" ]; then shift 2; fi
 printf '%s\n' "$*" >> '{}'
 if [ "$1" = "ls-remote" ]; then
   sleep 1
@@ -625,7 +682,7 @@ exit 1
     assert_eq!(
         invocations
             .lines()
-            .filter(|invocation| invocation.starts_with("ls-remote "))
+            .filter(|invocation| invocation.contains("ls-remote "))
             .count(),
         2
     );
@@ -976,6 +1033,7 @@ fn sync_openai_plugins_repo_via_git_cleans_up_staged_dir_on_fetch_failure() {
         &format!(
             r#"#!/bin/sh
 if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
+if [ "$1" = "--git-dir" ]; then shift 2; fi
 if [ "$1" = "ls-remote" ]; then
   printf '%s\tHEAD\n' "{sha}"
   exit 0
@@ -1022,6 +1080,7 @@ fn sync_openai_plugins_repo_via_git_preserves_existing_snapshot_on_validation_fa
         &format!(
             r#"#!/bin/sh
 if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
+if [ "$1" = "--git-dir" ]; then shift 2; fi
 if [ "$1" = "ls-remote" ]; then
   printf '%s\tHEAD\n' "{remote_sha}"
   exit 0

@@ -630,8 +630,14 @@ fn read_local_git_or_sha_file(
 }
 
 fn git_ls_remote_head_sha(git_binary: &Path) -> Result<String, String> {
+    let isolated_git_dir = tempfile::Builder::new()
+        .prefix("plugins-ls-remote-")
+        .tempdir()
+        .map_err(|err| format!("failed to create isolated Git dir for curated plugins: {err}"))?;
     let mut command = git_command(git_binary);
     command
+        .arg("--git-dir")
+        .arg(isolated_git_dir.path().join("gitdir"))
         .arg("ls-remote")
         .arg("https://github.com/openai/plugins.git")
         .arg("HEAD");
