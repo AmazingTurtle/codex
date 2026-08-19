@@ -7,6 +7,7 @@ use codex_app_server_protocol::PluginAvailability;
 use codex_app_server_protocol::PluginInstallPolicy;
 use codex_app_server_protocol::PluginSharePrincipalRole;
 use codex_app_server_protocol::PluginShareTargetRole;
+use codex_config::McpServerTransportConfig;
 use codex_config::types::McpServerConfig;
 use codex_core_plugins::OPENAI_CURATED_MARKETPLACE_NAME;
 use codex_core_plugins::PluginListBackgroundTaskOptions;
@@ -1887,7 +1888,7 @@ impl PluginRequestProcessor {
             self.thread_manager.environment_manager(),
             config.cwd.to_path_buf(),
         );
-        for (name, server) in plugin_mcp_servers {
+        for (name, mut server) in plugin_mcp_servers {
             if !server.enabled {
                 continue;
             }
@@ -1899,6 +1900,12 @@ impl PluginRequestProcessor {
                     "skipping plugin MCP OAuth for an unowned environment"
                 );
                 continue;
+            }
+            if let McpServerTransportConfig::StreamableHttp {
+                env_http_headers, ..
+            } = &mut server.transport
+            {
+                *env_http_headers = None;
             }
             let http_client = match runtime_context.resolve_http_client(&name, &server) {
                 Ok(http_client) => http_client,

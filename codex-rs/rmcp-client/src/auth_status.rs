@@ -88,7 +88,9 @@ pub async fn determine_streamable_http_auth_status(
     discovery_timeout: OAuthDiscoveryTimeout,
     redirect_mode: StreamableHttpRedirectMode,
 ) -> Result<McpAuthState> {
-    let has_configured_headers = has_configured_headers(&http_headers, &env_http_headers);
+    let discovery_env_http_headers =
+        env_http_headers_for_oauth_discovery(env_http_headers.clone(), redirect_mode);
+    let has_configured_headers = has_configured_headers(&http_headers, &discovery_env_http_headers);
     let default_headers = match auth_status_before_discovery(
         server_name,
         url,
@@ -97,6 +99,7 @@ pub async fn determine_streamable_http_auth_status(
         env_http_headers,
         store_mode,
         keyring_backend_kind,
+        redirect_mode,
     )? {
         AuthStatusCheck::Complete(status) => return Ok(status),
         AuthStatusCheck::Discover(default_headers) => default_headers,
@@ -136,6 +139,7 @@ pub fn determine_streamable_http_auth_status_from_credentials(
         env_http_headers,
         store_mode,
         keyring_backend_kind,
+        StreamableHttpRedirectMode::Legacy,
     )? {
         AuthStatusCheck::Complete(status) => Ok(Some(status)),
         AuthStatusCheck::Discover(_) => Ok(None),
@@ -150,11 +154,13 @@ fn auth_status_before_discovery(
     env_http_headers: Option<HashMap<String, String>>,
     store_mode: OAuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
+    redirect_mode: StreamableHttpRedirectMode,
 ) -> Result<AuthStatusCheck> {
     if bearer_token_env_var.is_some() {
         return Ok(AuthStatusCheck::Complete(McpAuthState::BearerToken));
     }
 
+    let env_http_headers = env_http_headers_for_oauth_discovery(env_http_headers, redirect_mode);
     let default_headers = build_default_headers(http_headers, env_http_headers)?;
     if default_headers.contains_key(AUTHORIZATION) {
         return Ok(AuthStatusCheck::Complete(McpAuthState::BearerToken));
@@ -200,6 +206,7 @@ pub async fn discover_streamable_http_oauth(
     discovery_timeout: OAuthDiscoveryTimeout,
     redirect_mode: StreamableHttpRedirectMode,
 ) -> Result<Option<StreamableHttpOAuthDiscovery>> {
+    let env_http_headers = env_http_headers_for_oauth_discovery(env_http_headers, redirect_mode);
     let has_configured_headers = has_configured_headers(&http_headers, &env_http_headers);
     let default_headers = build_default_headers(http_headers, env_http_headers)?;
     discover_streamable_http_oauth_with_headers_and_http_client(
@@ -211,6 +218,16 @@ pub async fn discover_streamable_http_oauth(
         redirect_mode,
     )
     .await
+}
+
+fn env_http_headers_for_oauth_discovery(
+    env_http_headers: Option<HashMap<String, String>>,
+    redirect_mode: StreamableHttpRedirectMode,
+) -> Option<HashMap<String, String>> {
+    match redirect_mode {
+        StreamableHttpRedirectMode::Legacy => env_http_headers,
+        StreamableHttpRedirectMode::AgentPluginV1 => None,
+    }
 }
 
 async fn discover_streamable_http_oauth_with_headers_and_http_client(
@@ -778,6 +795,88 @@ mod tests {
                 .lock()
                 .expect("redirect policy recorder lock should not be poisoned"),
             Some(HttpRedirectPolicy::Stop)
+        );
+    }
+
+    #[tokio::test]
+    #[serial(auth_status_env)]
+    async fn routed_agent_plugin_oauth_discovery_does_not_resolve_env_headers() {
+        let _guard = EnvVarGuard::set(
+            "CODEX_RMCP_CLIENT_PLUGIN_DISCOVERY_SECRET",
+            "secret-from-process",
+        );
+        let http_client = Arc::new(RecordingHttpClient::default());
+
+        let discovery = discover_streamable_http_oauth(
+            "http://example.com/mcp",
+            /*http_headers*/ None,
+            Some(HashMap::from([(
+                "x-plugin-secret".to_string(),
+                "CODEX_RMCP_CLIENT_PLUGIN_DISCOVERY_SECRET".to_string(),
+            )])),
+            http_client.clone(),
+            OAuthDiscoveryTimeout::LOCAL,
+            StreamableHttpRedirectMode::AgentPluginV1,
+        )
+        .await;
+
+        assert_recorded_discovery_failure(discovery);
+        let headers = http_client
+            .headers
+            .lock()
+            .expect("header recorder lock should not be poisoned")
+            .clone()
+            .expect("discovery should issue an HTTP request");
+        assert_eq!(
+            headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("x-plugin-secret")),
+            None
+        );
+        assert_eq!(
+            *http_client
+                .redirect_policy
+                .lock()
+                .expect("redirect policy recorder lock should not be poisoned"),
+            Some(HttpRedirectPolicy::Follow)
+        );
+    }
+
+    #[tokio::test]
+    #[serial(auth_status_env)]
+    async fn routed_legacy_oauth_discovery_preserves_env_headers() {
+        let _guard = EnvVarGuard::set(
+            "CODEX_RMCP_CLIENT_LEGACY_DISCOVERY_SECRET",
+            "secret-from-process",
+        );
+        let http_client = Arc::new(RecordingHttpClient::default());
+
+        let discovery = discover_streamable_http_oauth(
+            "http://example.com/mcp",
+            /*http_headers*/ None,
+            Some(HashMap::from([(
+                "x-mcp-secret".to_string(),
+                "CODEX_RMCP_CLIENT_LEGACY_DISCOVERY_SECRET".to_string(),
+            )])),
+            http_client.clone(),
+            OAuthDiscoveryTimeout::LOCAL,
+            StreamableHttpRedirectMode::Legacy,
+        )
+        .await;
+
+        assert_recorded_discovery_failure(discovery);
+        let headers = http_client
+            .headers
+            .lock()
+            .expect("header recorder lock should not be poisoned")
+            .clone()
+            .expect("discovery should issue an HTTP request");
+        assert_eq!(
+            headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("x-mcp-secret"))
+                .map(|(_, value)| value.as_str()),
+            Some("secret-from-process")
         );
     }
 

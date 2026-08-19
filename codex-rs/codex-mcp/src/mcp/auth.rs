@@ -68,10 +68,14 @@ pub async fn oauth_login_support(
     let Some(mut config) = oauth_login_candidate(transport) else {
         return McpOAuthLoginSupport::Unsupported;
     };
+    let discovery_env_http_headers = match redirect_mode {
+        StreamableHttpRedirectMode::Legacy => config.env_http_headers.clone(),
+        StreamableHttpRedirectMode::AgentPluginV1 => None,
+    };
     match discover_streamable_http_oauth(
         &config.url,
         config.http_headers.clone(),
-        config.env_http_headers.clone(),
+        discovery_env_http_headers,
         http_client,
         discovery_timeout,
         redirect_mode,
@@ -80,6 +84,9 @@ pub async fn oauth_login_support(
     {
         Ok(Some(discovery)) => {
             config.discovered_scopes = discovery.scopes_supported;
+            if redirect_mode == StreamableHttpRedirectMode::AgentPluginV1 {
+                config.env_http_headers = None;
+            }
             McpOAuthLoginSupport::Supported(config)
         }
         Ok(None) => McpOAuthLoginSupport::Unsupported,
