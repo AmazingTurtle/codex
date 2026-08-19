@@ -739,6 +739,11 @@ async fn resolve_root_git_project_for_trust_detects_worktree_pointer_without_git
         format!("gitdir: {}\n", worktree_git_dir.display()),
     )
     .unwrap();
+    std::fs::write(
+        worktree_git_dir.join("gitdir"),
+        worktree_root.join(".git").display().to_string(),
+    )
+    .unwrap();
 
     let expected = repo_root.abs();
     let worktree_root = worktree_root.abs();
@@ -750,6 +755,54 @@ async fn resolve_root_git_project_for_trust_detects_worktree_pointer_without_git
     assert_eq!(
         resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &nested).await,
         Some(expected)
+    );
+}
+
+#[tokio::test]
+async fn resolve_root_git_project_for_trust_rejects_fabricated_worktree_gitdir() {
+    let tmp = TempDir::new().expect("tempdir");
+    let trusted = tmp.path().join("trusted");
+    let attacker = tmp.path().join("attacker");
+    std::fs::create_dir_all(trusted.join(".git")).unwrap();
+    std::fs::create_dir_all(&attacker).unwrap();
+    std::fs::write(
+        attacker.join(".git"),
+        format!(
+            "gitdir: {}/worktrees/attacker\n",
+            trusted.join(".git").display()
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &attacker.abs()).await,
+        None
+    );
+}
+
+#[tokio::test]
+async fn resolve_root_git_project_for_trust_rejects_mismatched_worktree_backlink() {
+    let tmp = TempDir::new().expect("tempdir");
+    let trusted = tmp.path().join("trusted");
+    let attacker = tmp.path().join("attacker");
+    let other_checkout = tmp.path().join("other");
+    let worktree_git_dir = trusted.join(".git").join("worktrees").join("other");
+    std::fs::create_dir_all(&worktree_git_dir).unwrap();
+    std::fs::create_dir_all(&attacker).unwrap();
+    std::fs::write(
+        attacker.join(".git"),
+        format!("gitdir: {}\n", worktree_git_dir.display()),
+    )
+    .unwrap();
+    std::fs::write(
+        worktree_git_dir.join("gitdir"),
+        other_checkout.join(".git").display().to_string(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &attacker.abs()).await,
+        None
     );
 }
 

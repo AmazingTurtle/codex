@@ -811,8 +811,45 @@ pub async fn resolve_root_git_project_for_trust(
     }
 
     let git_dir_path = AbsolutePathBuf::resolve_path_against_base(git_dir_rel, repo_root.as_path());
+    let git_dir_uri = PathUri::from_abs_path(&git_dir_path);
+    if !fs
+        .get_metadata(&git_dir_uri, /*sandbox*/ None)
+        .await
+        .ok()?
+        .is_directory
+    {
+        return None;
+    }
+
     let worktrees_dir = git_dir_path.parent()?;
     if worktrees_dir.as_path().file_name() != Some(OsStr::new("worktrees")) {
+        return None;
+    }
+
+    let worktree_gitdir = git_dir_path.join("gitdir");
+    let worktree_gitdir_uri = PathUri::from_abs_path(&worktree_gitdir);
+    let worktree_gitdir_s = fs
+        .read_file_text(&worktree_gitdir_uri, /*sandbox*/ None)
+        .await
+        .ok()?;
+    let worktree_gitdir_rel = worktree_gitdir_s.trim();
+    if worktree_gitdir_rel.is_empty() {
+        return None;
+    }
+
+    let linked_dot_git =
+        AbsolutePathBuf::resolve_path_against_base(worktree_gitdir_rel, git_dir_path.as_path());
+    let linked_dot_git_uri = PathUri::from_abs_path(&linked_dot_git);
+    let paths_match = match (
+        fs.canonicalize(&linked_dot_git_uri, /*sandbox*/ None)
+            .await
+            .ok(),
+        fs.canonicalize(&dot_git_uri, /*sandbox*/ None).await.ok(),
+    ) {
+        (Some(linked), Some(current)) => linked == current,
+        _ => linked_dot_git == dot_git,
+    };
+    if !paths_match {
         return None;
     }
 
