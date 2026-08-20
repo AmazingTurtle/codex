@@ -13,10 +13,19 @@ impl ChatWidget {
 
     pub(super) fn on_view_image_tool_call(&mut self, path: LegacyAppPathString) {
         self.flush_answer_stream_with_separator();
-        self.add_to_history(history_cell::new_view_image_tool_call(
-            path,
-            &self.config.cwd,
-        ));
+        if let Some(cell) = self.transcript.active_cell.as_mut().and_then(|cell| {
+            cell.as_any_mut()
+                .downcast_mut::<history_cell::ViewImageCell>()
+        }) {
+            cell.add_path(path, &self.config.cwd);
+        } else {
+            self.flush_active_cell();
+            self.transcript.active_cell = Some(Box::new(history_cell::new_view_image_tool_call(
+                path,
+                &self.config.cwd,
+            )));
+        }
+        self.bump_active_cell_revision();
         self.request_redraw();
     }
 

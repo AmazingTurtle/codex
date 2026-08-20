@@ -1266,6 +1266,7 @@ async fn view_image_tool_call_adds_history_cell() {
     let image_path = chat.config.cwd.join("example.png");
 
     handle_view_image_tool_call(&mut chat, "call-image", image_path);
+    chat.flush_active_cell();
 
     let cells = drain_insert_history(&mut rx);
     assert_eq!(cells.len(), 1, "expected a single history cell");
@@ -1281,6 +1282,7 @@ async fn view_image_tool_call_preserves_foreign_path() {
             .expect("valid legacy app path string");
 
     handle_view_image_tool_call(&mut chat, "call-image", image_path);
+    chat.flush_active_cell();
 
     let cells = drain_insert_history(&mut rx);
     assert_eq!(cells.len(), 1, "expected a single history cell");
