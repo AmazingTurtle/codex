@@ -57,19 +57,61 @@ pub(crate) fn new_patch_apply_failure(stderr: String) -> PlainHistoryCell {
     PlainHistoryCell { lines }
 }
 
-pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString, cwd: &Path) -> PlainHistoryCell {
-    let display_path = path
-        .to_inferred_path_uri()
+fn display_image_path(path: LegacyAppPathString, cwd: &Path) -> String {
+    path.to_inferred_path_uri()
         .and_then(|path| path.to_abs_path().ok())
         .map(|path| display_path_for(path.as_path(), cwd))
-        .unwrap_or_else(|| path.into_string());
+        .unwrap_or_else(|| path.into_string())
+}
 
-    let lines: Vec<Line<'static>> = vec![
-        vec!["• ".dim(), "Viewed Image".bold()].into(),
-        vec!["  └ ".dim(), display_path.dim()].into(),
-    ];
+#[derive(Debug)]
+pub(crate) struct ViewImageCell {
+    display_paths: Vec<String>,
+}
 
-    PlainHistoryCell { lines }
+impl ViewImageCell {
+    pub(crate) fn add_path(&mut self, path: LegacyAppPathString, cwd: &Path) {
+        self.display_paths.push(display_image_path(path, cwd));
+    }
+
+    fn header(&self) -> &'static str {
+        if self.display_paths.len() == 1 {
+            "Viewed Image"
+        } else {
+            "Viewed Images"
+        }
+    }
+}
+
+impl HistoryCell for ViewImageCell {
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        let mut lines = vec![vec!["• ".dim(), self.header().bold()].into()];
+        let mut path_lines = Vec::new();
+        for path in &self.display_paths {
+            let path_line = Line::from(path.clone()).dim();
+            let wrapped =
+                adaptive_wrap_line(&path_line, RtOptions::new(width.saturating_sub(4) as usize));
+            push_owned_lines(&wrapped, &mut path_lines);
+        }
+        lines.extend(prefix_lines(path_lines, "  └ ".dim(), "    ".into()));
+        lines
+    }
+
+    fn raw_lines(&self) -> Vec<Line<'static>> {
+        let mut lines = vec![vec!["• ".into(), self.header().into()].into()];
+        lines.extend(prefix_lines(
+            self.display_paths.iter().cloned().map(Line::from).collect(),
+            "  └ ".into(),
+            "    ".into(),
+        ));
+        lines
+    }
+}
+
+pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString, cwd: &Path) -> ViewImageCell {
+    ViewImageCell {
+        display_paths: vec![display_image_path(path, cwd)],
+    }
 }
 
 pub(crate) fn new_image_generation_call(
