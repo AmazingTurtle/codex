@@ -1225,6 +1225,94 @@ fn web_search_history_cell_without_detail_snapshot() {
 }
 
 #[test]
+fn grouped_web_search_history_cell_snapshot() {
+    let mut cell = new_web_search_call(
+        "call-1".to_string(),
+        "rust ratatui wrapping".to_string(),
+        WebSearchAction::Search {
+            query: Some("rust ratatui wrapping".to_string()),
+            queries: None,
+        },
+    );
+    cell.add_call("call-2".to_string(), String::new());
+    cell.complete_call(
+        "call-2".to_string(),
+        WebSearchAction::OpenPage {
+            url: Some("https://docs.rs/ratatui/latest/ratatui/".to_string()),
+        },
+        "https://docs.rs/ratatui/latest/ratatui/".to_string(),
+    );
+    cell.add_call("call-3".to_string(), String::new());
+    cell.complete_call(
+        "call-3".to_string(),
+        WebSearchAction::OpenPage { url: None },
+        String::new(),
+    );
+    cell.add_call("call-4".to_string(), String::new());
+    cell.complete_call("call-4".to_string(), WebSearchAction::Other, String::new());
+    cell.add_call("call-5".to_string(), String::new());
+    cell.complete_call(
+        "call-5".to_string(),
+        WebSearchAction::FindInPage {
+            url: Some("https://docs.rs/ratatui/latest/ratatui/".to_string()),
+            pattern: Some("installation".to_string()),
+        },
+        "'installation' in https://docs.rs/ratatui/latest/ratatui/".to_string(),
+    );
+
+    let rendered = render_lines(&cell.display_lines(/*width*/ 64)).join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn active_grouped_web_search_history_cell_snapshot() {
+    let mut cell = new_web_search_call(
+        "call-1".to_string(),
+        "rust ratatui wrapping".to_string(),
+        WebSearchAction::Search {
+            query: Some("rust ratatui wrapping".to_string()),
+            queries: None,
+        },
+    );
+    cell.add_call("call-2".to_string(), String::new());
+
+    let rendered = render_lines(&cell.display_lines(/*width*/ 64)).join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn grouped_web_search_history_cell_reserves_width_for_tree_prefix() {
+    let mut cell = new_web_search_call(
+        "call-1".to_string(),
+        "rust ratatui wrapping across a narrow terminal".to_string(),
+        WebSearchAction::Search {
+            query: Some("rust ratatui wrapping across a narrow terminal".to_string()),
+            queries: None,
+        },
+    );
+    cell.add_call("call-2".to_string(), "second grouped search".to_string());
+
+    let rendered = render_lines(&cell.display_lines(/*width*/ 24));
+
+    assert_eq!(
+        rendered,
+        vec![
+            "• Searching the web".to_string(),
+            "  └ Search rust ratatui".to_string(),
+            "           wrapping".to_string(),
+            "           across a".to_string(),
+            "           narrow".to_string(),
+            "           terminal".to_string(),
+            "    Browse second".to_string(),
+            "           grouped".to_string(),
+            "           search".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn web_search_history_cell_wraps_with_indented_continuation() {
     let query = "example search query with several generic words to exercise wrapping".to_string();
     let cell = new_web_search_call(

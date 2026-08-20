@@ -112,7 +112,7 @@ impl WebSearchTool {
             model: call.model.clone(),
             reasoning: None,
             input: recent_input(call.conversation_history.items()),
-            commands: Some(commands),
+            commands: Some(commands.clone()),
             settings: Some(self.settings.clone()),
             max_output_tokens: Some(
                 u64::try_from(call.truncation_policy.token_budget()).unwrap_or(u64::MAX),
@@ -160,7 +160,7 @@ impl WebSearchTool {
             },
             WebSearchAction::Other => CoreWebSearchAction::Other,
         };
-        let query = web_search_action_detail(&legacy_action);
+        let query = command_detail(&commands, &legacy_action, results.as_deref());
         call.turn_item_emitter
             .emit_completed(extension_turn_item(
                 WebSearchItem {
@@ -217,9 +217,8 @@ fn command_action(commands: &SearchCommands) -> WebSearchAction {
                 .open
                 .as_deref()
                 .and_then(|operations| operations.first())
-                .and_then(|operation| {
-                    literal_url(&operation.ref_id)
-                        .map(|url| WebSearchAction::OpenPage { url: Some(url) })
+                .map(|operation| WebSearchAction::OpenPage {
+                    url: literal_url(&operation.ref_id),
                 })
         })
         .or_else(|| {
@@ -233,6 +232,47 @@ fn command_action(commands: &SearchCommands) -> WebSearchAction {
                 })
         })
         .unwrap_or(WebSearchAction::Other)
+}
+
+fn command_detail(
+    commands: &SearchCommands,
+    action: &CoreWebSearchAction,
+    results: Option<&[serde_json::Value]>,
+) -> String {
+    let ref_id = match action {
+        CoreWebSearchAction::OpenPage { url: None } => commands
+            .open
+            .as_deref()
+            .and_then(|operations| operations.first())
+            .map(|operation| operation.ref_id.as_str()),
+        CoreWebSearchAction::FindInPage { url: None, .. } => commands
+            .find
+            .as_deref()
+            .and_then(|operations| operations.first())
+            .map(|operation| operation.ref_id.as_str()),
+        CoreWebSearchAction::Search { .. }
+        | CoreWebSearchAction::OpenPage { url: Some(_) }
+        | CoreWebSearchAction::FindInPage { url: Some(_), .. }
+        | CoreWebSearchAction::Other => None,
+    };
+    let resolved_url = ref_id.and_then(|ref_id| {
+        results?.iter().find_map(|result| {
+            if result.get("ref_id").and_then(serde_json::Value::as_str) == Some(ref_id) {
+                result.get("url").and_then(serde_json::Value::as_str)
+            } else {
+                None
+            }
+        })
+    });
+
+    match (action, resolved_url) {
+        (CoreWebSearchAction::OpenPage { url: None }, Some(url)) => url.to_string(),
+        (CoreWebSearchAction::FindInPage { url: None, pattern }, Some(url)) => match pattern {
+            Some(pattern) => format!("'{pattern}' in {url}"),
+            None => url.to_string(),
+        },
+        _ => web_search_action_detail(action),
+    }
 }
 
 fn query_action(queries: &[SearchQuery]) -> Option<WebSearchAction> {
@@ -264,9 +304,11 @@ fn extension_turn_item(item: WebSearchItem, legacy_event: EventMsg) -> Extension
 mod tests {
     use codex_api::SearchCommands;
     use codex_extension_items::web_search::WebSearchAction;
+    use codex_protocol::models::WebSearchAction as CoreWebSearchAction;
     use pretty_assertions::assert_eq;
 
     use super::command_action;
+    use super::command_detail;
     use super::search_request_headers;
     use codex_core::X_CODEX_TURN_METADATA_HEADER;
 
@@ -319,7 +361,7 @@ mod tests {
             ),
             (
                 r#"{"open":[{"ref_id":"turn0search0"}]}"#,
-                WebSearchAction::Other,
+                WebSearchAction::OpenPage { url: None },
             ),
         ];
 
@@ -327,6 +369,45 @@ mod tests {
             let commands: SearchCommands =
                 serde_json::from_str(arguments).expect("valid search command arguments");
             assert_eq!(command_action(&commands), expected);
+        }
+    }
+
+    #[test]
+    fn command_detail_resolves_navigation_reference_urls() {
+        let results = vec![serde_json::json!({
+            "type": "text_result",
+            "ref_id": "turn0search0",
+            "url": "https://example.com/resolved",
+        })];
+        let cases = [
+            (
+                r#"{"open":[{"ref_id":"turn0search0"}]}"#,
+                "https://example.com/resolved",
+            ),
+            (
+                r#"{"find":[{"ref_id":"turn0search0","pattern":"install"}]}"#,
+                "'install' in https://example.com/resolved",
+            ),
+        ];
+
+        for (arguments, expected) in cases {
+            let commands: SearchCommands =
+                serde_json::from_str(arguments).expect("valid search command arguments");
+            let action = command_action(&commands);
+            let legacy_action = match action {
+                WebSearchAction::Search { query, queries } => {
+                    CoreWebSearchAction::Search { query, queries }
+                }
+                WebSearchAction::OpenPage { url } => CoreWebSearchAction::OpenPage { url },
+                WebSearchAction::FindInPage { url, pattern } => {
+                    CoreWebSearchAction::FindInPage { url, pattern }
+                }
+                WebSearchAction::Other => CoreWebSearchAction::Other,
+            };
+            assert_eq!(
+                command_detail(&commands, &legacy_action, Some(&results)),
+                expected
+            );
         }
     }
 }

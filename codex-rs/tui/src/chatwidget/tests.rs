@@ -256,6 +256,7 @@ mod status_and_layout;
 mod status_command_tests;
 mod status_surface_previews;
 mod terminal_title;
+mod tool_flow;
 mod usage;
 
 pub(crate) use helpers::make_chatwidget_manual_with_sender;
