@@ -70,12 +70,21 @@ impl ChatWidget {
 
     pub(super) fn on_web_search_begin(&mut self, call_id: String) {
         self.flush_answer_stream_with_separator();
-        self.flush_active_cell();
-        self.transcript.active_cell = Some(Box::new(history_cell::new_active_web_search_call(
-            call_id,
-            String::new(),
-            self.config.animations,
-        )));
+        if let Some(cell) = self
+            .transcript
+            .active_cell
+            .as_mut()
+            .and_then(|cell| cell.as_any_mut().downcast_mut::<WebSearchCell>())
+        {
+            cell.add_call(call_id, String::new());
+        } else {
+            self.flush_active_cell();
+            self.transcript.active_cell = Some(Box::new(history_cell::new_active_web_search_call(
+                call_id,
+                String::new(),
+                self.config.animations,
+            )));
+        }
         self.bump_active_cell_revision();
         self.request_redraw();
     }
@@ -87,24 +96,21 @@ impl ChatWidget {
         action: codex_app_server_protocol::WebSearchAction,
     ) {
         self.flush_answer_stream_with_separator();
-        let mut handled = false;
         if let Some(cell) = self
             .transcript
             .active_cell
             .as_mut()
             .and_then(|cell| cell.as_any_mut().downcast_mut::<WebSearchCell>())
-            && cell.call_id() == call_id
         {
-            cell.update(action.clone(), query.clone());
-            cell.complete();
-            self.bump_active_cell_revision();
+            cell.complete_call(call_id, action, query);
+        } else {
             self.flush_active_cell();
-            handled = true;
+            self.transcript.active_cell = Some(Box::new(history_cell::new_web_search_call(
+                call_id, query, action,
+            )));
         }
-
-        if !handled {
-            self.add_to_history(history_cell::new_web_search_call(call_id, query, action));
-        }
+        self.bump_active_cell_revision();
+        self.request_redraw();
         self.transcript.had_work_activity = true;
     }
 
