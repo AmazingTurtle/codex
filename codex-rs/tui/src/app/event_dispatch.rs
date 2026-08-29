@@ -649,7 +649,6 @@ impl App {
                 let summary = session_summary(
                     self.chat_widget.token_usage(),
                     self.chat_widget.thread_id(),
-                    self.chat_widget.thread_name(),
                     self.chat_widget.rollout_path().as_deref(),
                 );
                 self.chat_widget

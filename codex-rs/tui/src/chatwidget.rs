@@ -1570,7 +1570,7 @@ impl ChatWidget {
             "Session renamed to ".into(),
             name.to_string().cyan(),
         ];
-        if let Some(hint) = resume_hint(Some(name), thread_id) {
+        if let Some(hint) = resume_hint(thread_id) {
             line.extend([". To resume this session run ".into(), hint.cyan()]);
         }
         PlainHistoryCell::new(vec![line.into()])
