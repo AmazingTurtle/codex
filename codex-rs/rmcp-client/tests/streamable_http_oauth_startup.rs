@@ -375,7 +375,7 @@ async fn run_issuer_startup_child(
             "--ignored",
             "--nocapture",
         ])
-        .env("CODEX_HOME", codex_home.path())
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env(CHILD_SERVER_URL_ENV, server_url)
         .env(CHILD_STORED_ISSUER_ENV, stored_issuer)
         .env(CHILD_ACCESS_TOKEN_EXPIRY_ENV, access_token_expiry)

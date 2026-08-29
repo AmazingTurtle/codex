@@ -125,7 +125,7 @@ async fn queue_does_not_fallback_from_unsupported_explicit_remote() -> Result<()
 
 #[test]
 fn queue_rejects_empty_message() -> Result<()> {
-    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
         .args(["queue", "--thread", THREAD_ID, "--message", ""])
         .output()?;
     assert!(!output.status.success());
@@ -134,7 +134,7 @@ fn queue_rejects_empty_message() -> Result<()> {
 
 #[test]
 fn queue_rejects_image_attachments() -> Result<()> {
-    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+    let output = std::process::Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
         .args([
             "queue",
             "--thread",
@@ -178,8 +178,8 @@ async fn run_remote_queue_command(response: QueueResponse) -> Result<(Output, Va
             "CODEX_REMOTE_TOKEN",
         ]
     };
-    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
+    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .env("CODEX_REMOTE_TOKEN", "test-token")
         .args(remote_args)
         .args(["--thread", THREAD_ID, "--message", "do the thing"])
@@ -213,8 +213,8 @@ async fn queue_rejects_local_daemon_that_does_not_support_queueing() -> Result<(
         .await
     });
 
-    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
+    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .args(["queue", "--thread", THREAD_ID, "--message", "do the thing"])
         .output()
         .await?;
@@ -247,8 +247,8 @@ async fn queue_rejects_overrides_that_bypass_local_daemon() -> Result<()> {
         Ok::<_, std::io::Error>(())
     });
 
-    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
-        .env("CODEX_HOME", codex_home.path())
+    let output = tokio::process::Command::new(codex_utils_cargo_bin::cargo_bin("better-codex")?)
+        .env("BETTER_CODEX_HOME", codex_home.path())
         .args([
             "queue",
             "-c",

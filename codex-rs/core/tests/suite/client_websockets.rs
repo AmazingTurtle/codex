@@ -1605,6 +1605,7 @@ async fn responses_websocket_remains_enabled_with_one_policy_eligible_account() 
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
         accounts: Vec::new(),
     };
     let mut stored = account("account-allowed", "access-allowed");

@@ -1257,8 +1257,8 @@ pub fn login_with_api_key(
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
-            bedrock_access_keys: None,
-            accounts: Vec::new(),
+        bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     save_auth(
         codex_home,
@@ -1292,8 +1292,8 @@ pub async fn login_with_access_token(
                 agent_identity: None,
                 personal_access_token: Some(access_token.to_string()),
                 bedrock_api_key: None,
-            bedrock_access_keys: None,
-            accounts: Vec::new(),
+                bedrock_access_keys: None,
+                accounts: Vec::new(),
             }
         }
         CodexAccessToken::AgentIdentityJwt(jwt) => {
@@ -1312,8 +1312,8 @@ pub async fn login_with_access_token(
                 agent_identity: Some(AgentIdentityStorage::Jwt(jwt.to_string())),
                 personal_access_token: None,
                 bedrock_api_key: None,
-            bedrock_access_keys: None,
-            accounts: Vec::new(),
+                bedrock_access_keys: None,
+                accounts: Vec::new(),
             }
         }
     };

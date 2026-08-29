@@ -2424,7 +2424,7 @@ To log in with AWS access keys instead:
 The session token is optional. Both flows store credentials in the configured auth backend
 (`auth.json` or keyring), replace any previously stored login, and select
 `model_provider = "amazon-bedrock"`; access-key login also writes the selected AWS region to the
-active user config. Neither flow changes `$CODEX_HOME/.env`. Existing loaded sessions keep their
+active user config. Neither flow changes `$BETTER_CODEX_HOME/.env`. Existing loaded sessions keep their
 current provider selection, so clients should restart the app-server before sending more model
 requests. This limitation will be addressed in a follow-up.
 
@@ -2466,13 +2466,13 @@ Set up a named AWS profile:
 To select credentials already visible in the environment, use
 `{ "type": "environment", "region": "us-west-2" }`. The provider
 resolves available environment credentials through its normal authentication chain. Selecting
-profile or environment credentials leaves existing keys in `$CODEX_HOME/.env` unchanged.
+profile or environment credentials leaves existing keys in `$BETTER_CODEX_HOME/.env` unchanged.
 
 Successful setup writes `model_provider = "amazon-bedrock"` and the selected AWS region to the
 active user config, and additionally writes the selected profile for profile-based setup. Clients
 should restart the app-server before sending more model requests. Logging out while an Amazon
 Bedrock provider is selected clears the user-configured provider, profile, and region, removes
-any Codex-managed credentials, and leaves AWS-managed credentials and `$CODEX_HOME/.env` unchanged.
+any Codex-managed credentials, and leaves AWS-managed credentials and `$BETTER_CODEX_HOME/.env` unchanged.
 
 ### 4) Log in with ChatGPT (device code flow)
 
@@ -2508,7 +2508,7 @@ provider selection and its configured AWS profile and region, regardless of whet
 credentials are Codex-managed or AWS-managed. If the selected model is Bedrock-specific, logout
 also clears `model`; `model_reasoning_effort` and other generic settings are preserved.
 Codex-managed credentials are removed; AWS profiles, environment credentials, and
-`$CODEX_HOME/.env` are left untouched.
+`$BETTER_CODEX_HOME/.env` are left untouched.
 
 ### 7) Rate limits (ChatGPT)
 

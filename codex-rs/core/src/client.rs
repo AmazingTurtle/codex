@@ -1743,10 +1743,12 @@ impl ModelClientSession {
                 .current_client_setup_for_model(model_info)
                 .await?;
             if auth_recovery.is_none()
-                && let (Some(auth_manager), Some(auth)) =
-                    (auth_manager.as_ref(), client_setup.auth.clone())
+                && let Some(auth_manager) = auth_manager.as_ref()
             {
-                auth_recovery = Some(auth_manager.unauthorized_recovery_for_auth(auth));
+                auth_recovery = Some(match client_setup.auth.clone() {
+                    Some(auth) => auth_manager.unauthorized_recovery_for_auth(auth),
+                    None => auth_manager.unauthorized_recovery(),
+                });
             }
             let request_account_id = client_setup
                 .auth
@@ -1942,10 +1944,12 @@ impl ModelClientSession {
                 .current_client_setup_for_model(model_info)
                 .await?;
             if auth_recovery.is_none()
-                && let (Some(auth_manager), Some(auth)) =
-                    (auth_manager.as_ref(), client_setup.auth.clone())
+                && let Some(auth_manager) = auth_manager.as_ref()
             {
-                auth_recovery = Some(auth_manager.unauthorized_recovery_for_auth(auth));
+                auth_recovery = Some(match client_setup.auth.clone() {
+                    Some(auth) => auth_manager.unauthorized_recovery_for_auth(auth),
+                    None => auth_manager.unauthorized_recovery(),
+                });
             }
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),

@@ -1,6 +1,6 @@
-use codex_config::test_support::CloudConfigBundleFixture;
 use chrono::Utc;
 use codex_config::ManagedAuthPolicy;
+use codex_config::test_support::CloudConfigBundleFixture;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_config::types::ChatgptAccountSelection;
 use codex_core::ModelClient;
@@ -138,6 +138,7 @@ fn stored_chatgpt_account(account_id: &str, access_token: &str) -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
         accounts: Vec::new(),
     }
 }

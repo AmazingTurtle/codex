@@ -81,7 +81,7 @@ fn task_reference_context_deduplicates_and_merges_with_ide_context() {
         mention: title.to_string(),
         path: "thread://task-123".to_string(),
     };
-    let text = format!("# IDE: @{title}\n## My request for Codex:\n{visible}");
+    let text = format!("# IDE: @{title}\n## My request for Better Codex:\n{visible}");
     let plugin_start = text.find("plugin @").expect("plugin mention") + "plugin ".len();
     let selected_start = text.rfind(&format!("@{title}")).expect("selected task");
     let mut items = vec![UserInput::Text {
@@ -118,7 +118,7 @@ fn task_reference_context_deduplicates_and_merges_with_ide_context() {
         panic!("expected text with deduplicated task references");
     };
     assert!(text.starts_with("# IDE: @Review the migration\n## Referenced chats"));
-    assert_eq!(text.matches("## My request for Codex:").count(), 1);
+    assert_eq!(text.matches("## My request for Better Codex:").count(), 1);
     assert_eq!(text.matches("\"threadId\":\"task-123\"").count(), 1);
     assert!(text.contains("MUST call `read_thread`"));
     assert!(text.ends_with(
@@ -175,6 +175,6 @@ fn task_reference_heading_inside_selected_title_is_not_a_context_boundary() {
     let [UserInput::Text { text, .. }] = items.as_slice() else {
         panic!("expected text with a task reference");
     };
-    assert!(text.starts_with("## Referenced chats with Codex:"));
+    assert!(text.starts_with("## Referenced chats with Better Codex:"));
     assert!(text.ends_with(&format!("[@{title}](thread://task-123)")));
 }

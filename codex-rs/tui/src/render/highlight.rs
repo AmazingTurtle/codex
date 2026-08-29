@@ -116,7 +116,7 @@ pub(crate) fn validate_theme_name(name: Option<&str>, codex_home: Option<&Path>)
     let name = name?;
     let custom_theme_path_display = codex_home
         .map(|home| custom_theme_path(name, home).display().to_string())
-        .unwrap_or_else(|| format!("$CODEX_HOME/themes/{name}.tmTheme"));
+        .unwrap_or_else(|| format!("$BETTER_CODEX_HOME/themes/{name}.tmTheme"));
     // Bundled themes always resolve.
     if parse_theme_name(name).is_some() {
         return None;

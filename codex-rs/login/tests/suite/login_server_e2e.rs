@@ -28,6 +28,24 @@ const WORKSPACE_ID_ALLOWED: &str = "123e4567-e89b-42d3-a456-426614174000";
 const WORKSPACE_ID_SECOND_ALLOWED: &str = "123e4567-e89b-42d3-a456-426614174001";
 const WORKSPACE_ID_DISALLOWED: &str = "123e4567-e89b-42d3-a456-426614174002";
 
+fn unsigned_test_jwt(chatgpt_account_id: &str, email: &str) -> String {
+    let header = serde_json::json!({"alg": "none", "typ": "JWT"});
+    let payload = serde_json::json!({
+        "email": email,
+        "https://api.openai.com/auth": {
+            "chatgpt_plan_type": "pro",
+            "chatgpt_account_id": chatgpt_account_id,
+        }
+    });
+    let encode = |value: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(value);
+    format!(
+        "{}.{}.{}",
+        encode(&serde_json::to_vec(&header).expect("serialize JWT header")),
+        encode(&serde_json::to_vec(&payload).expect("serialize JWT payload")),
+        encode(b"sig")
+    )
+}
+
 // See spawn.rs for details
 
 fn start_mock_issuer(chatgpt_account_id: &str) -> (SocketAddr, thread::JoinHandle<()>) {
@@ -44,32 +62,7 @@ fn start_mock_issuer(chatgpt_account_id: &str) -> (SocketAddr, thread::JoinHandl
                 // Read body
                 let mut body = String::new();
                 let _ = req.as_reader().read_to_string(&mut body);
-                // Build minimal JWT with plan=pro
-                #[derive(serde::Serialize)]
-                struct Header {
-                    alg: &'static str,
-                    typ: &'static str,
-                }
-                let header = Header {
-                    alg: "none",
-                    typ: "JWT",
-                };
-                let payload = serde_json::json!({
-                    "email": "user@example.com",
-                    "https://api.openai.com/auth": {
-                        "chatgpt_plan_type": "pro",
-                        "chatgpt_account_id": chatgpt_account_id,
-                    }
-                });
-                let b64 = |b: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
-                let header_bytes = serde_json::to_vec(&header).unwrap();
-                let payload_bytes = serde_json::to_vec(&payload).unwrap();
-                let id_token = format!(
-                    "{}.{}.{}",
-                    b64(&header_bytes),
-                    b64(&payload_bytes),
-                    b64(b"sig")
-                );
+                let id_token = unsigned_test_jwt(&chatgpt_account_id, "user@example.com");
 
                 let tokens = serde_json::json!({
                     "id_token": id_token,
@@ -109,7 +102,7 @@ async fn browser_login_preserves_existing_chatgpt_account() -> Result<()> {
         "auth_mode": "chatgpt",
         "OPENAI_API_KEY": null,
         "tokens": {
-            "id_token": "stale.header.payload",
+            "id_token": unsigned_test_jwt("stale-acc", "stale@example.com"),
             "access_token": "stale-access",
             "refresh_token": "stale-refresh",
             "account_id": "stale-acc"

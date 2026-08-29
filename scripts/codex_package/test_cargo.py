@@ -17,7 +17,9 @@ class SourceBinariesForTargetTest(unittest.TestCase):
     def test_codex_package_builds_better_codex_for_canonical_entrypoint(self) -> None:
         variant = PACKAGE_VARIANTS["codex"]
 
-        self.assertEqual(variant.entrypoint_name(TARGET_SPECS["x86_64-unknown-linux-gnu"]), "codex")
+        self.assertEqual(
+            variant.entrypoint_name(TARGET_SPECS["x86_64-unknown-linux-gnu"]), "codex"
+        )
         self.assertEqual(
             source_binaries_for_target(
                 TARGET_SPECS["x86_64-unknown-linux-gnu"],

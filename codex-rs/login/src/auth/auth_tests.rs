@@ -76,6 +76,7 @@ fn stored_chatgpt_auth(account_id: &str, access_token: &str) -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
         accounts: Vec::new(),
     }
 }
@@ -1809,8 +1810,8 @@ fn logout_removes_auth_file() -> Result<(), std::io::Error> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
-            bedrock_access_keys: None,
-            accounts: Vec::new(),
+        bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     super::save_auth(
         dir.path(),
@@ -3163,8 +3164,8 @@ async fn workspace_policy_rejects_agent_identity_before_hydration() {
                 agent_identity: Some(stored_agent_identity),
                 personal_access_token: None,
                 bedrock_api_key: None,
-            bedrock_access_keys: None,
-            accounts: Vec::new(),
+                bedrock_access_keys: None,
+                accounts: Vec::new(),
             },
             AuthCredentialsStoreMode::File,
             AuthKeyringBackendKind::Direct,

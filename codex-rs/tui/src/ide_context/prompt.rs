@@ -14,6 +14,7 @@ const MAX_OPEN_TABS_CHARS: usize = 20_000;
 // marker. Keeping the same marker and stripping semantics lets threads created with IDE context in
 // one surface replay cleanly in the others.
 const PROMPT_REQUEST_BEGIN: &str = "## My request for Better Codex:";
+const LEGACY_PROMPT_REQUEST_BEGIN: &str = "## My request for Codex:";
 
 pub(crate) fn apply_ide_context_to_user_input(
     context: &IdeContext,
@@ -63,11 +64,16 @@ pub(crate) fn has_prompt_context(context: &IdeContext) -> bool {
 }
 
 pub(crate) fn extract_prompt_request_with_offset(message: &str) -> (&str, usize) {
-    let Some((before_request, request)) = message.rsplit_once(PROMPT_REQUEST_BEGIN) else {
+    let Some((request_start, marker)) = [PROMPT_REQUEST_BEGIN, LEGACY_PROMPT_REQUEST_BEGIN]
+        .into_iter()
+        .filter_map(|marker| message.rfind(marker).map(|start| (start, marker)))
+        .max_by_key(|(start, _)| *start)
+    else {
         return (message, 0);
     };
 
-    let request_start = before_request.len() + PROMPT_REQUEST_BEGIN.len();
+    let request = &message[request_start + marker.len()..];
+    let request_start = request_start + marker.len();
     let trimmed_request = request.trim();
     let leading_trimmed_len = request.len() - request.trim_start().len();
     (trimmed_request, request_start + leading_trimmed_len)

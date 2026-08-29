@@ -162,7 +162,7 @@ struct AnimationSpec {
 }
 
 fn load_builtin_pet(pet: catalog::BuiltinPet, codex_home: Option<&Path>) -> Result<Pet> {
-    let codex_home = codex_home.context("CODEX_HOME is not available")?;
+    let codex_home = codex_home.context("BETTER_CODEX_HOME is not available")?;
     let spritesheet_path = super::builtin_spritesheet_path(codex_home, pet.spritesheet_file);
     if !spritesheet_path.exists() {
         bail!("missing spritesheet {}", spritesheet_path.display());
@@ -183,7 +183,7 @@ fn load_builtin_pet(pet: catalog::BuiltinPet, codex_home: Option<&Path>) -> Resu
 }
 
 fn load_custom_pet(value: &str, codex_home: Option<&Path>) -> Result<Pet> {
-    let codex_home = codex_home.context("CODEX_HOME is not available")?;
+    let codex_home = codex_home.context("BETTER_CODEX_HOME is not available")?;
     let pet_dir = codex_home.join("pets").join(value);
     if pet_dir.join("pet.json").is_file() {
         return load_pet_manifest(&pet_dir, "pet.json", value, &custom_pet_cache_id(value));

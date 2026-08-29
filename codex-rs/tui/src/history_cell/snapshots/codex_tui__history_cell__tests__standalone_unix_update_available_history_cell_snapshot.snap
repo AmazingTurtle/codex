@@ -3,7 +3,7 @@ source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 ╭────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.148.0-better-codex -> 9.9.9     │
+│ ✨ Update available! 0.150.1-better-codex -> 9.9.9     │
 │ Run better-codex update to update.                     │
 │                                                        │
 │ See full release notes:                                │

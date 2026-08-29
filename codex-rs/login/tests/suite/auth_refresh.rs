@@ -1051,6 +1051,7 @@ async fn refresh_token_does_not_retry_after_standard_invalid_grant_failure() -> 
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 
@@ -1119,6 +1120,7 @@ async fn refresh_token_does_not_cache_other_bad_request_failure() -> Result<()> 
         personal_access_token: None,
         bedrock_api_key: None,
         bedrock_access_keys: None,
+        accounts: Vec::new(),
     };
     ctx.write_auth(&initial_auth).await?;
 

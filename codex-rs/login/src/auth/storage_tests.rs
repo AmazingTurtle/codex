@@ -174,8 +174,8 @@ async fn file_storage_loads_empty_agent_identity_email_as_none() -> anyhow::Resu
             })),
             personal_access_token: None,
             bedrock_api_key: None,
-        bedrock_access_keys: None,
-        accounts: Vec::new(),
+            bedrock_access_keys: None,
+            accounts: Vec::new(),
         })
     );
     Ok(())

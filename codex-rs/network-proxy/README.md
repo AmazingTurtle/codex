@@ -39,7 +39,7 @@ dangerously_allow_non_loopback_proxy = false
 mode = "full" # default when unset; use "limited" for read-only mode
 # HTTPS MITM is enabled automatically when `mode = "limited"` or when MITM hooks are configured.
 # The CA private key remains in proxy memory. When MITM is active, spawned commands receive CA
-# bundle env vars pointing at immutable public files under $CODEX_HOME/proxy/ so common HTTPS
+# bundle env vars pointing at immutable public files under $BETTER_CODEX_HOME/proxy/ so common HTTPS
 # clients trust the managed CA.
 
 # If false, local/private networking is rejected. Explicit allowlisting of local IP literals

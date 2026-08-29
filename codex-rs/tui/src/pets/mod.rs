@@ -3,7 +3,7 @@
 //! The TUI treats built-in and custom pets differently on purpose:
 //! built-in pets are versioned application assets fetched on demand into a
 //! managed CODEX_HOME cache, while custom pets remain entirely user-owned data
-//! under `$CODEX_HOME/pets/<pet-id>/pet.json` or legacy avatar directories.
+//! under `$BETTER_CODEX_HOME/pets/<pet-id>/pet.json` or legacy avatar directories.
 //!
 //! This module owns the TUI-facing contracts around that split:
 //! resolving a selected pet id, preparing frames for terminal image protocols,

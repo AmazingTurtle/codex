@@ -138,6 +138,7 @@ async fn bedrock_endpoint_resolution_ignores_chatgpt_account_binding() {
         SessionSource::Exec,
         "test_originator".to_string(),
         /*model_verbosity*/ None,
+        /*content_item_kinds_enabled*/ true,
         /*enable_request_compression*/ false,
         /*include_timing_metrics*/ false,
         /*beta_features_header*/ None,
