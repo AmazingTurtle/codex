@@ -476,11 +476,10 @@ pub enum ExitReason {
 fn session_summary(
     token_usage: TokenUsage,
     thread_id: Option<ThreadId>,
-    thread_name: Option<String>,
     rollout_path: Option<&Path>,
 ) -> Option<SessionSummary> {
     let usage_line = (!token_usage.is_zero()).then(|| token_usage.to_string());
-    let resume_hint = resume_hint_for_resumable_thread(thread_id, thread_name, rollout_path);
+    let resume_hint = resume_hint_for_resumable_thread(thread_id, rollout_path);
 
     if usage_line.is_none() && resume_hint.is_none() {
         return None;
@@ -507,11 +506,14 @@ fn resumable_thread(
 
 fn resume_hint_for_resumable_thread(
     thread_id: Option<ThreadId>,
-    thread_name: Option<String>,
     rollout_path: Option<&Path>,
 ) -> Option<String> {
-    let thread = resumable_thread(thread_id, thread_name, rollout_path)?;
-    codex_utils_cli::resume_hint(thread.thread_name.as_deref(), Some(thread.thread_id))
+    let thread_id = thread_id?;
+    let rollout_path = rollout_path?;
+    if !rollout_path_is_resumable(rollout_path) {
+        return None;
+    }
+    codex_utils_cli::resume_hint(Some(thread_id))
 }
 
 fn rollout_path_is_resumable(rollout_path: &Path) -> bool {
