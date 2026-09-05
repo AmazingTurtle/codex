@@ -49,6 +49,24 @@ async fn negotiates_after_early_packet_loss_and_slow_tcp_connect() {
 }
 
 async fn check_negotiation(runtime: Arc<dyn webrtc::runtime::Runtime>) {
+    let Some(bind_ip) = rtc::shared::ifaces::ifaces()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|interface| interface.addr.map(|address| address.ip()))
+        .find(|address| {
+            matches!(
+                address,
+                std::net::IpAddr::V4(address)
+                    if !address.is_loopback()
+                        && !address.is_unspecified()
+                        && !address.is_link_local()
+            )
+        })
+    else {
+        eprintln!("skipping voice negotiation test: no usable IPv4 interface");
+        return;
+    };
+    let bind_addr = std::net::SocketAddr::new(bind_ip, 0);
     for tcp in [false, true] {
         timeout(Duration::from_secs(/*secs*/ 30), async {
             let (sender, mut channels) = mpsc::channel(/*buffer*/ 1);
@@ -61,9 +79,9 @@ async fn check_negotiation(runtime: Arc<dyn webrtc::runtime::Runtime>) {
                 .with_setting_engine(settings)
                 .with_handler(Arc::new(RemoteEvents(sender, gathered.clone())));
             let remote = if tcp {
-                builder.with_tcp_addrs(vec!["0.0.0.0:0"])
+                builder.with_tcp_addrs(vec![bind_addr])
             } else {
-                builder.with_udp_addrs(vec!["0.0.0.0:0"])
+                builder.with_udp_addrs(vec![bind_addr])
             }
             .build()
             .await

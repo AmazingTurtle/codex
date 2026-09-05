@@ -1,0 +1,56 @@
+name: Better Codex full workspace baseline
+
+on:
+  schedule:
+    - cron: "43 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: better-codex-maintenance
+  cancel-in-progress: false
+
+jobs:
+  workspace:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    env:
+      CARGO_BUILD_JOBS: 6
+      RUST_TEST_THREADS: 6
+      RAYON_NUM_THREADS: 6
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532
+        with:
+          tool: nextest
+          version: 0.9.103
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential cmake pkg-config libcap-dev libasound2-dev bubblewrap
+      - uses: ./.github/actions/setup-better-codex-voice
+      - name: Set shared Cargo target
+        run: echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/codex-rs/target" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: codex-rs -> target
+          key: better-codex-linux-full
+          cache-on-failure: true
+      - name: Run complete workspace once
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/better_codex_release/full_tests.py > "$RUNNER_TEMP/full-tests.log" 2>&1
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        if: always()
+        with:
+          name: better-codex-full-tests-${{ github.run_id }}
+          path: ${{ runner.temp }}/full-tests.log
