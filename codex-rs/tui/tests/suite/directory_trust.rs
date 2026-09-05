@@ -20,7 +20,8 @@ use tokio_tungstenite::tungstenite::Message;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn connected_trust_cancellation_and_acceptance_control_task_creation() -> Result<()> {
     for trust_level in [None, Some("untrusted")] {
-        let workspace = tempfile::tempdir()?;
+        // Keep consent paths independent of checkout length and terminal wrapping.
+        let workspace = tempfile::tempdir_in("/tmp")?;
         let repo_root = workspace.path().canonicalize()?;
         std::fs::create_dir(repo_root.join(".git"))?;
         std::fs::write(repo_root.join(".git/HEAD"), "ref: refs/heads/main\n")?;
