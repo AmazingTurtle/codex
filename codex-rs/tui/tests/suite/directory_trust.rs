@@ -19,7 +19,9 @@ use tokio_tungstenite::tungstenite::Message;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn connected_trust_cancellation_and_acceptance_control_task_creation() -> Result<()> {
     for trust_level in [None, Some("untrusted")] {
-        let repo_root = codex_utils_cargo_bin::repo_root()?;
+        // Keep consent paths independent of checkout length and terminal wrapping.
+        let workspace = tempfile::tempdir_in("/tmp")?;
+        let repo_root = workspace.path().to_path_buf();
         let codex_home = tempfile::tempdir_in("/tmp")?;
         // The server's trust decision must win over the client's trusted-folder setting.
         write_test_config(codex_home.path(), &repo_root)?;
