@@ -1949,6 +1949,11 @@ async fn async_hook_finishing_while_idle_waits_for_the_next_turn(
     fs_wait::wait_for_path_exists(finished_path, Duration::from_secs(5))
         .await
         .context("timed out waiting for the async hook to finish")?;
+    fs::remove_file(
+        test.codex_home_path()
+            .join("async_user_prompt_submit_release"),
+    )
+    .context("re-arm gated async hook for the next turn")?;
 
     assert!(
         timeout(Duration::from_millis(150), test.codex.next_event())
