@@ -230,6 +230,13 @@ impl ShellSnapshotCache {
             "{startup}if ! eval \"unset {state_variables}\n{state_expansion}\" >/dev/null; then printf 'failed to restore shell snapshot\\n' >&2; fi\n{}",
             params.argv[2]
         );
+        if matches!(shell_type, ShellType::Bash) {
+            // Sandboxed getpeername can report EPERM, which Bash interprets as
+            // a remote shell and sources .bashrc even in privileged mode.
+            prepared
+                .command
+                .insert(shell_start + 1, "--norc".to_string());
+        }
 
         Ok(())
     }
