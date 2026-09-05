@@ -182,8 +182,19 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
             FileSystemAccessMode::Write,
         ));
         if deny_fd_path {
+            // Linux /dev/fd is normally a symlink into /proc. Bubblewrap
+            // cannot mount a deny rule onto that symlink itself.
+            let fd_path = if cfg!(target_os = "linux")
+                && std::fs::symlink_metadata("/dev/fd")?
+                    .file_type()
+                    .is_symlink()
+            {
+                "/proc"
+            } else {
+                "/dev/fd"
+            };
             policy.entries.push(FileSystemSandboxEntry::new(
-                PathUri::from_host_native_path("/dev/fd")?.into(),
+                PathUri::from_host_native_path(fd_path)?.into(),
                 FileSystemAccessMode::Deny,
             ));
         } else {
