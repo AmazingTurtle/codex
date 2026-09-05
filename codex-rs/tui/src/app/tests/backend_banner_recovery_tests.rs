@@ -362,6 +362,7 @@ async fn backend_banner_reset_redemption_rejects_pre_reset_content() -> Result<(
         &mut tui,
         &mut session,
         AppEvent::RateLimitResetCreditConsumed {
+            account_id: None,
             request_id,
             idempotency_key: "mock-reset".into(),
             credit_id: None,
@@ -485,4 +486,213 @@ fn backend_banner_recovery_coalesces_until_newer_epoch_can_be_read() {
         refresh.finish(next.0, next.1, epoch, RateLimitReadStatus::Succeeded),
         RateLimitRefreshOutcome::Apply
     );
+}
+
+#[tokio::test]
+async fn account_usage_reset_only_recovers_the_current_account() -> Result<()> {
+    use crate::chatwidget::UsagePickerEvent;
+    use crate::chatwidget::UsageReadPurpose;
+    use codex_app_server_protocol::AccountRateLimitsReadManyResponse;
+    use codex_app_server_protocol::AccountRateLimitsReadResult;
+    use codex_app_server_protocol::AccountRateLimitsSnapshot;
+    use codex_app_server_protocol::ChatgptAccountSummary;
+    use codex_app_server_protocol::ConsumeAccountRateLimitResetCreditOutcome;
+    use codex_app_server_protocol::ConsumeAccountRateLimitResetCreditResponse;
+    use codex_app_server_protocol::RateLimitResetCreditsSummary;
+
+    for (is_active, read_succeeds) in [(false, true), (true, true), (false, false), (true, false)] {
+        let (mut app, mut events, _ops) = make_test_app_with_channels().await;
+        let mut session =
+            Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+        set_chatgpt_auth(&mut app.chat_widget);
+        app.chat_widget.set_model("test-model-a");
+        app.chat_widget
+            .update_backend_banner(&response_with_banner());
+        app.chat_widget.insert_str("/usage");
+        app.chat_widget
+            .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        app.chat_widget
+            .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let request_id = loop {
+            if let AppEvent::UsagePicker(UsagePickerEvent::LoadAccounts { request_id }) =
+                events.try_recv()?
+            {
+                break request_id;
+            }
+        };
+        let account = ChatgptAccountSummary {
+            account_id: "selected-account".to_string(),
+            email: Some("selected@example.com".to_string()),
+            plan_type: codex_protocol::account::PlanType::Pro,
+            is_active,
+            is_eligible: true,
+        };
+        app.chat_widget
+            .finish_usage_accounts(request_id, Ok(vec![account.clone()]));
+        app.chat_widget.open_usage_account(account.clone());
+        let request_id = app.chat_widget.show_rate_limit_reset_consuming_popup();
+        let generation = app.rate_limit_hard_stop_generation;
+        let mut tui = crate::tui::test_support::make_test_tui()?;
+        app.handle_event(
+            &mut tui,
+            &mut session,
+            AppEvent::RateLimitResetCreditConsumed {
+                account_id: Some(account.account_id.clone()),
+                request_id,
+                idempotency_key: "attempt".to_string(),
+                credit_id: None,
+                result: Ok(ConsumeAccountRateLimitResetCreditResponse {
+                    outcome: ConsumeAccountRateLimitResetCreditOutcome::Reset,
+                }),
+            },
+        )
+        .await?;
+        if is_active {
+            assert!(app.rate_limit_hard_stop_generation > generation);
+        } else {
+            assert_eq!(app.rate_limit_hard_stop_generation, generation);
+        }
+        assert_eq!(
+            app.rate_limit_refresh_state.has_pending_recovery(),
+            is_active
+        );
+        let response = AccountRateLimitsReadManyResponse {
+            data: vec![AccountRateLimitsReadResult {
+                account: account.clone(),
+                error: None,
+                rate_limits: Some(AccountRateLimitsSnapshot {
+                    rate_limits: response_with_banner().rate_limits,
+                    rate_limits_by_limit_id: None,
+                    rate_limit_reset_credits: Some(RateLimitResetCreditsSummary {
+                        available_count: 0,
+                        credits: None,
+                    }),
+                }),
+            }],
+        };
+        let generation = app.rate_limit_hard_stop_generation;
+        app.handle_usage_picker_event(
+            UsagePickerEvent::AccountLoaded {
+                request_id,
+                account_id: account.account_id.clone(),
+                purpose: UsageReadPurpose::ResetConsume,
+                result: if read_succeeds {
+                    Ok(response.clone())
+                } else {
+                    Err("post-reset read timed out".to_string())
+                },
+            },
+            &mut session,
+        )
+        .await;
+        assert_eq!(app.rate_limit_hard_stop_generation, generation);
+        app.chat_widget.close_usage_picker();
+        app.chat_widget
+            .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(
+            render_bottom_popup(&app.chat_widget, /*width*/ 90)
+                .contains("Selected model usage exhausted"),
+            !is_active
+        );
+        let generation = app.rate_limit_hard_stop_generation;
+        // A result delivered after the account flow closes must not recover a later session.
+        app.handle_event(
+            &mut tui,
+            &mut session,
+            AppEvent::RateLimitResetCreditConsumed {
+                account_id: Some(account.account_id.clone()),
+                request_id,
+                idempotency_key: "attempt".to_string(),
+                credit_id: None,
+                result: Ok(ConsumeAccountRateLimitResetCreditResponse {
+                    outcome: ConsumeAccountRateLimitResetCreditOutcome::Reset,
+                }),
+            },
+        )
+        .await?;
+        assert_eq!(app.rate_limit_hard_stop_generation, generation);
+        app.handle_usage_picker_event(
+            UsagePickerEvent::AccountLoaded {
+                request_id,
+                account_id: account.account_id,
+                purpose: UsageReadPurpose::ResetConsume,
+                result: Ok(response),
+            },
+            &mut session,
+        )
+        .await;
+        assert_eq!(app.rate_limit_hard_stop_generation, generation);
+        session.shutdown().await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn usage_picker_without_stored_accounts_preserves_backend_token_activity() -> Result<()> {
+    let (mut app, mut events, _ops) = make_test_app_with_channels().await;
+    let mut session = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    app.handle_usage_picker_event(
+        crate::chatwidget::UsagePickerEvent::ShowUsage {
+            view: crate::chatwidget::TokenActivityView::Cumulative,
+            account_id: None,
+        },
+        &mut session,
+    )
+    .await;
+    assert_matches!(events.try_recv(), Ok(AppEvent::RefreshTokenActivity { .. }));
+    session.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn session_banner_reset_ignores_previously_inspected_account() -> Result<()> {
+    use crate::chatwidget::UsagePickerEvent;
+    use codex_app_server_protocol::ChatgptAccountSummary;
+    for navigation in [KeyCode::Esc, KeyCode::Enter] {
+        let (mut app, mut events, _ops) = make_test_app_with_channels().await;
+        let mut session =
+            Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+        let mut tui = crate::tui::test_support::make_test_tui()?;
+        set_chatgpt_auth(&mut app.chat_widget);
+        app.chat_widget.insert_str("/usage");
+        app.chat_widget
+            .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        app.chat_widget
+            .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let request_id = loop {
+            if let AppEvent::UsagePicker(UsagePickerEvent::LoadAccounts { request_id }) =
+                events.try_recv()?
+            {
+                break request_id;
+            }
+        };
+        let account = ChatgptAccountSummary {
+            account_id: "other".to_string(),
+            email: Some("other@example.com".to_string()),
+            plan_type: codex_protocol::account::PlanType::Pro,
+            is_active: false,
+            is_eligible: true,
+        };
+        app.chat_widget
+            .finish_usage_accounts(request_id, Ok(vec![account.clone()]));
+        app.chat_widget.open_usage_account(account);
+        if navigation == KeyCode::Enter {
+            app.chat_widget
+                .handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        }
+        app.chat_widget
+            .handle_key_event(KeyEvent::new(navigation, KeyModifiers::NONE));
+        app.chat_widget
+            .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        app.handle_event(
+            &mut tui,
+            &mut session,
+            AppEvent::OpenRateLimitResetCredits { account_id: None },
+        )
+        .await?;
+        assert_eq!(app.chat_widget.usage_reset_account_id(), None);
+        assert!(!render_bottom_popup(&app.chat_widget, /*width*/ 80).contains("other@example.com"));
+        session.shutdown().await?;
+    }
+    Ok(())
 }

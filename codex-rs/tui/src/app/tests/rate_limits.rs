@@ -208,13 +208,7 @@ async fn rolling_workspace_hard_stops_invalidate_older_rate_limit_reads() -> Res
 #[tokio::test]
 async fn stale_rate_limit_reads_preserve_newer_workspace_hard_stop_for_every_origin() -> Result<()>
 {
-    for origin_name in [
-        "startup",
-        "status",
-        "usage",
-        "reset-picker",
-        "reset-consume",
-    ] {
+    for origin_name in ["startup", "status", "reset-picker", "reset-consume"] {
         let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
         set_chatgpt_auth(&mut app.chat_widget);
         let mut tui = crate::tui::test_support::make_test_tui()?;
@@ -232,29 +226,6 @@ async fn stale_rate_limit_reads_preserve_newer_workspace_hard_stop_for_every_ori
                 app.chat_widget
                     .add_status_output(/*refreshing_rate_limits*/ true, Some(request_id));
                 RateLimitRefreshOrigin::StatusCommand { request_id }
-            }
-            "usage" => {
-                let startup_request_id = app.chat_widget.start_rate_limit_reset_startup_check();
-                app.chat_widget.finish_rate_limit_reset_hint_refresh(
-                    startup_request_id,
-                    Vec::new(),
-                    Ok(RateLimitResetCreditsSummary {
-                        available_count: 0,
-                        credits: None,
-                    }),
-                );
-                app.chat_widget.insert_str("/usage reset");
-                app.chat_widget
-                    .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-                app.chat_widget
-                    .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-                loop {
-                    match app_event_rx.try_recv() {
-                        Ok(AppEvent::RefreshRateLimits { origin }) => break origin,
-                        Ok(_) => {}
-                        other => panic!("expected usage refresh request, got {other:?}"),
-                    }
-                }
             }
             "reset-picker" => RateLimitRefreshOrigin::ResetPicker {
                 request_id: app.chat_widget.show_rate_limit_reset_loading_popup(),
@@ -295,7 +266,6 @@ async fn stale_rate_limit_reads_preserve_newer_workspace_hard_stop_for_every_ori
 
         let popup = render_bottom_popup(&app.chat_widget, /*width*/ 100);
         match origin_name {
-            "usage" => assert!(popup.contains("No usage limit resets available.")),
             "reset-picker" => {
                 assert!(popup.contains("You don't have any usage limit resets available."));
             }

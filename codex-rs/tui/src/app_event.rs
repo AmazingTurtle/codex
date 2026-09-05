@@ -158,9 +158,7 @@ pub(crate) struct PluginRemoteSectionError {
 /// updates the cached snapshots and any available reset-credit notice (no
 /// status card to finalize). A `StatusCommand` is tied to a specific `/status`
 /// invocation and must call `finish_status_rate_limit_refresh` when done so the
-/// card stops showing a "refreshing" state. A `UsageMenu` refreshes a cached
-/// zero reset count so the disabled menu entry can become available without a
-/// restart. A `ResetPicker` refreshes the rate limits and detailed reset-credit
+/// card stops showing a "refreshing" state. A `ResetPicker` refreshes the rate limits and detailed reset-credit
 /// rows before showing redemption choices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RateLimitRefreshOrigin {
@@ -169,8 +167,6 @@ pub(crate) enum RateLimitRefreshOrigin {
     /// User-initiated via `/status`; the `request_id` correlates with the
     /// status card that should be updated when the fetch completes.
     StatusCommand { request_id: u64 },
-    /// User reopened `/usage` while the cached reset-credit count was zero.
-    UsageMenu { request_id: u64 },
     /// User opened the reset-credit picker.
     ResetPicker { request_id: u64 },
     /// Refresh requested after a reset credit was successfully consumed.
@@ -594,11 +590,12 @@ pub(crate) enum AppEvent {
         result: Result<GetAccountRateLimitsResponse, String>,
     },
 
-    /// Open the default token-activity view selected from the `/usage` menu.
-    OpenTokenActivity,
+    UsagePicker(crate::chatwidget::UsagePickerEvent),
 
-    /// Open the reset-credit flow selected from the `/usage` menu.
-    OpenRateLimitResetCredits,
+    /// Open resets for an explicitly selected account, or the active session when omitted.
+    OpenRateLimitResetCredits {
+        account_id: Option<String>,
+    },
 
     /// Confirm the reset credit selected from the reset-credit picker.
     OpenRateLimitResetConfirmation {
@@ -612,12 +609,14 @@ pub(crate) enum AppEvent {
 
     /// Consume one reset credit using a stable idempotency key.
     ConsumeRateLimitResetCredit {
+        account_id: Option<String>,
         idempotency_key: String,
         credit_id: Option<String>,
     },
 
     /// Result of consuming one reset credit.
     RateLimitResetCreditConsumed {
+        account_id: Option<String>,
         request_id: u64,
         idempotency_key: String,
         credit_id: Option<String>,
@@ -626,6 +625,7 @@ pub(crate) enum AppEvent {
 
     /// Fetch account-wide token activity for a `/usage` history card.
     RefreshTokenActivity {
+        target: crate::chatwidget::TokenActivityTarget,
         request_id: u64,
     },
 

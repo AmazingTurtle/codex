@@ -488,10 +488,7 @@ impl ChatWidget {
             }
             SlashCommand::Usage => {
                 if self.ensure_usage_command_available() {
-                    self.app_event_tx.send(AppEvent::ShowChatgptAccountUsage {
-                        view: tokens::TokenActivityView::Cumulative,
-                        selector: None,
-                    });
+                    self.open_usage_menu();
                 }
             }
             SlashCommand::Ide => {
@@ -759,7 +756,7 @@ impl ChatWidget {
             }
             SlashCommand::Usage => {
                 if self.ensure_usage_command_available() {
-                    if trimmed.eq_ignore_ascii_case("reset") {
+                    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("reset") {
                         self.open_usage_menu();
                         return;
                     }
@@ -776,7 +773,7 @@ impl ChatWidget {
                         };
                     if parts.next().is_some() {
                         self.add_error_message(
-                            "Usage: /usage [daily|weekly|cumulative] [account]".to_string(),
+                            "Usage: /usage [daily|weekly|cumulative] [account], /usage <account>, or /usage reset".to_string(),
                         );
                     } else {
                         self.app_event_tx

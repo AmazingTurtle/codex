@@ -33,6 +33,12 @@ use crate::history_cell::plain_lines;
 
 pub(crate) use chart::TokenActivityView;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum TokenActivityTarget {
+    Active,
+    Stored { account_id: String, label: String },
+}
+
 /// Tracks the renderable lifecycle of one token activity history cell.
 #[derive(Debug)]
 enum TokenActivityState {
@@ -94,6 +100,7 @@ impl TokenActivityHandle {
 #[derive(Debug)]
 struct TokenActivityHistoryCell {
     view: TokenActivityView,
+    target: TokenActivityTarget,
     state: Arc<RwLock<TokenActivityState>>,
 }
 
@@ -104,17 +111,24 @@ struct TokenActivityHistoryCell {
 /// matching background response arrives; otherwise the transient card stays loading.
 pub(super) fn new_token_activity_output(
     view: TokenActivityView,
+    target: TokenActivityTarget,
 ) -> (CompositeHistoryCell, TokenActivityHandle) {
+    let suffix = match &target {
+        TokenActivityTarget::Active => String::new(),
+        TokenActivityTarget::Stored { account_id, .. } => format!(" {account_id}"),
+    };
     let command = PlainHistoryCell::new(vec![
-        format!("/usage {}", view.label().to_lowercase())
-            .magenta()
-            .into(),
+        format!("/usage {}{suffix}", view.as_str()).magenta().into(),
     ]);
     let state = Arc::new(RwLock::new(TokenActivityState::Loading));
     let handle = TokenActivityHandle {
         state: Arc::clone(&state),
     };
-    let card = TokenActivityHistoryCell { view, state };
+    let card = TokenActivityHistoryCell {
+        view,
+        target,
+        state,
+    };
     (
         CompositeHistoryCell::new(vec![Box::new(command), Box::new(card)]),
         handle,
@@ -125,7 +139,15 @@ impl HistoryCell for TokenActivityHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         #[expect(clippy::expect_used)]
         let state = self.state.read().expect("token activity state poisoned");
-        match &*state {
+        let label = match &self.target {
+            TokenActivityTarget::Active => "Active account",
+            TokenActivityTarget::Stored { label, .. } => label,
+        };
+        let mut lines = textwrap::wrap(&format!("Account: {label}"), usize::from(width).max(1))
+            .into_iter()
+            .map(|line| line.into_owned().dim().into())
+            .collect::<Vec<Line<'static>>>();
+        lines.extend(match &*state {
             TokenActivityState::Loading => {
                 vec![
                     " Token activity".bold().into(),
@@ -139,7 +161,8 @@ impl HistoryCell for TokenActivityHistoryCell {
             TokenActivityState::Loaded { response, today } => {
                 chart::loaded_lines(self.view, response, *today, width)
             }
-        }
+        });
+        lines
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
@@ -153,11 +176,15 @@ impl ChatWidget {
     /// Each invocation receives a request ID so background responses update only
     /// their own card. The card remains outside transcript history until completion,
     /// which keeps loading visible without disturbing existing transcript content.
-    pub(crate) fn add_token_activity_output(&mut self, view: TokenActivityView) {
+    pub(crate) fn add_token_activity_output(
+        &mut self,
+        view: TokenActivityView,
+        target: TokenActivityTarget,
+    ) {
         let request_id = self.next_token_activity_request_id;
         self.next_token_activity_request_id =
             self.next_token_activity_request_id.wrapping_add(/*rhs*/ 1);
-        let (cell, handle) = new_token_activity_output(view);
+        let (cell, handle) = new_token_activity_output(view, target.clone());
         self.completed_token_activity_output = None;
         self.refreshing_token_activity_output = Some(PendingTokenActivityOutput {
             request_id,
@@ -167,7 +194,7 @@ impl ChatWidget {
         self.bump_active_cell_revision();
         self.request_redraw();
         self.app_event_tx
-            .send(AppEvent::RefreshTokenActivity { request_id });
+            .send(AppEvent::RefreshTokenActivity { request_id, target });
     }
 
     /// Returns the transient token activity card that should render above the composer.

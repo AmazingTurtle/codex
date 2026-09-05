@@ -83,13 +83,16 @@ fn start_daily_token_activity_and_expect_refresh(
     chat: &mut ChatWidget,
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
 ) -> u64 {
-    chat.add_token_activity_output(TokenActivityView::Daily);
+    chat.add_token_activity_output(
+        TokenActivityView::Daily,
+        crate::chatwidget::TokenActivityTarget::Active,
+    );
     expect_token_activity_refresh(rx)
 }
 
 fn expect_token_activity_refresh(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> u64 {
     match rx.try_recv() {
-        Ok(AppEvent::RefreshTokenActivity { request_id }) => request_id,
+        Ok(AppEvent::RefreshTokenActivity { request_id, .. }) => request_id,
         other => panic!("expected token activity refresh request, got {other:?}"),
     }
 }
@@ -1469,12 +1472,16 @@ async fn clearing_pending_token_activity_refreshes_discards_late_result() {
     assert_eq!(
         chat.pending_token_activity_output()
             .map(|cell| lines_to_single_string(&cell.display_lines(u16::MAX))),
-        Some("/usage daily\n\n Token activity\n   Loading...\n".to_string()),
+        Some(
+            "/usage daily\n\nAccount: Active account\n Token activity\n   Loading...\n".to_string()
+        ),
     );
     assert_eq!(
         chat.active_cell_transcript_lines(u16::MAX)
             .map(|lines| lines_to_single_string(&lines)),
-        Some("/usage daily\n\n Token activity\n   Loading...\n".to_string()),
+        Some(
+            "/usage daily\n\nAccount: Active account\n Token activity\n   Loading...\n".to_string()
+        ),
     );
 
     chat.clear_pending_token_activity_refreshes();
@@ -1558,7 +1565,7 @@ async fn completed_token_activity_refresh_returns_one_history_cell() {
     assert!(chat.pending_token_activity_output().is_none());
     assert_eq!(
         lines_to_single_string(&cell.display_lines(u16::MAX)),
-        "/usage daily\n\n Token activity\n   Token activity unavailable\n",
+        "/usage daily\n\nAccount: Active account\n Token activity\n   Token activity unavailable\n",
     );
 }
 
@@ -1580,7 +1587,7 @@ async fn completed_token_activity_refresh_waits_for_active_stream() {
     assert_eq!(
         chat.pending_token_activity_output()
             .map(|cell| lines_to_single_string(&cell.display_lines(u16::MAX))),
-        Some("/usage daily\n\n Token activity\n   Token activity unavailable\n".to_string()),
+        Some("/usage daily\n\nAccount: Active account\n Token activity\n   Token activity unavailable\n".to_string()),
     );
 
     chat.finalize_turn();
@@ -1743,13 +1750,19 @@ async fn repeated_token_activity_refreshes_keep_only_latest_card() {
 
     let first_request_id = start_daily_token_activity_and_expect_refresh(&mut chat, &mut rx);
 
-    chat.add_token_activity_output(TokenActivityView::Weekly);
+    chat.add_token_activity_output(
+        TokenActivityView::Weekly,
+        crate::chatwidget::TokenActivityTarget::Active,
+    );
     let second_request_id = expect_token_activity_refresh(&mut rx);
 
     assert_eq!(
         chat.pending_token_activity_output()
             .map(|cell| lines_to_single_string(&cell.display_lines(u16::MAX))),
-        Some("/usage weekly\n\n Token activity\n   Loading...\n".to_string()),
+        Some(
+            "/usage weekly\n\nAccount: Active account\n Token activity\n   Loading...\n"
+                .to_string()
+        ),
     );
     assert!(!chat.finish_token_activity_refresh(
         first_request_id,

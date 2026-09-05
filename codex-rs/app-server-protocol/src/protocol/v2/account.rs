@@ -534,6 +534,9 @@ pub enum RateLimitResetCreditStatus {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ConsumeAccountRateLimitResetCreditParams {
+    /// Stored ChatGPT account to redeem for. When omitted, uses the active account.
+    #[ts(optional = nullable)]
+    pub account_id: Option<String>,
     /// Identifies one logical reset attempt. A UUID is recommended; reuse the same value when
     /// retrying that attempt.
     pub idempotency_key: String,

@@ -268,6 +268,8 @@ mod status_surface_previews;
 mod terminal_title;
 mod tool_flow;
 mod usage;
+#[path = "tests/usage_picker_tests.rs"]
+mod usage_picker_tests;
 
 pub(crate) use helpers::make_chatwidget_manual_with_sender;
 pub(crate) use helpers::set_chatgpt_auth;

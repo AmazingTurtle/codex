@@ -443,6 +443,7 @@ mod thread_usage;
 pub(crate) use self::thread_usage::ThreadUsageOutcome;
 mod tokens;
 pub(crate) use self::tokens::TokenActivityView;
+pub(crate) use tokens::TokenActivityTarget;
 mod tool_lifecycle;
 mod tool_requests;
 mod transcript;
@@ -452,6 +453,9 @@ mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
 mod usage;
+mod usage_picker;
+pub(crate) use usage_picker::UsagePickerEvent;
+pub(crate) use usage_picker::UsageReadPurpose;
 mod user_messages;
 mod working_directory;
 use self::user_messages::PendingSteer;
@@ -599,6 +603,7 @@ pub(crate) struct ChatWidget {
     rate_limit_reset_picker_request_id: Option<u64>,
     pending_rate_limit_reset_hint_request_id: Option<u64>,
     pending_usage_menu_rate_limit_request_id: Option<u64>,
+    usage_picker: usage_picker::UsagePickerState,
     pending_rate_limit_reset_hint: Option<PlainHistoryCell>,
     available_rate_limit_reset_credits: Option<i64>,
     next_rate_limit_reset_request_id: u64,

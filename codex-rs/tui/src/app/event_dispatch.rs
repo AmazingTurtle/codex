@@ -25,7 +25,7 @@ use codex_product_info::CLI_NAME;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
-fn resolve_chatgpt_account_selector(
+pub(super) fn resolve_chatgpt_account_selector(
     accounts: &[codex_app_server_protocol::ChatgptAccountSummary],
     selector: &str,
 ) -> Result<String, String> {
@@ -317,31 +317,7 @@ impl App {
                 }
             }
             AppEvent::ShowChatgptAccountUsage { view, selector } => {
-                let account_ids = if let Some(selector) = selector {
-                    match app_server.list_chatgpt_accounts().await {
-                        Ok(response) => {
-                            match resolve_chatgpt_account_selector(&response.data, &selector) {
-                                Ok(account_id) => Some(vec![account_id]),
-                                Err(err) => {
-                                    self.chat_widget.add_error_message(err);
-                                    return Ok(AppRunControl::Continue);
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            self.chat_widget.add_error_message(err.to_string());
-                            return Ok(AppRunControl::Continue);
-                        }
-                    }
-                } else {
-                    None
-                };
-                match app_server.read_chatgpt_account_usage(account_ids).await {
-                    Ok(response) => self.chat_widget.add_account_usage_output(view, response),
-                    Err(err) => self
-                        .chat_widget
-                        .add_error_message(format!("Failed to load account usage: {err}")),
-                }
+                self.show_account_usage(view, selector, app_server).await;
             }
             AppEvent::ConfirmRemoveChatgptAccount { account } => {
                 self.chat_widget.show_remove_account_confirmation(account);
@@ -1518,8 +1494,8 @@ impl App {
             AppEvent::RefreshRateLimits { origin } => {
                 self.refresh_rate_limits(app_server, origin);
             }
-            AppEvent::RefreshTokenActivity { request_id } => {
-                self.refresh_token_activity(app_server, request_id);
+            AppEvent::RefreshTokenActivity { request_id, target } => {
+                self.refresh_token_activity(app_server, request_id, target);
             }
             AppEvent::RefreshThreadUsage {
                 thread_id,
@@ -1634,16 +1610,6 @@ impl App {
                             self.chat_widget
                                 .finish_status_rate_limit_refresh(request_id, snapshots);
                         }
-                        RateLimitRefreshOrigin::UsageMenu { request_id } => {
-                            self.chat_widget.finish_usage_menu_rate_limit_refresh(
-                                request_id,
-                                snapshots,
-                                rate_limit_reset_credits.ok_or_else(|| {
-                                    "account/rateLimits/read response did not include rateLimitResetCredits"
-                                    .to_string()
-                                }),
-                            );
-                        }
                         RateLimitRefreshOrigin::ResetPicker { request_id } => {
                             self.chat_widget.finish_rate_limit_reset_credits_refresh(
                                 request_id,
@@ -1681,13 +1647,6 @@ impl App {
                             self.chat_widget
                                 .finish_status_rate_limit_refresh(request_id, Vec::new());
                         }
-                        RateLimitRefreshOrigin::UsageMenu { request_id } => {
-                            self.chat_widget.finish_usage_menu_rate_limit_refresh(
-                                request_id,
-                                Vec::new(),
-                                Err(err),
-                            );
-                        }
                         RateLimitRefreshOrigin::ResetPicker { request_id } => {
                             self.chat_widget.finish_rate_limit_reset_credits_refresh(
                                 request_id,
@@ -1706,16 +1665,22 @@ impl App {
                     self.chat_widget.finish_rate_limit_recovery();
                 }
             },
-            AppEvent::OpenTokenActivity => {
-                self.chat_widget
-                    .add_token_activity_output(crate::chatwidget::TokenActivityView::Daily);
+            AppEvent::UsagePicker(event) => {
+                self.handle_usage_picker_event(event, app_server).await;
             }
-            AppEvent::OpenRateLimitResetCredits => {
-                let request_id = self.chat_widget.show_rate_limit_reset_loading_popup();
-                self.refresh_rate_limits(
-                    app_server,
-                    RateLimitRefreshOrigin::ResetPicker { request_id },
-                );
+            AppEvent::OpenRateLimitResetCredits { account_id } => {
+                // Session banners must never inherit a previously inspected account.
+                if account_id.is_none() {
+                    self.chat_widget.close_usage_picker();
+                }
+                if account_id == self.chat_widget.usage_reset_account_id() {
+                    let request_id = self.chat_widget.show_rate_limit_reset_loading_popup();
+                    if let Some(account_id) = account_id {
+                        self.read_usage_picker_account(app_server, request_id, account_id, crate::chatwidget::UsageReadPurpose::ResetPicker);
+                    } else {
+                        self.refresh_rate_limits(app_server, RateLimitRefreshOrigin::ResetPicker { request_id });
+                    }
+                }
             }
             AppEvent::OpenRateLimitResetConfirmation {
                 picker_request_id,
@@ -1735,10 +1700,12 @@ impl App {
                 );
             }
             AppEvent::ConsumeRateLimitResetCredit {
+                account_id,
                 idempotency_key,
                 credit_id,
             } => {
-                if let Some(request_id) = self
+                if account_id == self.chat_widget.usage_reset_account_id()
+                    && let Some(request_id) = self
                     .chat_widget
                     .start_rate_limit_reset_consumption(&idempotency_key)
                 {
@@ -1747,10 +1714,12 @@ impl App {
                         request_id,
                         idempotency_key,
                         credit_id,
+                        account_id,
                     );
                 }
             }
             AppEvent::RateLimitResetCreditConsumed {
+                account_id,
                 request_id,
                 idempotency_key,
                 credit_id,
@@ -1761,21 +1730,29 @@ impl App {
                         "account/rateLimitResetCredit/consume failed during TUI request: {err}"
                     );
                 }
-                if self.chat_widget.finish_rate_limit_reset_consume(
+                if account_id == self.chat_widget.usage_reset_account_id() && self.chat_widget.finish_rate_limit_reset_consume(
                     request_id,
                     idempotency_key,
                     credit_id,
                     result,
                 ) {
-                    // Reads started before redemption must not restore the pre-reset banner.
-                    self.rate_limit_hard_stop_generation =
-                        self.rate_limit_hard_stop_generation.wrapping_add(1);
-                    self.rate_limit_refresh_state.invalidate_recovery();
-                    self.chat_widget.clear_backend_banner();
-                    self.refresh_rate_limits(
-                        app_server,
-                        RateLimitRefreshOrigin::ResetConsume { request_id },
-                    );
+                    if let Some(account_id) = account_id {
+                        // Recover on successful redemption, even if the subsequent credit read fails.
+                        // AccountUpdated invalidates the identity and request before this result can apply.
+                        if self.chat_widget.usage_reset_account().is_some_and(|account| account.is_active) {
+                            self.rate_limit_hard_stop_generation = self.rate_limit_hard_stop_generation.wrapping_add(1);
+                            self.rate_limit_refresh_state.invalidate_recovery();
+                            self.chat_widget.clear_backend_banner();
+                            self.refresh_rate_limits(app_server, RateLimitRefreshOrigin::Recovery);
+                        }
+                        self.read_usage_picker_account(app_server, request_id, account_id, crate::chatwidget::UsageReadPurpose::ResetConsume);
+                    } else {
+                        // Reads started before redemption must not restore the pre-reset banner.
+                        self.rate_limit_hard_stop_generation = self.rate_limit_hard_stop_generation.wrapping_add(1);
+                        self.rate_limit_refresh_state.invalidate_recovery();
+                        self.chat_widget.clear_backend_banner();
+                        self.refresh_rate_limits(app_server, RateLimitRefreshOrigin::ResetConsume { request_id });
+                    }
                 }
             }
             AppEvent::TokenActivityLoaded { request_id, result } => {

@@ -664,6 +664,13 @@
     },
     "ConsumeAccountRateLimitResetCreditParams": {
       "properties": {
+        "accountId": {
+          "description": "Stored ChatGPT account to redeem for. When omitted, uses the active account.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "creditId": {
           "description": "Opaque reset-credit identifier to redeem. When omitted, the backend selects the next available credit.",
           "type": [
