@@ -1,0 +1,42 @@
+name: Better Codex native voice test inputs
+description: Build and cache the pinned development prefix for full voice-host tests.
+inputs:
+  repository:
+    description: Candidate repository containing the pinned native source recipe
+    default: ${{ github.workspace }}
+runs:
+  using: composite
+  steps:
+    - name: Select exact native build inputs
+      id: pin
+      shell: bash
+      env:
+        VOICE_REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        pin=$(sha256sum "$VOICE_REPOSITORY/third_party/voice/sources.json" "$VOICE_REPOSITORY/third_party/voice/build_native.py" | cut -d ' ' -f 1 | sha256sum | cut -d ' ' -f 1)
+        echo "sha=$pin" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7
+      id: cache
+      with:
+        path: ${{ runner.temp }}/better-codex-voice/prefix
+        key: better-codex-voice-linux-${{ steps.pin.outputs.sha }}
+    - name: Build pinned native voice development inputs
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VOICE_REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:6])))')
+        taskset -c "$cpus" python3 "$VOICE_REPOSITORY/third_party/voice/build_native.py" --target x86_64-unknown-linux-gnu --jobs 6 --archives "$RUNNER_TEMP/voice-archives" --output "$RUNNER_TEMP/better-codex-voice" --cc "$(command -v cc)" --cxx "$(command -v c++)" --cmake "$(command -v cmake)" --make "$(command -v make)" --pkg-config "$(command -v pkg-config)" --shell /bin/bash
+    - uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7
+      if: steps.cache.outputs.cache-hit != 'true'
+      with:
+        path: ${{ runner.temp }}/better-codex-voice/prefix
+        key: better-codex-voice-linux-${{ steps.pin.outputs.sha }}
+    - name: Use pinned native voice development inputs
+      shell: bash
+      run: |
+        echo "PKG_CONFIG_PATH=$RUNNER_TEMP/better-codex-voice/prefix/lib/pkgconfig:$RUNNER_TEMP/better-codex-voice/prefix/share/pkgconfig" >> "$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=$RUNNER_TEMP/better-codex-voice/prefix/lib" >> "$GITHUB_ENV"

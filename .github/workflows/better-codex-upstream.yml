@@ -1,0 +1,169 @@
+name: Better Codex upstream updates
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: Exact stable rust-v tag (empty selects newest stable)
+        type: string
+      candidate_branch:
+        description: Completed recovery branch, if resuming a failed rebase
+        type: string
+      candidate_sha:
+        description: Exact recovery commit
+        type: string
+      source_sha:
+        description: Exact maintained source commit recorded in the failed attempt
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: better-codex-maintenance
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CARGO_BUILD_JOBS: 6
+      RUST_TEST_THREADS: 6
+      RAYON_NUM_THREADS: 6
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - name: Select exact stable release
+        id: target
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
+          RECOVERY_BRANCH: ${{ inputs.candidate_branch }}
+        run: |
+          set -euo pipefail
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" ]]; then
+            tag=$(gh api --paginate repos/openai/codex/git/matching-refs/tags/rust-v --jq '.[].ref | sub("^refs/tags/"; "")' | rg '^rust-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          fi
+          [[ "$tag" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          sha=$(gh api "repos/openai/codex/commits/$tag" --jq .sha)
+          git remote add upstream https://github.com/openai/codex.git
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          source=$(git rev-parse HEAD)
+          current=$(git for-each-ref --merged HEAD --format='%(refname:short)' 'refs/tags/rust-v*' | rg '^rust-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [[ -n "$RECOVERY_BRANCH" ]]; then
+            [[ -n "$REQUESTED_TAG" ]]
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$current" == "$tag" && -z "$REQUESTED_TAG" ]]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          elif gh pr list --state open --json headRefName --jq '.[].headRefName' | rg -q "^candidate/$tag/${source:0:12}-"; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: ./.github/actions/setup-ci
+        if: steps.target.outputs.needed == 'true'
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        if: steps.target.outputs.needed == 'true'
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        if: steps.target.outputs.needed == 'true'
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
+        if: steps.target.outputs.needed == 'true'
+        with:
+          components: clippy,rustfmt
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532
+        if: steps.target.outputs.needed == 'true'
+        with:
+          tool: nextest
+          version: 0.9.103
+      - name: Prepare candidate and exact state
+        if: steps.target.outputs.needed == 'true'
+        shell: bash
+        env:
+          UPSTREAM_TAG: ${{ steps.target.outputs.tag }}
+          UPSTREAM_SHA: ${{ steps.target.outputs.sha }}
+          RECOVERY_BRANCH: ${{ inputs.candidate_branch }}
+          RECOVERY_SHA: ${{ inputs.candidate_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "better-codex-release[bot]"
+          git config user.email "better-codex-release@users.noreply.github.com"
+          mkdir -p "$RUNNER_TEMP/better-codex-state"
+          args=(--upstream-tag "$UPSTREAM_TAG" --upstream-sha "$UPSTREAM_SHA" --worktree "$RUNNER_TEMP/better-codex-candidate" --state "$RUNNER_TEMP/better-codex-state/state.json" --cpus 6)
+          if [[ -n "$RECOVERY_BRANCH" ]]; then
+            [[ "$RECOVERY_SHA" =~ ^[0-9a-f]{40}$ && "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+            args+=(--source "$SOURCE_SHA" --candidate-branch "$RECOVERY_BRANCH" --candidate-sha "$RECOVERY_SHA")
+          fi
+          python3 scripts/better_codex_release/rebase.py "${args[@]}"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/better-codex-candidate/codex-rs/target" >> "$GITHUB_ENV"
+      - name: Install native build dependencies
+        if: steps.target.outputs.needed == 'true'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential cmake pkg-config libcap-dev libasound2-dev bubblewrap
+      - name: Select recovery native dependencies
+        if: steps.target.outputs.needed == 'true'
+        run: |
+          scope=$(python3 "$RUNNER_TEMP/better-codex-candidate/scripts/better_codex_release/validation.py" --state "$RUNNER_TEMP/better-codex-state/state.json" --scope-only)
+          echo "NEEDS_VOICE_SDK=$(jq 'index("codex-voice-host") != null' <<< "$scope")" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-better-codex-voice
+        if: steps.target.outputs.needed == 'true' && env.NEEDS_VOICE_SDK == 'true'
+        with:
+          repository: ${{ runner.temp }}/better-codex-candidate
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        if: steps.target.outputs.needed == 'true'
+        with:
+          workspaces: ${{ runner.temp }}/better-codex-candidate/codex-rs -> target
+          key: better-codex-linux
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+      - name: Validate once, package, and publish
+        if: steps.target.outputs.needed == 'true'
+        run: |
+          python3 "$RUNNER_TEMP/better-codex-candidate/scripts/better_codex_release/pipeline.py" --state "$RUNNER_TEMP/better-codex-state/state.json" --package-dir "$RUNNER_TEMP/better-codex-package" --output-dir "$RUNNER_TEMP/better-codex-artifacts" --publish
+      - name: Close completed recovery PR
+        if: success() && inputs.candidate_branch != '' && steps.target.outputs.needed == 'true'
+        env:
+          RECOVERY_BRANCH: ${{ inputs.candidate_branch }}
+        run: |
+          number=$(gh pr list --state open --head "$RECOVERY_BRANCH" --json number --jq '.[0].number // empty')
+          if [[ -n "$number" ]]; then gh pr close "$number"; fi
+      - name: Keep failed candidate for recovery
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/better-codex-state/state.json"
+          [[ -f "$state" ]] || exit 0
+          branch=$(jq -r .candidate_branch "$state")
+          candidate=$(jq -r .worktree "$state")
+          git -C "$candidate" diff --binary > "$RUNNER_TEMP/better-codex-state/candidate.patch"
+          git -C "$candidate" status --porcelain > "$RUNNER_TEMP/better-codex-state/candidate-status.txt"
+          lease=$(jq -r '.expected_candidate_branch // ""' "$state")
+          git -C "$candidate" push --force-with-lease="refs/heads/$branch:$lease" origin "HEAD:refs/heads/$branch"
+          body="$RUNNER_TEMP/better-codex-state/RECOVERY.md"
+          if [[ ! -f "$body" ]]; then
+            printf 'Candidate validation failed. See %s/actions/runs/%s and attached diagnostics.\n' "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "$body"
+          fi
+          existing=$(gh pr list --state open --head "$branch" --json number --jq '.[0].number // empty')
+          if [[ -n "$existing" ]]; then
+            gh pr edit "$existing" --body-file "$body"
+          else
+            gh pr create --draft --base main --head "$branch" --title "Recover Better Codex upstream update" --body-file "$body"
+          fi
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        if: always() && steps.target.outputs.needed == 'true'
+        with:
+          name: better-codex-maintenance-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/better-codex-state
+            ${{ runner.temp }}/better-codex-artifacts
