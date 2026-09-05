@@ -2436,7 +2436,7 @@ fn open_agent_picker_marks_loaded_threads_open() -> Result<()> {
 #[test]
 fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -> Result<()> {
     const WORKER_THREADS: usize = 1;
-    const TEST_STACK_SIZE_BYTES: usize = 12 * 1024 * 1024;
+    const TEST_STACK_SIZE_BYTES: usize = 16 * 1024 * 1024;
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(WORKER_THREADS)
