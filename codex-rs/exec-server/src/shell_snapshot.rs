@@ -370,6 +370,13 @@ impl ShellSnapshotCache {
                 params.argv[2]
             )
         };
+        if matches!(shell_type, ShellType::Bash) {
+            // Sandboxed getpeername can report EPERM, which Bash interprets as
+            // a remote shell and sources .bashrc even in privileged mode.
+            prepared
+                .command
+                .insert(shell_start + 1, "--norc".to_string());
+        }
 
         telemetry.shell_snapshot_command(wait, availability, "used");
         Ok(reader)
