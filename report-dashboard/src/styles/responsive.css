@@ -1,0 +1,278 @@
+@media (min-width: 1500px) {
+  main {
+    padding-left: 55px;
+    padding-right: 55px;
+  }
+  .chart {
+    height: 320px;
+  }
+  .breakdown-chart {
+    height: 220px;
+  }
+  .limit-chart {
+    height: 200px;
+  }
+}
+@media (max-width: 1050px) {
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .metric:nth-last-child(-n + 2) {
+    grid-column: span 1;
+  }
+  .filter-bar {
+    gap: 9px;
+  }
+  .filter-disclosure {
+    margin-left: 0;
+  }
+  .select-filters {
+    flex-wrap: wrap;
+  }
+  .filter-bar > .icon-button {
+    margin-left: auto;
+  }
+  .report-stamp {
+    display: none;
+  }
+  .account-heading h3 {
+    max-width: 180px;
+  }
+  .limit-grid {
+    grid-template-columns: 1fr;
+  }
+  .metric-value {
+    font-size: 30px;
+  }
+}
+@media (max-width: 767px) {
+  .topbar {
+    height: 64px;
+    padding: 0 20px;
+  }
+  .brand {
+    font-size: 16px;
+  }
+  .brand-divider,
+  .brand-section,
+  .local-badge {
+    display: none;
+  }
+  .theme-button {
+    min-width: 0;
+  }
+  .theme-button span {
+    display: none;
+  }
+  main {
+    padding: 30px 18px 0;
+  }
+  .hero {
+    margin-bottom: 25px;
+  }
+  h1 {
+    font-size: 32px;
+    letter-spacing: -1.1px;
+  }
+  .hero .eyebrow {
+    font-size: 8px;
+    letter-spacing: 1.4px;
+  }
+  .hero-description {
+    font-size: 11px;
+  }
+  .filter-bar {
+    padding: 10px;
+    gap: 8px;
+  }
+  .date-filters {
+    flex: 1;
+  }
+  .date-filters input {
+    width: 108px;
+    min-width: 0;
+    font-size: 10px;
+  }
+  .filter-disclosure {
+    width: calc(100% - 40px);
+    order: 3;
+  }
+  .filter-disclosure > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    padding: 6px 1px;
+  }
+  .filter-disclosure > summary:after {
+    content: "⌄";
+    margin-left: auto;
+  }
+  .select-filters {
+    display: flex;
+    gap: 7px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .select-filters label {
+    flex: 1;
+    min-width: 85px;
+  }
+  .select-filters select {
+    width: 100%;
+    max-width: 100%;
+    font-size: 10px;
+    padding: 7px;
+  }
+  .filter-bar > .icon-button {
+    order: 4;
+    align-self: flex-start;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .metric {
+    padding: 16px 14px;
+  }
+  .metric:last-child {
+    grid-column: span 2;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 20px;
+  }
+  .metric:last-child .metric-value {
+    grid-column: 2;
+    grid-row: 1/3;
+    margin: 0;
+  }
+  .metric:last-child .metric-label {
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  .metric:last-child .metric-detail {
+    margin-top: 6px;
+  }
+  .metric-label {
+    font-size: 10px;
+  }
+  .metric-value {
+    font-size: 29px;
+    margin: 13px 0 7px;
+  }
+  .metric-detail {
+    font-size: 8px;
+  }
+  .panel {
+    padding: 18px 15px;
+  }
+  .panel-heading {
+    gap: 8px;
+  }
+  h2 {
+    font-size: 16px;
+  }
+  .panel-heading p:not(.eyebrow) {
+    font-size: 9px;
+  }
+  .panel-tag {
+    font-size: 7px;
+  }
+  .activity-total {
+    margin-top: 20px;
+    font-size: 22px;
+  }
+  .activity-total > .chart-hint {
+    display: none;
+  }
+  .chart {
+    height: 260px;
+  }
+  .breakdown-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 25px;
+  }
+  .breakdown-chart {
+    height: 190px;
+  }
+  .limit-chart {
+    height: 180px;
+  }
+  .account-heading h3 {
+    max-width: 180px;
+  }
+  .section-description {
+    font-size: 9px;
+  }
+  .usage-panel {
+    padding: 0;
+  }
+  .usage-panel > .panel-heading {
+    padding: 18px 15px;
+  }
+  .usage-panel h2 {
+    font-size: 15px;
+  }
+  .subtle-button {
+    font-size: 9px;
+    padding: 6px;
+  }
+  .coverage {
+    padding: 12px;
+  }
+  .coverage summary {
+    flex-wrap: wrap;
+  }
+  .coverage summary > span {
+    margin-left: 0;
+    width: 100%;
+    padding-left: 22px;
+  }
+  .coverage-content {
+    font-size: 10px;
+  }
+  footer {
+    flex-direction: column;
+    gap: 10px;
+    padding: 23px 0;
+    font-size: 8px;
+  }
+  .chart-empty {
+    height: 250px;
+  }
+}
+@media (max-width: 390px) {
+  h1 {
+    font-size: 29px;
+  }
+  .mobile-break {
+    display: block;
+  }
+  .text-button {
+    font-size: 9px;
+  }
+  .date-filters {
+    gap: 5px;
+  }
+  .date-filters input {
+    width: 103px;
+  }
+  .account-heading h3 {
+    max-width: 160px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .metric:hover {
+    transform: none;
+  }
+}
