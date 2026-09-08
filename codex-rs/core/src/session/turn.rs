@@ -2500,6 +2500,7 @@ async fn try_run_sampling_request(
         .instrument(trace_span!("stream_request"))
         .or_cancel(&cancellation_token)
         .await??;
+    let request_attribution = stream.request_attribution().clone();
     let mut in_flight: FuturesOrdered<InFlightFuture<'static>> = FuturesOrdered::new();
     let mut needs_follow_up = false;
     let mut last_agent_message: Option<String> = None;
@@ -2853,6 +2854,7 @@ async fn try_run_sampling_request(
                     &response_id,
                     token_usage.as_ref(),
                     usage_metadata.as_ref(),
+                    &request_attribution,
                 )
                 .await;
                 let budget_result = sess

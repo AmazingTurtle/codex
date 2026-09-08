@@ -58,6 +58,7 @@ pub enum SlashCommand {
     #[strum(to_string = "pwd", serialize = "cwd")]
     Pwd,
     Usage,
+    Report,
     DebugConfig,
     Title,
     Statusline,
@@ -120,6 +121,7 @@ impl SlashCommand {
             SlashCommand::Cd => "change the current working directory",
             SlashCommand::Pwd => "show the current working directory",
             SlashCommand::Usage => "view account usage or use a usage limit reset",
+            SlashCommand::Report => "generate an interactive offline telemetry dashboard",
             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
             SlashCommand::Title => "configure which items appear in the terminal title",
             SlashCommand::Statusline => "configure which items appear in the status line",
@@ -208,6 +210,7 @@ impl SlashCommand {
                 | SlashCommand::Warnings
                 | SlashCommand::Pwd
                 | SlashCommand::Usage
+                | SlashCommand::Report
                 | SlashCommand::Ide
         )
     }
@@ -281,6 +284,7 @@ impl SlashCommand {
             | SlashCommand::Warnings
             | SlashCommand::Pwd
             | SlashCommand::Usage
+            | SlashCommand::Report
             | SlashCommand::DebugConfig
             | SlashCommand::Ps
             | SlashCommand::Stop

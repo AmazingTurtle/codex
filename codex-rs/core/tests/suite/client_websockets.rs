@@ -213,6 +213,7 @@ async fn responses_websocket_preserves_credit_usage_metadata() {
         Some(codex_protocol::ResponseUsageMetadata {
             amount: Some("0.12345678901234567890".to_string()),
             metadata: Some(expected_metadata),
+            ..Default::default()
         }),
     );
     assert_eq!(server.single_connection().len(), 1);

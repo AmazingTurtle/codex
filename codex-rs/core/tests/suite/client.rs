@@ -3909,7 +3909,21 @@ async fn multiple_accounts_force_http_and_retry_usage_limits() -> anyhow::Result
                 .set_body_string(sse(vec![
                     ev_response_created("resp-rotated"),
                     ev_assistant_message("msg-rotated", "rotated account worked"),
-                    ev_completed("resp-rotated"),
+                    json!({
+                        "type": "response.completed",
+                        "response": {
+                            "id": "resp-rotated",
+                            "headers": { "openai-model": "gpt-5.5-routed" },
+                            "service_tier": "priority",
+                            "usage": {
+                                "input_tokens": 12,
+                                "input_tokens_details": { "cached_tokens": 7 },
+                                "output_tokens": 3,
+                                "output_tokens_details": { "reasoning_tokens": 2 },
+                                "total_tokens": 15
+                            }
+                        }
+                    }),
                 ])),
         )
         .expect(2)
@@ -3928,10 +3942,29 @@ async fn multiple_accounts_force_http_and_retry_usage_limits() -> anyhow::Result
         })
         .build(&server)
         .await?;
+    let rollout_path = codex_fixture.codex.rollout_path().expect("rollout path");
     codex_fixture.submit_turn("hello").await?;
     codex_fixture
         .submit_turn("continue on the selected account")
         .await?;
+    codex_fixture.codex.shutdown_and_wait().await?;
+
+    let records = std::fs::read_to_string(rollout_path)?
+        .lines()
+        .filter_map(|line| codex_rollout::parse_rollout_line(line).ok())
+        .filter_map(|line| match line.item {
+            RolloutItem::TokenUsageRecord(record) => Some(record),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(records.len(), 2);
+    assert!(records.iter().all(|record| {
+        record.account_id.as_deref() == Some("account-a")
+            && record.requested_model.as_deref() == Some("gpt-5.5")
+            && record.requested_service_tier.is_none()
+            && record.reported_model.as_deref() == Some("gpt-5.5-routed")
+            && record.reported_service_tier.as_deref() == Some("priority")
+    }));
 
     Ok(())
 }

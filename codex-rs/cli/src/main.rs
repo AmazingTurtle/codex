@@ -197,6 +197,9 @@ enum Subcommand {
     /// Check for the latest Better Codex source release.
     Update,
 
+    /// Generate an interactive offline telemetry dashboard from local sessions.
+    Report,
+
     /// Diagnose the local Better Codex installation, config, auth, and runtime health.
     Doctor(DoctorCommand),
 
@@ -1736,6 +1739,17 @@ async fn cli_main(
             )?;
             update::run().await?;
         }
+        Some(Subcommand::Report) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "report",
+            )?;
+            let path = codex_report::generate_report(&find_codex_home()?).await?;
+            let link = url::Url::from_file_path(&path)
+                .map_err(|()| anyhow::anyhow!("report path must be absolute"))?;
+            println!("[Open telemetry dashboard]({link})\n{}", path.display());
+        }
         Some(Subcommand::Doctor(doctor_cli)) => {
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
@@ -2653,6 +2667,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::Completion(_)) => Some("completion"),
         Some(Subcommand::ImportCodexState(_)) => Some("import-codex-state"),
         Some(Subcommand::Update) => Some("update"),
+        Some(Subcommand::Report) => Some("report"),
         Some(Subcommand::Cloud(_)) => Some("cloud"),
         Some(Subcommand::Sandbox(_)) => Some("sandbox"),
         Some(Subcommand::Debug(_)) => Some("debug"),

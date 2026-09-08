@@ -129,6 +129,7 @@ use crate::attestation::AttestationProvider;
 use crate::attestation::X_OAI_ATTESTATION_HEADER;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
+use crate::client_common::ResponseRequestAttribution;
 use crate::client_common::ResponseStream;
 use crate::context::BaseInstructionsFragment;
 use crate::context::ContextualUserFragment;
@@ -1961,6 +1962,11 @@ impl ModelClientSession {
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
+            let request_attribution = ResponseRequestAttribution {
+                account_id: request_account_id.clone(),
+                requested_model: Some(request.model.clone()),
+                requested_service_tier: request.service_tier.clone(),
+            };
             let client = ApiResponsesClient::new(
                 transport,
                 client_setup.api_provider,
@@ -1976,6 +1982,7 @@ impl ModelClientSession {
                         request_session_telemetry,
                         inference_trace_attempt,
                         Arc::clone(&self.client.state.provider),
+                        request_attribution,
                     );
                     return Ok(stream);
                 }
@@ -2138,6 +2145,15 @@ impl ModelClientSession {
             if guardian_reviewer {
                 request.service_tier = None;
             }
+            let request_attribution = ResponseRequestAttribution {
+                account_id: client_setup
+                    .auth
+                    .as_ref()
+                    .filter(|auth| auth.api_auth_mode() == AuthMode::Chatgpt)
+                    .and_then(CodexAuth::get_account_id),
+                requested_model: Some(request.model.clone()),
+                requested_service_tier: request.service_tier.clone(),
+            };
             request.access_programs = cyber_access_program::for_auth(
                 client_setup.auth.as_ref(),
                 prompt.cyber_access_program,
@@ -2329,6 +2345,7 @@ impl ModelClientSession {
                 request_session_telemetry,
                 inference_trace_attempt,
                 Arc::clone(&self.client.state.provider),
+                request_attribution,
             );
             self.websocket_session.last_response_rx = Some(last_request_rx);
             return Ok(WebsocketStreamOutcome::Stream(stream));
@@ -2569,6 +2586,7 @@ fn map_response_stream(
     session_telemetry: SessionTelemetry,
     inference_trace_attempt: InferenceTraceAttempt,
     provider: SharedModelProvider,
+    request_attribution: ResponseRequestAttribution,
 ) -> (ResponseStream, oneshot::Receiver<LastResponse>) {
     let codex_api::ResponseStream {
         rx_event,
@@ -2584,6 +2602,7 @@ fn map_response_stream(
         session_telemetry,
         inference_trace_attempt,
         provider,
+        request_attribution,
     )
 }
 
@@ -2593,6 +2612,7 @@ fn map_response_events<S>(
     session_telemetry: SessionTelemetry,
     inference_trace_attempt: InferenceTraceAttempt,
     provider: SharedModelProvider,
+    request_attribution: ResponseRequestAttribution,
 ) -> (ResponseStream, oneshot::Receiver<LastResponse>)
 where
     S: futures::Stream<Item = std::result::Result<ResponseEvent, ApiError>>
@@ -2732,6 +2752,7 @@ where
         ResponseStream {
             rx_event,
             consumer_dropped: consumer_dropped_for_stream,
+            request_attribution,
         },
         rx_last_response,
     )

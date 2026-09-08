@@ -1,3 +1,4 @@
+mod account_telemetry;
 mod backfill_state;
 mod graph;
 mod log;
@@ -9,6 +10,8 @@ mod thread_attachment;
 mod thread_goal;
 mod thread_metadata;
 
+pub use account_telemetry::AccountLimitObservation;
+pub use account_telemetry::UsageResetEvent;
 pub use backfill_state::BackfillState;
 pub use backfill_state::BackfillStatus;
 pub use graph::DirectionalThreadSpawnEdgeStatus;
