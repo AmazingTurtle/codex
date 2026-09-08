@@ -351,10 +351,6 @@ impl AccountRequestProcessor {
         }
     }
 
-
-
-
-
     async fn load_latest_config(&self) -> Config {
         match self
             .config_manager
@@ -1413,7 +1409,6 @@ impl AccountRequestProcessor {
         })
     }
 
-
     async fn get_account_token_usage_response(
         &self,
         params: Option<GetAccountTokenUsageParams>,
@@ -1519,9 +1514,6 @@ impl AccountRequestProcessor {
         .map_err(|err| internal_error(format!("failed to fetch token usage profile: {err}")))?;
         Ok(Self::account_token_usage_response(profile))
     }
-
-
-
 
     async fn get_workspace_messages_response(
         &self,
