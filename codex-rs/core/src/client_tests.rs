@@ -3,7 +3,6 @@ use super::ModelClient;
 use super::NonIncrementalReason;
 use super::PendingUnauthorizedRetry;
 use super::Prompt;
-use super::ResponseRequestAttribution;
 use super::UnauthorizedRecoveryExecution;
 use super::X_CODEX_INSTALLATION_ID_HEADER;
 use super::X_CODEX_PARENT_THREAD_ID_HEADER;
@@ -2280,7 +2279,6 @@ async fn intercepted_output_reaches_trace_and_websocket_bookkeeping() -> anyhow:
         attempt,
         test_model_provider(),
         vec![Box::new(ReplaceOutput)],
-        ResponseRequestAttribution::default(),
     );
     let mut delivered = Vec::new();
     while let Some(event) = stream.next().await {

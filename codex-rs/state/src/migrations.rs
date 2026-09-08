@@ -4,6 +4,10 @@ use crate::sqlite::SqliteWriteQueryExt;
 use sqlx::migrate::Migrator;
 use sqlx_sqlite::SqlitePool;
 
+// Reserve downstream migration numbers above upstream's sequential range.
+// Keep the SQL unchanged so released telemetry checksums remain recognizable.
+const ACCOUNT_TELEMETRY_MIGRATION_VERSION: i64 = 1_000_000_001;
+
 pub(crate) static STATE_MIGRATOR: Migrator = sqlx_macros::migrate!("./migrations");
 pub(crate) static LOGS_MIGRATOR: Migrator = sqlx_macros::migrate!("./logs_migrations");
 pub(crate) static GOALS_MIGRATOR: Migrator = sqlx_macros::migrate!("./goals_migrations");
@@ -55,14 +59,36 @@ pub(crate) fn runtime_thread_history_migrator() -> Migrator {
     runtime_migrator(&THREAD_HISTORY_MIGRATOR)
 }
 
-pub(crate) async fn repair_legacy_recency_migration_version(
+pub(crate) async fn repair_legacy_migration_versions(
     pool: &SqlitePool,
     migrator: &Migrator,
 ) -> anyhow::Result<()> {
-    let Some(recency_migration) = migrator
+    repair_legacy_migration_version(
+        pool, migrator, /*legacy_version*/ 38, /*current_version*/ 39,
+    )
+    .await?;
+    for legacy_version in [53, 55, 56] {
+        repair_legacy_migration_version(
+            pool,
+            migrator,
+            legacy_version,
+            ACCOUNT_TELEMETRY_MIGRATION_VERSION,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn repair_legacy_migration_version(
+    pool: &SqlitePool,
+    migrator: &Migrator,
+    legacy_version: i64,
+    current_version: i64,
+) -> anyhow::Result<()> {
+    let Some(current_migration) = migrator
         .migrations
         .iter()
-        .find(|migration| migration.version == 39)
+        .find(|migration| migration.version == current_version)
     else {
         return Ok(());
     };
@@ -76,7 +102,7 @@ pub(crate) async fn repair_legacy_recency_migration_version(
         return Ok(());
     }
 
-    let legacy_recency_needs_repair = sqlx::query_scalar::<_, i64>(
+    let legacy_migration_needs_repair = sqlx::query_scalar::<_, i64>(
         r#"
 SELECT 1
 FROM _sqlx_migrations
@@ -87,13 +113,13 @@ WHERE version = ?
   )
         "#,
     )
-    .bind(38_i64)
-    .bind(recency_migration.checksum.as_ref())
-    .bind(recency_migration.version)
+    .bind(legacy_version)
+    .bind(current_migration.checksum.as_ref())
+    .bind(current_migration.version)
     .fetch_optional(pool)
     .await?
     .is_some();
-    if !legacy_recency_needs_repair {
+    if !legacy_migration_needs_repair {
         return Ok(());
     }
 
@@ -108,11 +134,11 @@ WHERE version = ?
   )
         "#,
     )
-    .bind(recency_migration.version)
-    .bind(recency_migration.description.as_ref())
-    .bind(38_i64)
-    .bind(recency_migration.checksum.as_ref())
-    .bind(recency_migration.version)
+    .bind(current_migration.version)
+    .bind(current_migration.description.as_ref())
+    .bind(legacy_version)
+    .bind(current_migration.checksum.as_ref())
+    .bind(current_migration.version)
     .execute_with_busy_retry(pool)
     .await?;
     Ok(())
