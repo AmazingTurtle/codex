@@ -12,6 +12,7 @@ use codex_app_server_protocol::JSONRPCError;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::RequestId;
 use codex_config::types::AuthCredentialsStoreMode;
+use codex_utils_absolute_path::test_support::PathExt;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
@@ -186,6 +187,12 @@ async fn consume_rate_limit_reset_credit_requires_chatgpt_auth() -> Result<()> {
 #[tokio::test]
 async fn consume_account_rate_limit_reset_credit_maps_backend_outcomes() -> Result<()> {
     let (codex_home, server) = chatgpt_test_context().await?;
+    let config_path = codex_home.path().join("config.toml");
+    let config = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        format!("{config}\n[features]\nsqlite = true\n"),
+    )?;
     let cases = [
         (
             "request-reset",
@@ -235,6 +242,18 @@ async fn consume_account_rate_limit_reset_credit_maps_backend_outcomes() -> Resu
             }
         );
     }
+    let reader = codex_state::AccountTelemetryReader::open(
+        &codex_state::SqliteConfig::new_for_testing(codex_home.path().abs()),
+    )
+    .await?;
+    let reset_events = reader.list_usage_reset_events().await?;
+    assert_eq!(reset_events.len(), 1);
+    assert_eq!(reset_events[0].account_id, "account-123");
+    assert_eq!(
+        reset_events[0].idempotency_key.as_deref(),
+        Some("request-reset")
+    );
+    assert_eq!(reset_events[0].limit_id.as_deref(), Some("codex"));
     Ok(())
 }
 

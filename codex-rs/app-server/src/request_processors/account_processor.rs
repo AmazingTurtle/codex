@@ -18,6 +18,7 @@ mod bedrock_setup;
 mod gateway_oauth;
 mod rate_limit_resets;
 mod workspace_routing;
+mod telemetry;
 
 // Duration before a browser ChatGPT login attempt is abandoned.
 const LOGIN_CHATGPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -94,6 +95,7 @@ pub(crate) struct AccountRequestProcessor {
     outgoing: Arc<OutgoingMessageSender>,
     config: Arc<Config>,
     config_manager: ConfigManager,
+    state_db: Option<StateDbHandle>,
     active_login: Arc<Mutex<Option<ActiveLogin>>>,
     workspace_routing: Arc<Mutex<Option<workspace_routing::CachedWorkspaceRouting>>>,
     workspace_routing_fetches: Arc<Mutex<workspace_routing::WorkspaceRoutingFetches>>,
@@ -119,6 +121,7 @@ impl AccountRequestProcessor {
         outgoing: Arc<OutgoingMessageSender>,
         config: Arc<Config>,
         config_manager: ConfigManager,
+        state_db: Option<StateDbHandle>,
     ) -> Arc<Self> {
         let gateway_notifications = crate::gateway_oauth_notifications::spawn(
             Arc::clone(&auth_manager),
@@ -168,6 +171,7 @@ impl AccountRequestProcessor {
             outgoing,
             config,
             config_manager,
+            state_db,
             active_login: Arc::new(Mutex::new(None)),
             gateway_login: Arc::new(std::sync::Mutex::new(/*t*/ None)),
             gateway_client: Arc::new(std::sync::Mutex::new(/*t*/ None)),
@@ -1417,7 +1421,7 @@ impl AccountRequestProcessor {
             .rate_limit_upsell
             .filter(|_| matches_active_account);
 
-        Ok(GetAccountRateLimitsResponse {
+        let response = GetAccountRateLimitsResponse {
             ordinary_usage_allowed: response
                 .ordinary_usage_allowed
                 .filter(|_| matches_active_account),
@@ -1431,7 +1435,9 @@ impl AccountRequestProcessor {
             rate_limit_reset_credits,
             account_id: response.account_id,
             rate_limit_upsell,
-        })
+        };
+        self.record_account_rate_limits(auth, &response).await;
+        Ok(response)
     }
 
     async fn get_account_rate_limits_many_response(

@@ -44,24 +44,6 @@ fn bar_levels_fill_from_bottom() {
 }
 
 #[test]
-fn token_activity_view_aliases_parse() {
-    assert_eq!(TokenActivityView::parse(""), Some(TokenActivityView::Daily));
-    assert_eq!(
-        TokenActivityView::parse("day"),
-        Some(TokenActivityView::Daily)
-    );
-    assert_eq!(
-        TokenActivityView::parse("week"),
-        Some(TokenActivityView::Weekly)
-    );
-    assert_eq!(
-        TokenActivityView::parse("cumulative"),
-        Some(TokenActivityView::Cumulative)
-    );
-    assert_eq!(TokenActivityView::parse("year"), None);
-}
-
-#[test]
 fn daily_graph_snapshot_uses_distinct_empty_and_active_cells() {
     let today =
         NaiveDate::from_ymd_opt(/*year*/ 2026, /*month*/ 5, /*day*/ 29).expect("valid date");

@@ -29,20 +29,6 @@ pub(crate) enum TokenActivityView {
 }
 
 impl TokenActivityView {
-    /// Parses the optional `/usage` argument into a supported chart view.
-    ///
-    /// An empty argument selects Daily when a mode is requested. The bare `/usage`
-    /// command opens its menu. Returning `None` lets the slash-command dispatcher
-    /// report unsupported arguments instead of silently choosing a view.
-    pub(crate) fn parse(value: &str) -> Option<Self> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "" | "day" | "daily" => Some(Self::Daily),
-            "week" | "weekly" => Some(Self::Weekly),
-            "cumulative" => Some(Self::Cumulative),
-            _ => None,
-        }
-    }
-
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Daily => "Daily",

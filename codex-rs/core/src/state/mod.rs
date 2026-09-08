@@ -12,6 +12,7 @@ pub(crate) use auto_compact_window::AutoCompactWindowSnapshot;
 pub(crate) use service::SessionServices;
 pub(crate) use session::ReasoningEffortPin;
 pub(crate) use session::SessionState;
+pub(crate) use session::TokenUsageRecordInput;
 pub(crate) use turn::AcceptedUserInputResponse;
 pub(crate) use turn::ActiveTurn;
 pub(crate) use turn::MailboxDeliveryPhase;

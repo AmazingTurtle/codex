@@ -1,4 +1,6 @@
 use super::*;
+use chrono::Utc;
+use codex_state::UsageResetEvent;
 
 const RATE_LIMIT_RESET_REQUEST_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 10);
 const RATE_LIMIT_RESET_DETAILS_REQUEST_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 5);
@@ -53,6 +55,7 @@ impl AccountRequestProcessor {
             return Err(invalid_request("creditId must not be empty"));
         }
 
+        let requested_account_id = params.account_id.clone();
         let auth_and_factory = if let Some(account_id) = params.account_id {
             self.selected_chatgpt_accounts(/*account_ids*/ Some(vec![account_id.clone()]))?;
             let http_client_factory = self.auth_manager.http_client_factory();
@@ -77,7 +80,7 @@ impl AccountRequestProcessor {
         let client = BackendClient::from_auth(
             self.config.chatgpt_base_url.clone(),
             &auth,
-            http_client_factory,
+            http_client_factory.clone(),
         );
         let request_timeout = RATE_LIMIT_RESET_REQUEST_TIMEOUT;
         #[cfg(debug_assertions)]
@@ -117,6 +120,37 @@ impl AccountRequestProcessor {
                 ConsumeAccountRateLimitResetCreditOutcome::AlreadyRedeemed
             }
         };
+        if outcome == ConsumeAccountRateLimitResetCreditOutcome::Reset {
+            if let Some(state_db) = self.state_db.as_ref()
+                && let Some(account_id) = auth.get_account_id().or(requested_account_id)
+            {
+                let event = UsageResetEvent {
+                    consumed_at: Utc::now(),
+                    account_id,
+                    idempotency_key: Some(params.idempotency_key),
+                    limit_id: Some("codex".to_string()),
+                };
+                if let Err(err) = state_db.record_usage_reset_event(&event).await {
+                    tracing::warn!("failed to record usage reset event: {err}");
+                }
+            }
+            let processor = self.clone();
+            tokio::spawn(async move {
+                if let Err(err) = processor
+                    .get_account_rate_limits_response_for_auth(
+                        &auth,
+                        http_client_factory,
+                        GetAccountRateLimitsParams::default(),
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        "failed to refresh account rate limits after reset: {}",
+                        err.message
+                    );
+                }
+            });
+        }
         Ok(Some(
             ConsumeAccountRateLimitResetCreditResponse { outcome }.into(),
         ))
