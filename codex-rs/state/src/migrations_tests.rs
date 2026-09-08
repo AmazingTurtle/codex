@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use super::STATE_MIGRATOR;
 use super::THREAD_HISTORY_MIGRATOR;
-use super::repair_legacy_recency_migration_version;
+use super::repair_legacy_migration_versions;
 use crate::PINNED_THREAD_SECTION_ID;
 use crate::PINNED_THREAD_SECTION_NAME;
 
@@ -790,7 +790,7 @@ async fn repairs_recency_migration_that_was_applied_as_version_38() {
         .await
         .expect("legacy recency migration should apply as version 38");
 
-    repair_legacy_recency_migration_version(&pool, &STATE_MIGRATOR)
+    repair_legacy_migration_versions(&pool, &STATE_MIGRATOR)
         .await
         .expect("legacy migration history should be repaired");
     STATE_MIGRATOR
@@ -824,6 +824,109 @@ async fn repairs_recency_migration_that_was_applied_as_version_38() {
 }
 
 #[tokio::test]
+async fn repairs_account_telemetry_migration_that_was_applied_as_version_53() {
+    let sqlite_home = crate::runtime::test_support::unique_temp_dir();
+    tokio::fs::create_dir_all(&sqlite_home)
+        .await
+        .expect("sqlite home should be created");
+    let _cleanup = scopeguard::guard(sqlite_home.clone(), |sqlite_home| {
+        let _ = std::fs::remove_dir_all(sqlite_home);
+    });
+    let sqlite = crate::SqliteConfig::new_for_testing(sqlite_home.as_path().abs());
+    let state_path = sqlite.state_db_path();
+    let pool = sqlite
+        .open_read_write_pool(&state_path)
+        .await
+        .expect("sqlite database should open");
+
+    let telemetry_migration = STATE_MIGRATOR
+        .migrations
+        .iter()
+        .find(|migration| migration.version == 55)
+        .expect("account telemetry migration should exist");
+    let mut legacy_migrations = STATE_MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= 52)
+        .cloned()
+        .collect::<Vec<_>>();
+    legacy_migrations.push(Migration::new(
+        53,
+        telemetry_migration.description.clone(),
+        telemetry_migration.migration_type,
+        telemetry_migration.sql.clone(),
+        telemetry_migration.no_tx,
+    ));
+    Migrator::with_migrations(legacy_migrations)
+        .run(&pool)
+        .await
+        .expect("legacy account telemetry migration should apply as version 53");
+    sqlx::query(
+        "INSERT INTO usage_reset_events (consumed_at, account_id, idempotency_key, limit_id) VALUES (?, ?, ?, ?)",
+    )
+    .bind(1_700_000_000_i64)
+    .bind("account-1")
+    .bind("reset-1")
+    .bind("codex")
+    .execute(&pool)
+    .await
+    .expect("legacy telemetry row should insert");
+
+    repair_legacy_migration_versions(&pool, &STATE_MIGRATOR)
+        .await
+        .expect("legacy account telemetry migration history should be repaired");
+    STATE_MIGRATOR
+        .run(&pool)
+        .await
+        .expect("upstream and renumbered telemetry migrations should apply");
+
+    let applied = sqlx::query(
+        "SELECT version, checksum FROM _sqlx_migrations WHERE version >= 53 ORDER BY version",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("applied migrations should load")
+    .into_iter()
+    .map(|row| {
+        (
+            row.get::<i64, _>("version"),
+            row.get::<Vec<u8>, _>("checksum"),
+        )
+    })
+    .collect::<Vec<_>>();
+    let expected = STATE_MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version >= 53)
+        .map(|migration| (migration.version, migration.checksum.to_vec()))
+        .collect::<Vec<_>>();
+    assert_eq!(applied, expected);
+
+    let preserved = sqlx::query(
+        "SELECT consumed_at, account_id, idempotency_key, limit_id FROM usage_reset_events",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("legacy telemetry row should remain readable");
+    assert_eq!(
+        (
+            preserved.get::<i64, _>("consumed_at"),
+            preserved.get::<String, _>("account_id"),
+            preserved.get::<Option<String>, _>("idempotency_key"),
+            preserved.get::<Option<String>, _>("limit_id"),
+        ),
+        (
+            1_700_000_000,
+            "account-1".to_string(),
+            Some("reset-1".to_string()),
+            Some("codex".to_string()),
+        )
+    );
+
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn repair_recency_migration_succeeds_while_another_connection_holds_writer_slot() {
     let sqlite_home = crate::runtime::test_support::unique_temp_dir();
     tokio::fs::create_dir_all(&sqlite_home)
@@ -852,7 +955,7 @@ async fn repair_recency_migration_succeeds_while_another_connection_holds_writer
         .await
         .expect("write transaction should acquire the writer slot");
 
-    let repair_result = repair_legacy_recency_migration_version(&read_pool, &STATE_MIGRATOR).await;
+    let repair_result = repair_legacy_migration_versions(&read_pool, &STATE_MIGRATOR).await;
 
     write_transaction
         .rollback()

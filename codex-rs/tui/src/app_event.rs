@@ -360,6 +360,12 @@ pub(crate) enum AppEvent {
         view: TokenActivityView,
         selector: Option<String>,
     },
+    /// Generate an offline dashboard from sessions in this client's home.
+    GenerateReport,
+    /// A background report generation finished without blocking terminal input.
+    ReportGenerated {
+        result: Result<std::path::PathBuf, String>,
+    },
     /// Ask for confirmation before removing one persisted ChatGPT account.
     ConfirmRemoveChatgptAccount {
         account: ChatgptAccountSummary,

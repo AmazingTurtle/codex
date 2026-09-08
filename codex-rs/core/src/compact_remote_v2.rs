@@ -424,6 +424,7 @@ async fn collect_compaction_output(
     turn_context: &TurnContext,
     mut stream: ResponseStream,
 ) -> CodexResult<RemoteCompactionV2Output> {
+    let request_attribution = stream.request_attribution().clone();
     let mut output_item_count = 0usize;
     let mut compaction_count = 0usize;
     let mut compaction_output = None;
@@ -451,6 +452,7 @@ async fn collect_compaction_output(
                     &response_id,
                     token_usage.as_ref(),
                     usage_metadata.as_ref(),
+                    &request_attribution,
                 )
                 .await;
                 completed_response_id = Some(response_id);
@@ -814,6 +816,7 @@ mod tests {
         ResponseStream {
             rx_event,
             consumer_dropped: CancellationToken::new(),
+            request_attribution: Default::default(),
         }
     }
 
@@ -1177,6 +1180,7 @@ mod tests {
                 usage_metadata: Some(codex_protocol::ResponseUsageMetadata {
                     amount: Some("0.125".to_string()),
                     metadata: Some(serde_json::json!({ "extra": { "label": "example" } })),
+                    ..Default::default()
                 }),
                 end_turn: Some(true),
             }),
@@ -1200,6 +1204,7 @@ mod tests {
             Some(codex_protocol::ResponseUsageMetadata {
                 amount: Some("0.125".to_string()),
                 metadata: Some(serde_json::json!({ "extra": { "label": "example" } })),
+                ..Default::default()
             })
         );
         assert_eq!(

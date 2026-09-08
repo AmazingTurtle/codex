@@ -16,6 +16,7 @@ use crate::agent::status::is_final;
 use crate::agent_communication::AgentCommunicationContext;
 use crate::agent_communication::AgentCommunicationKind;
 use crate::attestation::AttestationProvider;
+use crate::client_common::ResponseRequestAttribution;
 use crate::compact;
 use crate::compact::CompactedHistoryMetadata;
 use crate::config::ManagedFeatures;
@@ -301,6 +302,7 @@ use crate::state::AutoCompactWindowSnapshot;
 use crate::state::PendingRequestPermissions;
 use crate::state::SessionServices;
 use crate::state::SessionState;
+use crate::state::TokenUsageRecordInput;
 #[cfg(test)]
 use crate::stream_events_utils::HandleOutputCtx;
 #[cfg(test)]
@@ -4380,6 +4382,7 @@ impl Session {
         response_id: &str,
         usage: Option<&TokenUsage>,
         usage_metadata: Option<&ResponseUsageMetadata>,
+        request_attribution: &ResponseRequestAttribution,
     ) {
         self.send_event(
             turn_context,
@@ -4393,17 +4396,23 @@ impl Session {
         let Some(usage) = usage else {
             return;
         };
-        let record = self.state.lock().await.record_token_usage(
-            self.thread_id,
-            &turn_context.sub_id,
-            self.session_id(),
-            turn_context
-                .turn_metadata_state
-                .root_turn_id()
-                .unwrap_or_else(|| turn_context.sub_id.clone()),
-            response_id.to_string(),
-            usage,
-        );
+        let record = self
+            .state
+            .lock()
+            .await
+            .record_token_usage(TokenUsageRecordInput {
+                thread_id: self.thread_id,
+                turn_id: &turn_context.sub_id,
+                session_id: self.session_id(),
+                root_turn_id: turn_context
+                    .turn_metadata_state
+                    .root_turn_id()
+                    .unwrap_or_else(|| turn_context.sub_id.clone()),
+                response_id: response_id.to_string(),
+                usage,
+                request_attribution,
+                usage_metadata,
+            });
         self.persist_rollout_items(&[RolloutItem::TokenUsageRecord(record)])
             .await;
     }

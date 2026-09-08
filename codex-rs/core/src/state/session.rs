@@ -12,6 +12,7 @@ use super::AdditionalContextStore;
 use super::auto_compact_window::AutoCompactWindow;
 use super::auto_compact_window::AutoCompactWindowIds;
 use super::auto_compact_window::AutoCompactWindowSnapshot;
+use crate::client_common::ResponseRequestAttribution;
 use crate::context_manager::ContextManager;
 use crate::context_manager::HistoryReplacement;
 use crate::session::PreviousTurnSettings;
@@ -19,6 +20,7 @@ use crate::session::session::SessionConfiguration;
 use crate::session::time_reminder::CurrentTimeReminderState;
 use crate::session_startup_prewarm::SessionStartupPrewarmHandle;
 use codex_history::ResponseItemEnvelope;
+use codex_protocol::ResponseUsageMetadata;
 use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::RateLimitSnapshot;
@@ -55,6 +57,18 @@ pub(crate) struct SessionState {
     pub(crate) pending_session_start_sources: VecDeque<codex_hooks::SessionStartSource>,
     granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
     next_turn_is_first: bool,
+}
+
+/// Inputs for recording one response's token usage in session state.
+pub(crate) struct TokenUsageRecordInput<'a> {
+    pub(crate) thread_id: ThreadId,
+    pub(crate) turn_id: &'a str,
+    pub(crate) session_id: SessionId,
+    pub(crate) root_turn_id: String,
+    pub(crate) response_id: String,
+    pub(crate) usage: &'a TokenUsage,
+    pub(crate) request_attribution: &'a ResponseRequestAttribution,
+    pub(crate) usage_metadata: Option<&'a ResponseUsageMetadata>,
 }
 
 impl SessionState {
@@ -160,13 +174,18 @@ impl SessionState {
 
     pub(crate) fn record_token_usage(
         &mut self,
-        thread_id: ThreadId,
-        turn_id: &str,
-        session_id: SessionId,
-        root_turn_id: String,
-        response_id: String,
-        usage: &TokenUsage,
+        input: TokenUsageRecordInput<'_>,
     ) -> TokenUsageRecord {
+        let TokenUsageRecordInput {
+            thread_id,
+            turn_id,
+            session_id,
+            root_turn_id,
+            response_id,
+            usage,
+            request_attribution,
+            usage_metadata,
+        } = input;
         let mut turn_token_usage = self
             .latest_token_usage_record
             .as_ref()
@@ -188,6 +207,12 @@ impl SessionState {
             session_id,
             root_turn_id,
             response_id,
+            account_id: request_attribution.account_id.clone(),
+            requested_model: request_attribution.requested_model.clone(),
+            requested_service_tier: request_attribution.requested_service_tier.clone(),
+            reported_model: usage_metadata.and_then(|metadata| metadata.reported_model.clone()),
+            reported_service_tier: usage_metadata
+                .and_then(|metadata| metadata.reported_service_tier.clone()),
             usage: usage.clone(),
             turn_token_usage,
             thread_token_usage,

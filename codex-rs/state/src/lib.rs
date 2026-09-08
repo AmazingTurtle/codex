@@ -19,6 +19,7 @@ mod runtime;
 mod sqlite;
 mod telemetry;
 
+pub use model::AccountLimitObservation;
 pub use model::CreatedProject;
 pub use model::LogEntry;
 pub use model::LogQuery;
@@ -32,6 +33,8 @@ pub use model::QueuedUserSubmissionRecord;
 pub use model::RolloutMigrationCursor;
 pub use model::RolloutMigrationSkippedRollout;
 pub use model::RolloutMigrationState;
+pub use model::UsageResetEvent;
+pub use runtime::AccountTelemetryReader;
 /// Preferred entrypoint: owns configuration and metrics.
 pub use runtime::StateRuntime;
 pub use sqlite::SqliteConfig;

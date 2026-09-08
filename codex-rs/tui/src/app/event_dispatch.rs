@@ -69,6 +69,8 @@ impl App {
                     | AppEvent::BeginThreadSwitchHistoryReplayBuffer
                     | AppEvent::EndInitialHistoryReplayBuffer
                     | AppEvent::FatalExitRequest(_)
+                    | AppEvent::GenerateReport
+                    | AppEvent::ReportGenerated { .. }
             )
         {
             return Ok(AppRunControl::Continue);
@@ -102,7 +104,11 @@ impl App {
             AppEvent::ContinueMisalignment(review) => {
                 self.continue_misalignment(app_server, review).await;
             }
-            AppEvent::CloseMisalignmentReview => self.chat_widget.show_misalignment_policy_precaution(),
+            AppEvent::CloseMisalignmentReview => {
+                self.chat_widget.show_misalignment_policy_precaution();
+            }
+            AppEvent::GenerateReport => self.generate_report(),
+            AppEvent::ReportGenerated { result } => self.finish_report(result),
             AppEvent::SkillsListLoaded { ref cwd, .. }
                 if cwds_differ(cwd, self.config.cwd.as_path()) =>
             {

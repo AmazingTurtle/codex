@@ -2613,6 +2613,7 @@ dependencies = [
  "codex-plugin",
  "codex-product-info",
  "codex-protocol",
+ "codex-report",
  "codex-responses-api-proxy",
  "codex-rmcp-client",
  "codex-rollout",
@@ -4273,6 +4274,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-report"
+version = "0.154.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "codex-protocol",
+ "codex-rollout",
+ "codex-state",
+ "codex-utils-absolute-path",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "ts-rs",
+ "walkdir",
+ "zstd",
+]
+
+[[package]]
 name = "codex-response-debug-context"
 version = "0.154.0"
 dependencies = [
@@ -4691,6 +4712,7 @@ dependencies = [
  "codex-plugin",
  "codex-product-info",
  "codex-protocol",
+ "codex-report",
  "codex-rollout",
  "codex-sandboxing",
  "codex-shell-command",

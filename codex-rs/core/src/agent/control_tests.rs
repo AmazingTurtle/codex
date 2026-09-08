@@ -1407,6 +1407,11 @@ async fn spawn_agent_fork_drops_inherited_token_usage_state(thread_context_enabl
         session_id: parent_thread.session.session_id(),
         root_turn_id: "parent-turn".to_string(),
         response_id: "parent-response".to_string(),
+        account_id: None,
+        requested_model: None,
+        requested_service_tier: None,
+        reported_model: None,
+        reported_service_tier: None,
         usage: parent_usage.clone(),
         turn_token_usage: parent_usage.clone(),
         thread_token_usage: parent_usage,
@@ -1470,6 +1475,7 @@ async fn spawn_agent_fork_drops_inherited_token_usage_state(thread_context_enabl
             "child-response",
             Some(&child_usage),
             /*usage_metadata*/ None,
+            &Default::default(),
         )
         .await;
     child_thread
@@ -1515,6 +1521,11 @@ async fn spawn_agent_fork_drops_inherited_token_usage_state(thread_context_enabl
             session_id: child_thread.session.session_id(),
             root_turn_id: turn_context.sub_id.clone(),
             response_id: "child-response".to_string(),
+            account_id: None,
+            requested_model: None,
+            requested_service_tier: None,
+            reported_model: None,
+            reported_service_tier: None,
             usage: child_usage.clone(),
             turn_token_usage: child_usage.clone(),
             thread_token_usage: child_usage,
