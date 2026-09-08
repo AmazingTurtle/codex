@@ -39,6 +39,7 @@ use std::sync::atomic::AtomicI64;
 use std::time::Instant;
 use tracing::warn;
 
+mod account_telemetry;
 mod backfill;
 mod external_agent_config_imports;
 mod goals;
@@ -55,6 +56,7 @@ mod thread_section_order;
 mod thread_sections;
 mod threads;
 
+pub use account_telemetry::AccountTelemetryReader;
 pub use external_agent_config_imports::ExternalAgentConfigImportDetailsRecord;
 pub use external_agent_config_imports::ExternalAgentConfigImportFailureRecord;
 pub use external_agent_config_imports::ExternalAgentConfigImportHistoryRecord;

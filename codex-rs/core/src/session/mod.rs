@@ -15,6 +15,7 @@ use crate::agent::status::is_final;
 use crate::agent_communication::AgentCommunicationContext;
 use crate::agent_communication::AgentCommunicationKind;
 use crate::attestation::AttestationProvider;
+use crate::client_common::ResponseRequestAttribution;
 use crate::compact;
 use crate::compact::CompactedHistoryMetadata;
 use crate::config::ManagedFeatures;
@@ -4345,6 +4346,7 @@ impl Session {
         response_id: &str,
         usage: Option<&TokenUsage>,
         usage_metadata: Option<&ResponseUsageMetadata>,
+        request_attribution: &ResponseRequestAttribution,
     ) {
         self.send_event(
             turn_context,
@@ -4368,6 +4370,8 @@ impl Session {
                 .unwrap_or_else(|| turn_context.sub_id.clone()),
             response_id.to_string(),
             usage,
+            request_attribution,
+            usage_metadata,
         );
         self.persist_rollout_items(&[RolloutItem::TokenUsageRecord(record)])
             .await;

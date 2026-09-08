@@ -491,6 +491,9 @@ impl ChatWidget {
                     self.open_usage_menu();
                 }
             }
+            SlashCommand::Report => {
+                self.app_event_tx.send(AppEvent::GenerateReport);
+            }
             SlashCommand::Ide => {
                 self.handle_ide_command();
             }
@@ -1184,6 +1187,7 @@ impl ChatWidget {
             | SlashCommand::Status
             | SlashCommand::Pwd
             | SlashCommand::Usage
+            | SlashCommand::Report
             | SlashCommand::DebugConfig
             | SlashCommand::Ps
             | SlashCommand::Stop

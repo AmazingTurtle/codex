@@ -70,6 +70,7 @@ use codex_login::login_with_bedrock_api_key;
 use codex_login::save_auth;
 use codex_protocol::account::PlanType as AccountPlanType;
 use codex_protocol::auth::AuthMode as DomainAuthMode;
+use codex_utils_absolute_path::test_support::PathExt;
 use core_test_support::responses;
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -455,6 +456,15 @@ async fn account_rate_limits_read_many_preserves_requested_order_and_partial_err
             ..Default::default()
         },
     )?;
+    let config_path = codex_home.path().join("config.toml");
+    let config = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        config_path,
+        config.replace(
+            "shell_snapshot = false",
+            "shell_snapshot = false\nsqlite = true",
+        ),
+    )?;
     write_chatgpt_auth(
         codex_home.path(),
         ChatGptAuthFixture::new("active-token")
@@ -561,6 +571,22 @@ async fn account_rate_limits_read_many_preserves_requested_order_and_partial_err
             ("active-account", true, false),
         ]
     );
+    let reader = codex_state::AccountTelemetryReader::open(
+        &codex_state::SqliteConfig::new_for_testing(codex_home.path().abs()),
+    )
+    .await?;
+    let observations = reader.list_account_limit_observations().await?;
+    assert_eq!(observations.len(), 1);
+    let observation = &observations[0];
+    assert_eq!(observation.account_id, "active-account");
+    assert_eq!(observation.limit_id, "codex");
+    assert_eq!(observation.window_seconds, Some(3_600));
+    assert_eq!(observation.used_percent, Some(42.0));
+    assert_eq!(
+        observation.resets_at.map(|timestamp| timestamp.timestamp()),
+        Some(1_735_689_720)
+    );
+    assert_eq!(observation.source, "account/rateLimits/read");
     server.verify().await;
     Ok(())
 }

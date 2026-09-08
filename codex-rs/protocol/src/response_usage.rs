@@ -11,4 +11,8 @@ use ts_rs::TS;
 pub struct ResponseUsageMetadata {
     pub amount: Option<String>,
     pub metadata: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reported_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reported_service_tier: Option<String>,
 }

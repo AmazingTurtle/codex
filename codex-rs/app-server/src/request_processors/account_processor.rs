@@ -14,6 +14,7 @@ use codex_model_provider::is_supported_amazon_bedrock_region;
 
 mod bedrock_setup;
 mod rate_limit_resets;
+mod telemetry;
 
 // Duration before a browser ChatGPT login attempt is abandoned.
 const LOGIN_CHATGPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -90,6 +91,7 @@ pub(crate) struct AccountRequestProcessor {
     outgoing: Arc<OutgoingMessageSender>,
     config: Arc<Config>,
     config_manager: ConfigManager,
+    state_db: Option<StateDbHandle>,
     active_login: Arc<Mutex<Option<ActiveLogin>>>,
     _account_change_task: Arc<AccountChangeTask>,
 }
@@ -109,6 +111,7 @@ impl AccountRequestProcessor {
         outgoing: Arc<OutgoingMessageSender>,
         config: Arc<Config>,
         config_manager: ConfigManager,
+        state_db: Option<StateDbHandle>,
     ) -> Self {
         let mut account_changes = auth_manager.active_account_change_receiver();
         let task_auth_manager = Arc::clone(&auth_manager);
@@ -152,6 +155,7 @@ impl AccountRequestProcessor {
             outgoing,
             config,
             config_manager,
+            state_db,
             active_login: Arc::new(Mutex::new(None)),
             _account_change_task: Arc::new(AccountChangeTask(account_change_task)),
         }
@@ -1409,7 +1413,7 @@ impl AccountRequestProcessor {
                 && response.user_id == auth.get_chatgpt_user_id()
         });
 
-        Ok(GetAccountRateLimitsResponse {
+        let response = GetAccountRateLimitsResponse {
             rate_limits: rate_limits.into(),
             rate_limits_by_limit_id: Some(
                 rate_limits_by_limit_id
@@ -1420,7 +1424,9 @@ impl AccountRequestProcessor {
             rate_limit_reset_credits,
             account_id: response.account_id,
             rate_limit_upsell,
-        })
+        };
+        self.record_account_rate_limits(auth, &response).await;
+        Ok(response)
     }
 
     async fn get_account_rate_limits_many_response(

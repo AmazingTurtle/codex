@@ -478,14 +478,29 @@ pub fn process_responses_event(
         }
         "response.completed" => {
             if let Some(resp_val) = event.response {
+                let reported_model = resp_val
+                    .get("headers")
+                    .and_then(header_openai_model_value_from_json);
+                let reported_service_tier = resp_val
+                    .get("service_tier")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
                 let metadata = resp_val
                     .get("usage")
                     .filter(|usage| !usage.is_null())
                     .cloned();
                 match serde_json::from_value::<ResponseCompleted>(resp_val) {
                     Ok(mut resp) => {
-                        if let Some(metadata) = metadata {
-                            resp.usage_metadata.get_or_insert_default().metadata = Some(metadata);
+                        if metadata.is_some()
+                            || reported_model.is_some()
+                            || reported_service_tier.is_some()
+                        {
+                            let usage_metadata = resp.usage_metadata.get_or_insert_default();
+                            if let Some(metadata) = metadata {
+                                usage_metadata.metadata = Some(metadata);
+                            }
+                            usage_metadata.reported_model = reported_model;
+                            usage_metadata.reported_service_tier = reported_service_tier;
                         }
                         return Ok(Some(ResponseEvent::Completed {
                             response_id: resp.id,

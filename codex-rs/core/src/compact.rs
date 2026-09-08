@@ -754,6 +754,7 @@ async fn drain_to_completed(
             &InferenceTraceContext::disabled(),
         )
         .await?;
+    let request_attribution = stream.request_attribution().clone();
     loop {
         let maybe_event = stream.next().await;
         let Some(event) = maybe_event else {
@@ -783,6 +784,7 @@ async fn drain_to_completed(
                     &response_id,
                     token_usage.as_ref(),
                     usage_metadata.as_ref(),
+                    &request_attribution,
                 )
                 .await;
                 sess.update_token_usage_info(turn_context, token_usage.as_ref())

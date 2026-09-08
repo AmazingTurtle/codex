@@ -1,0 +1,6 @@
+---
+source: tui/src/app/tests/report_tests.rs
+expression: rendered
+---
+• Open telemetry dashboard (<REPORT_PATH>)
+• Report saved to <REPORT_PATH>

@@ -68,6 +68,8 @@ impl App {
                     | AppEvent::BeginThreadSwitchHistoryReplayBuffer
                     | AppEvent::EndInitialHistoryReplayBuffer
                     | AppEvent::FatalExitRequest(_)
+                    | AppEvent::GenerateReport
+                    | AppEvent::ReportGenerated { .. }
             )
         {
             return Ok(AppRunControl::Continue);
@@ -91,6 +93,8 @@ impl App {
         }
 
         match event {
+            AppEvent::GenerateReport => self.generate_report(),
+            AppEvent::ReportGenerated { result } => self.finish_report(result),
             AppEvent::SkillsListLoaded { ref cwd, .. }
             | AppEvent::PluginMentionsLoaded { ref cwd, .. }
                 if cwds_differ(cwd, self.config.cwd.as_path()) => {}

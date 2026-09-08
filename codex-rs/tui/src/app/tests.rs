@@ -31,6 +31,8 @@ mod plugin_catalog;
 mod rate_limits;
 #[path = "tests/recap_generation_tests.rs"]
 mod recap_generation;
+#[path = "tests/report_tests.rs"]
+mod report_tests;
 mod safety_buffering;
 #[path = "tests/session_lifecycle_requests.rs"]
 mod session_lifecycle_requests;
@@ -5497,7 +5499,7 @@ async fn make_test_app() -> App {
     }
 }
 
-async fn make_test_app_with_channels() -> (
+pub(super) async fn make_test_app_with_channels() -> (
     App,
     tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     tokio::sync::mpsc::UnboundedReceiver<Op>,

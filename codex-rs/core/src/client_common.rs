@@ -105,11 +105,25 @@ fn strip_image_details(items: &mut [ResponseItem]) {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ResponseRequestAttribution {
+    pub(crate) account_id: Option<String>,
+    pub(crate) requested_model: Option<String>,
+    pub(crate) requested_service_tier: Option<String>,
+}
+
 pub struct ResponseStream {
     pub(crate) rx_event: mpsc::Receiver<Result<ResponseEvent>>,
     /// Signals the mapper task that the consumer stopped polling before the
     /// provider stream reached its own terminal event.
     pub(crate) consumer_dropped: CancellationToken,
+    pub(crate) request_attribution: ResponseRequestAttribution,
+}
+
+impl ResponseStream {
+    pub(crate) fn request_attribution(&self) -> &ResponseRequestAttribution {
+        &self.request_attribution
+    }
 }
 
 impl Stream for ResponseStream {

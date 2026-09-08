@@ -20,6 +20,18 @@ async fn resolve_runtime_model_provider_base_url(provider: &ModelProviderInfo) -
     }
 }
 
+pub(super) fn account_limit_poll_is_active(app: &App) -> bool {
+    !app.reconnect.offline
+        && !app.app_server_target.uses_remote_workspace()
+        && app.state_db.is_some()
+        && (app.chat_widget.is_user_turn_pending_or_running()
+            || app
+                .agent_navigation
+                .ordered_threads()
+                .iter()
+                .any(|(_, entry)| entry.is_running && !entry.is_closed))
+}
+
 fn spawn_startup_thread_start(
     app_server: &AppServerSession,
     config: Config,
@@ -714,6 +726,7 @@ See the Codex keymap documentation for supported actions and examples."
         #[cfg(debug_assertions)]
         let pre_loop_exit_reason: Option<ExitReason> = None;
 
+        let mut telemetry_poll = super::telemetry_poll::AccountLimitPoller::default();
         let exit_reason_result = if let Some(exit_reason) = pre_loop_exit_reason {
             Ok(exit_reason)
         } else {
@@ -743,7 +756,14 @@ See the Codex keymap documentation for supported actions and examples."
                             && has_pending_app_events
                         || (!waiting_for_initial_session_configured
                             && app.has_queued_startup_protected_request());
+                let telemetry_active = account_limit_poll_is_active(&app);
+                if telemetry_active && let Some(state_db) = &app.state_db {
+                    telemetry_poll.start_if_due(state_db.clone(), app_server.request_handle());
+                }
                 let control = select! {
+                    () = tokio::time::sleep_until(telemetry_poll.next_attempt), if telemetry_active => {
+                        AppRunControl::Continue
+                    }
                     Some(event) = app_event_rx.recv() => {
                         let is_initial_session_header = matches!(
                             &event,
