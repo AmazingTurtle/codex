@@ -1365,6 +1365,25 @@
       ],
       "type": "string"
     },
+    "DebloatConfigToml": {
+      "additionalProperties": false,
+      "description": "Configuration for suppressing optional capability providers at startup.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enables debloat filtering. Defaults to `false`.",
+          "type": "boolean"
+        },
+        "whitelist": {
+          "description": "Explicit capability allowlist. Absence selects the default debloat policy; an explicitly empty list disables every plugin, MCP server, and standalone skill.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "ExperimentalRequestUserInput": {
       "additionalProperties": false,
       "properties": {
@@ -6516,6 +6535,14 @@
     },
     "computer_use": {
       "$ref": "#/definitions/ComputerUseConfigToml"
+    },
+    "debloat": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/DebloatConfigToml"
+        }
+      ],
+      "description": "Suppresses optional capability providers before they are loaded."
     },
     "default_permissions": {
       "description": "Default permissions profile to apply. Names starting with `:` refer to built-in profiles; other names are resolved from the `[permissions]` table.",

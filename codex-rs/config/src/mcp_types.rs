@@ -62,6 +62,8 @@ pub enum McpServerDisabledReason {
     Requirements { source: RequirementSource },
     /// Enterprise authorization was rejected for this registration, not its name.
     EmaRegistration,
+    /// The server was suppressed by the effective debloat policy.
+    Debloat,
 }
 
 impl fmt::Display for McpServerDisabledReason {
@@ -74,6 +76,7 @@ impl fmt::Display for McpServerDisabledReason {
             McpServerDisabledReason::EmaRegistration => {
                 write!(f, "invalid enterprise registration")
             }
+            McpServerDisabledReason::Debloat => write!(f, "debloat"),
         }
     }
 }

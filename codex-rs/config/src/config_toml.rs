@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::path::Path;
 
+use crate::DebloatConfigToml;
 use crate::HooksToml;
 use crate::browser_use::BrowserUseConfigToml;
 use crate::computer_use::ComputerUseConfigToml;
@@ -293,6 +294,9 @@ pub struct ConfigToml {
     /// Trusted enterprise IdP shared by EMA-enabled MCP servers and plugins.
     #[serde(default)]
     pub mcp_enterprise_managed_auth: Option<McpEnterpriseManagedAuthConfig>,
+
+    /// Suppresses optional capability providers before they are loaded.
+    pub debloat: Option<DebloatConfigToml>,
 
     /// Preferred backend for storing MCP OAuth credentials.
     /// keyring: Use an OS-specific keyring service.
