@@ -100,6 +100,7 @@ pub use manager::RemotePluginOperationError;
 pub use manager::RemotePluginOperationErrorKind;
 pub use manager::RemotePluginUninstallOutcome;
 pub use marketplace_policy::allowed_configured_marketplace_names;
+pub use marketplace_policy::is_openai_managed_marketplace_name;
 pub use marketplace_upgrade::ConfigLayerReload;
 pub use marketplace_upgrade::ConfiguredMarketplaceUpgradeError as PluginMarketplaceUpgradeError;
 pub use marketplace_upgrade::ConfiguredMarketplaceUpgradeOutcome as PluginMarketplaceUpgradeOutcome;
