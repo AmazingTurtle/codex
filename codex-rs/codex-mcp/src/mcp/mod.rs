@@ -173,6 +173,9 @@ pub struct McpConfig {
     /// ChatGPT auth is checked separately before a materialized host-owned Apps
     /// server can be used.
     pub apps_enabled: bool,
+    /// When present, only these Apps connector IDs may be exposed by the shared Apps MCP.
+    /// `None` preserves the normal unfiltered Apps behavior.
+    pub allowed_app_connector_ids: Option<HashSet<String>>,
     /// Whether model-visible MCP tool namespaces should keep the legacy
     /// `mcp__` prefix.
     pub prefix_mcp_tool_names: bool,
@@ -195,6 +198,13 @@ pub struct McpConfig {
 pub const DEFAULT_OPTIONAL_MCP_STARTUP_GRACE: Duration = Duration::from_secs(1);
 
 impl McpConfig {
+    pub fn allows_app_connector(&self, connector_id: Option<&str>) -> bool {
+        match &self.allowed_app_connector_ids {
+            None => true,
+            Some(allowed) => connector_id.is_some_and(|id| allowed.contains(id)),
+        }
+    }
+
     /// Resolves enabled runtime servers against the exact attachment permissions being published.
     pub fn set_server_permission_profiles(
         &mut self,
@@ -254,11 +264,18 @@ pub struct ToolPluginContext {
     plugin_display_names_by_mcp_server_name: HashMap<String, Vec<String>>,
     plugin_ids_by_mcp_server_name: HashMap<String, String>,
     selected_plugin_mcp_server_names: HashSet<String>,
+    allowed_app_connector_ids: Option<HashSet<String>>,
 }
 
 impl ToolPluginContext {
     pub(crate) fn allows_connector_id(&self, connector_id: Option<&str>) -> bool {
-        connector_id.is_none_or(|id| !self.disabled_connector_ids.contains(id))
+        if connector_id.is_some_and(|id| self.disabled_connector_ids.contains(id)) {
+            return false;
+        }
+        match &self.allowed_app_connector_ids {
+            None => true,
+            Some(allowed) => connector_id.is_some_and(|id| allowed.contains(id)),
+        }
     }
 
     pub fn plugin_display_names_for_connector_id(&self, connector_id: &str) -> &[String] {
@@ -288,6 +305,7 @@ impl ToolPluginContext {
     fn from_config(config: &McpConfig) -> Self {
         let mut tool_plugin_context = Self {
             disabled_connector_ids: config.connector_snapshot.disabled_connector_ids().clone(),
+            allowed_app_connector_ids: config.allowed_app_connector_ids.clone(),
             ..Self::default()
         };
         for connector_id in config.connector_snapshot.connector_ids() {

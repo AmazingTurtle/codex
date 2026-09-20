@@ -2,6 +2,8 @@ use crate::session::tests::update_turn_settings_for_test;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use codex_config::DebloatConfigToml;
+use codex_config::DebloatPolicy;
 use codex_features::Feature;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
@@ -2452,6 +2454,34 @@ async fn request_plugin_install_requires_all_discovery_features() {
     )
     .await;
     enabled.assert_visible_contains(&[
+        "list_available_plugins_to_install",
+        "request_plugin_install",
+    ]);
+}
+
+#[tokio::test]
+async fn request_plugin_install_is_hidden_when_debloat_is_enabled() {
+    let plan = probe_with(
+        |turn| {
+            set_features(
+                turn,
+                &[Feature::ToolSuggest, Feature::Apps, Feature::Plugins],
+            );
+            let mut config = (*turn.config).clone();
+            config.debloat_policy = DebloatPolicy::from_config(Some(&DebloatConfigToml {
+                enabled: true,
+                whitelist: None,
+            }));
+            turn.config = Arc::new(config);
+        },
+        ToolPlanInputs {
+            tool_suggest_candidates: Some(plugin_candidates(ToolSuggestPresentation::ListTool)),
+            ..ToolPlanInputs::default()
+        },
+    )
+    .await;
+
+    plan.assert_visible_lacks(&[
         "list_available_plugins_to_install",
         "request_plugin_install",
     ]);

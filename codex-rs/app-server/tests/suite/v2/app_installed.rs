@@ -200,6 +200,33 @@ async fn installed_apps_global_disable_retains_tool_derived_identities() -> Resu
 }
 
 #[tokio::test]
+async fn installed_apps_debloat_hides_stale_cached_apps() -> Result<()> {
+    let fixture = InstalledAppsFixture::start().await?;
+    let codex_home = configured_codex_home(fixture.base_url())?;
+    {
+        let mut app_server = start_app_server(codex_home.path()).await?;
+        let populated = send_installed_request(&mut app_server, /*force_refresh*/ true).await?;
+        assert!(!populated.apps.is_empty());
+    }
+
+    let config_path = codex_home.path().join("config.toml");
+    let config = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        &config_path,
+        format!("{config}\n[debloat]\nenabled = true\n"),
+    )?;
+    let mut app_server = start_app_server(codex_home.path()).await?;
+
+    for force_refresh in [false, true] {
+        let installed = send_installed_request(&mut app_server, force_refresh).await?;
+        assert_eq!(installed, AppsInstalledResponse { apps: Vec::new() });
+    }
+    assert_eq!(fixture.list_tools_calls(), 1);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn installed_apps_thread_id_uses_effective_thread_config() -> Result<()> {
     let fixture = InstalledAppsFixture::start().await?;
     let codex_home = configured_codex_home(fixture.base_url())?;

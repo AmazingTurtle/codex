@@ -59,11 +59,16 @@ impl AppsRequestProcessor {
                 ),
             };
             let auth = self.auth_manager.auth().await;
-            let runtime_enabled = config
-                .features
+            let mcp_manager = self.thread_manager.mcp_manager();
+            let mcp_config = match thread.as_ref() {
+                Some(thread) => thread.current_mcp_config_and_runtime_context().await.0,
+                None => Arc::new(mcp_manager.runtime_config(&config).await),
+            };
+            let runtime_enabled = mcp_config.apps_enabled
+                && config
+                    .features
                 .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend));
 
-            let mcp_manager = self.thread_manager.mcp_manager();
             let cache_key = connector_runtime_context_key(auth.as_ref());
             let previous_snapshot = mcp_manager
                 .codex_apps_tools_cache()
@@ -77,10 +82,14 @@ impl AppsRequestProcessor {
                         snapshot_age = Some(Duration::ZERO);
                         return Ok(snapshot.tools);
                     }
-                    let mcp_config = mcp_manager.runtime_config(&config).await;
                     let mut mcp_servers = effective_mcp_servers(&mcp_config, auth.as_ref());
                     mcp_servers.retain(|name, _| name == CODEX_APPS_MCP_SERVER_NAME);
-                    let mcp_config = Arc::new(mcp_config.for_threadless_operations(&mcp_servers));
+                    let mcp_config = Arc::new(
+                        mcp_config
+                            .as_ref()
+                            .clone()
+                            .for_threadless_operations(&mcp_servers),
+                    );
                     anyhow::ensure!(
                         !mcp_servers.is_empty(),
                         "host-owned MCP server '{CODEX_APPS_MCP_SERVER_NAME}' is not enabled"
@@ -170,6 +179,10 @@ impl AppsRequestProcessor {
                     snapshot.tools().to_vec()
                 })
             };
+            let tools = tools
+                .into_iter()
+                .filter(|tool| mcp_config.allows_app_connector(tool.connector_id.as_deref()))
+                .collect::<Vec<_>>();
 
             snapshot_tool_count = tools.len();
             let apps = installed_connector_runtime(

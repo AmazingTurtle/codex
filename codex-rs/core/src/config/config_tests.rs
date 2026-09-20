@@ -6067,6 +6067,144 @@ enabled = true
 }
 
 #[tokio::test]
+async fn debloat_empty_whitelist_keeps_project_mcp_and_disables_external_mcp() -> anyhow::Result<()>
+{
+    let codex_home = TempDir::new()?;
+    let packaged = ConfigLayerEntry::new(
+        ConfigLayerSource::PackagedDefaults {
+            file: codex_home.path().join("packaged.toml").abs(),
+        },
+        toml::from_str(
+            r#"
+[mcp_servers.product]
+command = "product-server"
+"#,
+        )?,
+    );
+    let user = ConfigLayerEntry::new(
+        ConfigLayerSource::User {
+            file: codex_home.path().join(CONFIG_TOML_FILE).abs(),
+            profile: None,
+        },
+        toml::from_str(
+            r#"
+[debloat]
+enabled = true
+whitelist = []
+
+[mcp_servers.user]
+command = "user-server"
+"#,
+        )?,
+    );
+    let project = ConfigLayerEntry::new(
+        ConfigLayerSource::Project {
+            dot_codex_folder: codex_home.path().join("repo/.codex").abs(),
+        },
+        toml::from_str(
+            r#"
+[mcp_servers.project]
+command = "project-server"
+"#,
+        )?,
+    );
+    let config_layer_stack = ConfigLayerStack::new(
+        vec![packaged, user, project],
+        Default::default(),
+        Default::default(),
+    )?;
+    let config = Config::load_config_with_layer_stack(
+        LOCAL_FS.as_ref(),
+        config_layer_stack.effective_config().try_into()?,
+        ConfigOverrides {
+            cwd: Some(codex_home.path().to_path_buf()),
+            ..Default::default()
+        },
+        codex_home.abs(),
+        config_layer_stack,
+    )
+    .await?;
+
+    let mcp_config = config.to_mcp_config_with_loaded_plugins(
+        &PluginLoadOutcome::default(),
+        std::iter::empty::<McpServerRegistration>(),
+    );
+    let servers = mcp_config.mcp_server_catalog.configured_servers();
+    assert_eq!(
+        servers
+            .into_iter()
+            .map(|(name, server)| (name, (server.enabled, server.disabled_reason)))
+            .collect::<HashMap<_, _>>(),
+        HashMap::from([
+            (
+                "product".to_string(),
+                (false, Some(McpServerDisabledReason::Debloat)),
+            ),
+            (
+                "user".to_string(),
+                (false, Some(McpServerDisabledReason::Debloat)),
+            ),
+            ("project".to_string(), (true, None)),
+        ])
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn explicit_debloat_whitelist_keeps_plugins_atomic() -> anyhow::Result<()> {
+    let codex_home = TempDir::new()?;
+    let config_layer_stack = ConfigLayerStack::new(
+        vec![ConfigLayerEntry::new(
+            ConfigLayerSource::User {
+                file: codex_home.path().join(CONFIG_TOML_FILE).abs(),
+                profile: None,
+            },
+            toml::from_str(
+                r#"
+[debloat]
+enabled = true
+whitelist = ["mcp.selected"]
+"#,
+            )?,
+        )],
+        Default::default(),
+        Default::default(),
+    )?;
+    let config = Config::load_config_with_layer_stack(
+        LOCAL_FS.as_ref(),
+        config_layer_stack.effective_config().try_into()?,
+        ConfigOverrides {
+            cwd: Some(codex_home.path().to_path_buf()),
+            ..Default::default()
+        },
+        codex_home.abs(),
+        config_layer_stack,
+    )
+    .await?;
+
+    let mcp_config = config.to_mcp_config_with_loaded_plugins(
+        &PluginLoadOutcome::default(),
+        [McpServerRegistration::from_selected_plugin(
+            "selected".to_string(),
+            McpPluginAttribution::new("custom@personal".to_string(), "Custom".to_string()),
+            /*selection_order*/ 0,
+            /*source_environment_id*/ "local",
+            http_mcp("https://selected.example/mcp"),
+        )],
+    );
+
+    assert_eq!(
+        mcp_config
+            .mcp_server_catalog
+            .configured_servers()
+            .get("selected")
+            .map(|server| (server.enabled, server.disabled_reason.clone())),
+        Some((false, Some(McpServerDisabledReason::Debloat)))
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn add_dir_override_extends_workspace_writable_roots() -> std::io::Result<()> {
     let temp_dir = TempDir::new()?;
     let frontend = temp_dir.path().join("frontend");
@@ -7221,7 +7359,7 @@ pane = { selected = "console", expanded = false }
 }
 
 #[tokio::test]
-async fn to_mcp_config_preserves_apps_feature_from_config() -> std::io::Result<()> {
+async fn to_mcp_config_preserves_apps_feature_from_config() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let mut config = Config::load_from_base_config_with_overrides(
         ConfigToml::default(),
@@ -7244,6 +7382,19 @@ async fn to_mcp_config_preserves_apps_feature_from_config() -> std::io::Result<(
     let _ = config.features.enable(Feature::Apps);
     let mcp_config = config.to_mcp_config(&plugins_manager).await;
     assert!(mcp_config.apps_enabled);
+
+    let default_debloat: ConfigToml = toml::from_str("[debloat]\nenabled = true")?;
+    config.debloat_policy = DebloatPolicy::from_config(default_debloat.debloat.as_ref());
+    let mcp_config = config.to_mcp_config(&plugins_manager).await;
+    assert!(!mcp_config.apps_enabled);
+    assert_eq!(mcp_config.allowed_app_connector_ids, Some(HashSet::new()));
+
+    let whitelisted_apps: ConfigToml =
+        toml::from_str("[debloat]\nenabled = true\nwhitelist = [\"mcp.codex_apps\"]")?;
+    config.debloat_policy = DebloatPolicy::from_config(whitelisted_apps.debloat.as_ref());
+    let mcp_config = config.to_mcp_config(&plugins_manager).await;
+    assert!(mcp_config.apps_enabled);
+    assert_eq!(mcp_config.allowed_app_connector_ids, None);
 
     Ok(())
 }
