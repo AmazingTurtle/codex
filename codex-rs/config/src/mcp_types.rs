@@ -61,6 +61,8 @@ pub enum McpServerDisabledReason {
     Unknown,
     /// The server was disabled by config requirements from the given source.
     Requirements { source: RequirementSource },
+    /// The server was suppressed by the effective debloat policy.
+    Debloat,
 }
 
 impl fmt::Display for McpServerDisabledReason {
@@ -70,6 +72,7 @@ impl fmt::Display for McpServerDisabledReason {
             McpServerDisabledReason::Requirements { source } => {
                 write!(f, "requirements ({source})")
             }
+            McpServerDisabledReason::Debloat => write!(f, "debloat"),
         }
     }
 }

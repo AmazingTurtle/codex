@@ -1858,12 +1858,24 @@ async fn start_thread_seeds_extension_data_for_mcp_and_lifecycle_contributors() 
             .get("originator"),
         Some(&"codex_work_desktop".to_string())
     );
-    for disabled_plugin_ids in [vec!["plugin-selected-a".to_string()], vec![]] {
+    for (disabled_plugin_ids, debloated) in [
+        (vec!["plugin-selected-a".to_string()], false),
+        (vec![], false),
+        (vec![], true),
+    ] {
+        let mut projection_config = config.clone();
+        if debloated {
+            projection_config.debloat_policy =
+                codex_config::DebloatPolicy::from_config(Some(&codex_config::DebloatConfigToml {
+                    enabled: true,
+                    whitelist: Some(Vec::new()),
+                }));
+        }
         let projection = first_session
             .services
             .mcp_manager
             .runtime_config_for_step(
-                &config,
+                &projection_config,
                 &first_session.services.mcp_thread_init,
                 &first_session.services.thread_extension_data,
                 McpThreadIdentity {
@@ -1879,17 +1891,18 @@ async fn start_thread_seeds_extension_data_for_mcp_and_lifecycle_contributors() 
                 /*executor_capability_discovery*/ None,
             )
             .await;
+        let disabled = !disabled_plugin_ids.is_empty() || debloated;
         assert_eq!(
             projection.selected_plugins.disabled_plugin_roots,
-            if disabled_plugin_ids.is_empty() {
-                vec![]
-            } else {
+            if disabled {
                 vec!["selected-a".to_string()]
+            } else {
+                vec![]
             }
         );
         assert_eq!(
             selected_servers(&projection.config).contains_key("selected-a"),
-            disabled_plugin_ids.is_empty()
+            !disabled
         );
         assert_eq!(
             projection
@@ -1897,11 +1910,11 @@ async fn start_thread_seeds_extension_data_for_mcp_and_lifecycle_contributors() 
                 .connector_snapshot
                 .disabled_connector_ids()
                 .contains("selected-a-connector"),
-            !disabled_plugin_ids.is_empty()
+            disabled
         );
         assert_eq!(
             projection.selected_plugins.plugins.len(),
-            usize::from(disabled_plugin_ids.is_empty())
+            usize::from(!disabled)
         );
     }
 }

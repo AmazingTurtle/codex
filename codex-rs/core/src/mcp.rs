@@ -93,6 +93,7 @@ pub(crate) struct McpThreadIdentity<'a> {
 
 enum OrderedMcpOverlay {
     Set(Box<McpServerRegistration>),
+    HostedApps(Box<McpServerRegistration>),
     Remove {
         contributor_id: &'static str,
         contribution_order: usize,
@@ -233,6 +234,7 @@ impl McpManager {
         disabled_plugin_ids: &[String],
     ) -> McpRuntimeProjection {
         let config = context.config();
+        let mut disabled_plugin_ids = disabled_plugin_ids.to_vec();
         let mut selected_plugin_connector_sources = Vec::new();
         let mut selected_plugin_registrations = Vec::new();
         let mut selected_plugins = Vec::new();
@@ -253,8 +255,13 @@ impl McpManager {
             {
                 let selection_order = plugin_selection_order;
                 plugin_selection_order += 1;
-                let disabled = disabled_plugin_ids.contains(&plugin_id);
-                if !config.features.enabled(Feature::Plugins) || disabled {
+                let debloated = !config.allows_plugin_by_debloat(&plugin_id);
+                if debloated && !disabled_plugin_ids.contains(&plugin_id) {
+                    disabled_plugin_ids.push(plugin_id.clone());
+                }
+                let disabled = !config.features.enabled(Feature::Plugins)
+                    || disabled_plugin_ids.contains(&plugin_id);
+                if disabled {
                     disabled_plugin_roots.push(selected_root_id);
                 } else {
                     selected_plugins.push(SelectedPluginIdentity {
@@ -295,29 +302,35 @@ impl McpManager {
 
             for contribution in contributor.contribute(context).await {
                 match contribution {
-                    McpServerContribution::Set { name, config } => {
+                    McpServerContribution::Set {
+                        name,
+                        config: server_config,
+                    } => {
                         overlays.push(OrderedMcpOverlay::Set(Box::new(
-                            McpServerRegistration::from_extension(
-                                name,
-                                contributor.id(),
-                                contribution_order,
-                                *config,
+                            config.apply_debloat_to_mcp_registration(
+                                McpServerRegistration::from_extension(
+                                    name,
+                                    contributor.id(),
+                                    contribution_order,
+                                    *server_config,
+                                ),
                             ),
                         )));
                     }
                     McpServerContribution::SetWithProtocolMode {
                         name,
-                        config,
+                        config: server_config,
                         protocol_mode,
                     } => {
+                        let registration = McpServerRegistration::from_extension(
+                            name,
+                            contributor.id(),
+                            contribution_order,
+                            *server_config,
+                        )
+                        .with_protocol_mode(protocol_mode);
                         overlays.push(OrderedMcpOverlay::Set(Box::new(
-                            McpServerRegistration::from_extension(
-                                name,
-                                contributor.id(),
-                                contribution_order,
-                                *config,
-                            )
-                            .with_protocol_mode(protocol_mode),
+                            config.apply_debloat_to_mcp_registration(registration),
                         )));
                     }
                     McpServerContribution::HostedApps {
@@ -332,14 +345,18 @@ impl McpManager {
                         if let Some(protocol_mode) = protocol_mode {
                             registration = registration.with_protocol_mode(protocol_mode);
                         }
-                        overlays.push(OrderedMcpOverlay::Set(Box::new(registration)));
+                        overlays.push(OrderedMcpOverlay::HostedApps(Box::new(registration)));
                     }
                     McpServerContribution::HostedPluginConnectors {
                         plugin_id,
                         plugin_display_name,
                         connector_ids,
                     } => {
-                        if config.features.enabled(Feature::Plugins) {
+                        let debloated = !config.allows_plugin_by_debloat(&plugin_id);
+                        if debloated && !disabled_plugin_ids.contains(&plugin_id) {
+                            disabled_plugin_ids.push(plugin_id.clone());
+                        }
+                        if config.features.enabled(Feature::Plugins) && !debloated {
                             if !disabled_plugin_ids.contains(&plugin_id) {
                                 selected_plugins.push(SelectedPluginIdentity {
                                     selected_root_id: None,
@@ -380,16 +397,26 @@ impl McpManager {
         let connector_snapshot = if config.features.enabled(Feature::Plugins) {
             self.plugins_manager.connector_snapshot(
                 host_plugin_connector_sources.chain(selected_plugin_connector_sources),
-                disabled_plugin_ids,
+                &disabled_plugin_ids,
             )
         } else {
             Default::default()
         };
-        let loaded_plugins = loaded_plugins.without_plugins(disabled_plugin_ids);
+        let loaded_plugins = loaded_plugins.without_plugins(&disabled_plugin_ids);
         let plugins_available =
             !selected_plugins.is_empty() || !loaded_plugins.capability_summaries().is_empty();
         let mut mcp_config = config
             .to_mcp_config_with_loaded_plugins(&loaded_plugins, selected_plugin_registrations);
+        if let Some(allowed_connector_ids) = &mut mcp_config.allowed_app_connector_ids {
+            allowed_connector_ids.extend(
+                connector_snapshot
+                    .connector_ids()
+                    .iter()
+                    .map(|connector_id| connector_id.0.clone()),
+            );
+            mcp_config.apps_enabled =
+                config.features.enabled(Feature::Apps) && !allowed_connector_ids.is_empty();
+        }
         let mut catalog = mcp_config.mcp_server_catalog.to_builder();
         // Isolated sessions do not inherit the implicit Apps connection.
         if mcp_config.apps_enabled
@@ -418,6 +445,12 @@ impl McpManager {
         for overlay in overlays {
             match overlay {
                 OrderedMcpOverlay::Set(registration) => catalog.register(*registration),
+                OrderedMcpOverlay::HostedApps(mut registration) => {
+                    if !mcp_config.apps_enabled {
+                        registration.disable_by_debloat();
+                    }
+                    catalog.register(*registration);
+                }
                 OrderedMcpOverlay::Remove {
                     contributor_id,
                     contribution_order,
@@ -450,7 +483,9 @@ impl McpManager {
 
     /// Returns config- and plugin-backed servers without runtime contributions.
     pub async fn configured_servers(&self, config: &Config) -> HashMap<String, McpServerConfig> {
-        let mcp_config = config.to_mcp_config(self.plugins_manager.as_ref()).await;
+        let mcp_config = config
+            .to_mcp_inventory_config(self.plugins_manager.as_ref())
+            .await;
         configured_mcp_servers(&mcp_config)
     }
 
