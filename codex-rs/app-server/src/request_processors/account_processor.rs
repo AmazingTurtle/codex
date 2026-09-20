@@ -16,8 +16,8 @@ use codex_model_provider::is_supported_amazon_bedrock_region;
 
 mod bedrock_setup;
 mod rate_limit_resets;
-mod workspace_routing;
 mod telemetry;
+mod workspace_routing;
 
 // Duration before a browser ChatGPT login attempt is abandoned.
 const LOGIN_CHATGPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);

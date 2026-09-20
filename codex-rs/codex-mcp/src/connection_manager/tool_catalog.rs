@@ -417,7 +417,8 @@ impl McpConnectionSet {
             .servers
             .get(CODEX_APPS_MCP_SERVER_NAME)
             .ok_or_else(|| anyhow!("unknown MCP server '{CODEX_APPS_MCP_SERVER_NAME}'"))?;
-        let (tools, _) = self.refresh_codex_apps_tool_catalog().await?;
+        let (mut tools, _) = self.refresh_codex_apps_tool_catalog().await?;
+        tools.retain(|tool| config.allows_app_connector(tool.connector_id.as_deref()));
         let server_has_permission = config
             .permission_profile_for_server(CODEX_APPS_MCP_SERVER_NAME)
             .is_some();

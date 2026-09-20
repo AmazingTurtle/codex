@@ -453,7 +453,7 @@ fn validate_expected_marketplace_name(
         })
 }
 
-fn is_reserved_marketplace_name(marketplace_name: &str) -> bool {
+pub fn is_openai_managed_marketplace_name(marketplace_name: &str) -> bool {
     matches!(
         marketplace_name,
         OPENAI_CURATED_MARKETPLACE_NAME
@@ -461,7 +461,15 @@ fn is_reserved_marketplace_name(marketplace_name: &str) -> bool {
             | OPENAI_BUNDLED_MARKETPLACE_NAME
             | OPENAI_BUNDLED_ALPHA_MARKETPLACE_NAME
             | OPENAI_PRIMARY_RUNTIME_MARKETPLACE_NAME
-    ) || RemotePluginScope::from_marketplace_name(marketplace_name).is_some()
+    ) || matches!(
+        RemotePluginScope::from_marketplace_name(marketplace_name),
+        Some(RemotePluginScope::Global)
+    )
+}
+
+fn is_reserved_marketplace_name(marketplace_name: &str) -> bool {
+    is_openai_managed_marketplace_name(marketplace_name)
+        || RemotePluginScope::from_marketplace_name(marketplace_name).is_some()
 }
 
 fn managed_marketplace_name(

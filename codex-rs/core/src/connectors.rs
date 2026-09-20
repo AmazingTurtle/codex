@@ -24,6 +24,7 @@ use crate::mcp::McpManager;
 use crate::plugins::list_tool_suggest_discoverable_plugins;
 use crate::plugins::plugins_manager_for_config;
 use crate::session::INITIAL_SUBMIT_ID;
+use codex_config::DebloatPolicy;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::ToolSuggestDiscoverableType;
 use codex_core_plugins::PluginsManager;
@@ -50,6 +51,7 @@ struct AccessibleConnectorsCacheKey {
     account_id: Option<String>,
     chatgpt_user_id: Option<String>,
     is_workspace_account: bool,
+    debloat_policy: DebloatPolicy,
 }
 
 #[derive(Clone)]
@@ -354,6 +356,7 @@ fn accessible_connectors_cache_key(
         account_id,
         chatgpt_user_id,
         is_workspace_account,
+        debloat_policy: config.debloat_policy.clone(),
     }
 }
 

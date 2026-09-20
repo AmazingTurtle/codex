@@ -2,6 +2,8 @@ use super::*;
 use crate::config::CONFIG_TOML_FILE;
 use crate::config::ConfigBuilder;
 use crate::plugins::plugins_manager_for_config;
+use codex_config::DebloatConfigToml;
+use codex_config::DebloatPolicy;
 use codex_config::test_support::CloudConfigBundleFixture;
 use codex_config::types::ApprovalsReviewer;
 use codex_connectors::merge::plugin_connector_to_app_info;
@@ -259,6 +261,35 @@ async fn refresh_accessible_connectors_cache_from_mcp_tools_writes_latest_instal
             }
         ]
     );
+}
+
+#[tokio::test]
+async fn accessible_connectors_cache_does_not_cross_debloat_policies() {
+    let codex_home = tempdir().expect("tempdir should succeed");
+    let mut config = ConfigBuilder::default()
+        .codex_home(codex_home.path().to_path_buf())
+        .build()
+        .await
+        .expect("config should load");
+    let _ = config.features.set_enabled(Feature::Apps, /*enabled*/ true);
+    let tools = vec![codex_app_tool(
+        "calendar_list_events",
+        "calendar",
+        Some("Google Calendar"),
+        &[],
+    )];
+
+    let cached = with_accessible_connectors_cache_cleared(|| {
+        refresh_accessible_connectors_cache_from_mcp_tools(&config, /*auth*/ None, &tools);
+        config.debloat_policy = DebloatPolicy::from_config(Some(&DebloatConfigToml {
+            enabled: true,
+            whitelist: None,
+        }));
+        let debloated_cache_key = accessible_connectors_cache_key(&config, /*auth*/ None);
+        read_cached_accessible_connectors(&debloated_cache_key)
+    });
+
+    assert_eq!(cached, None);
 }
 
 #[test]

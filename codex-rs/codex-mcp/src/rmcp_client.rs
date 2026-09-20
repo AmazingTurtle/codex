@@ -1304,12 +1304,15 @@ pub(crate) async fn make_rmcp_client(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp::tests::test_mcp_config;
     use codex_protocol::mcp::MCP_APP_UI_EXTENSION_ID;
     use codex_protocol::mcp::OPENAI_FORM_EXTENSION_ID;
     use pretty_assertions::assert_eq;
     use rmcp::model::JsonObject;
     use rmcp::model::MetaObject;
     use rmcp::transport::auth::AuthError;
+    use std::collections::HashSet;
+    use std::path::PathBuf;
 
     #[test]
     fn startup_outcome_error_identifies_authentication_required() {
@@ -1472,6 +1475,40 @@ mod tests {
         assert_eq!(
             serde_json::to_value(tool_info).expect("serialize actual tool info"),
             serde_json::to_value(expected).expect("serialize expected tool info")
+        );
+    }
+
+    #[test]
+    fn codex_apps_tools_are_limited_to_allowed_connectors() {
+        let mut gmail = tool_info_from_listed_tool(
+            CODEX_APPS_MCP_SERVER_NAME,
+            /*is_codex_apps_mcp_server*/ true,
+            /*server_instructions*/ None,
+            ToolWithConnectorId {
+                tool: tool_with_connector_meta(),
+                connector_id: Some("connector_gmail".to_string()),
+                connector_name: Some("Gmail".to_string()),
+                connector_description: Some("Mail connector".to_string()),
+            },
+        );
+        let mut sites = gmail.clone();
+        sites.connector_id = Some("connector_sites".to_string());
+        sites.connector_name = Some("Sites".to_string());
+        gmail.plugin_display_names = vec!["Gmail Plugin".to_string()];
+
+        let mut config = test_mcp_config(PathBuf::new());
+        config.allowed_app_connector_ids = Some(HashSet::from(["connector_gmail".to_string()]));
+        let tools = prepare_codex_apps_tools_for_model(
+            vec![sites, gmail],
+            &crate::tool_plugin_context(&config),
+        );
+
+        assert_eq!(
+            tools
+                .iter()
+                .filter_map(|tool| tool.connector_id.as_deref())
+                .collect::<Vec<_>>(),
+            vec!["connector_gmail"]
         );
     }
 }

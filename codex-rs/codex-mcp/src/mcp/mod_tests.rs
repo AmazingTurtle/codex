@@ -106,6 +106,7 @@ pub(crate) fn test_mcp_config(codex_home: PathBuf) -> McpConfig {
         codex_linux_sandbox_exe: None,
         use_legacy_landlock: false,
         apps_enabled: false,
+        allowed_app_connector_ids: None,
         prefix_mcp_tool_names: true,
         non_prefixed_mcp_tool_servers: Vec::new(),
         protocol_mode: McpProtocolMode::Legacy,
@@ -374,6 +375,7 @@ fn tool_plugin_context_collects_app_and_mcp_sources() {
                 "alpha@test".to_string(),
             )]),
             selected_plugin_mcp_server_names: HashSet::new(),
+            allowed_app_connector_ids: None,
         }
     );
     assert_eq!(
@@ -428,6 +430,7 @@ fn selected_mcp_attribution_does_not_join_an_unrelated_local_summary() {
                 "shared-plugin-id".to_string(),
             )]),
             selected_plugin_mcp_server_names: HashSet::from(["github".to_string()]),
+            allowed_app_connector_ids: None,
         }
     );
     assert!(provenance.is_selected_plugin_mcp_server("github"));

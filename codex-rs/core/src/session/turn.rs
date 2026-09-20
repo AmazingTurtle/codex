@@ -1755,7 +1755,7 @@ pub(crate) async fn built_tools(
     let all_mcp_tools = mcp.tools();
     let connector_snapshot = mcp.config().connector_snapshot.clone();
 
-    let apps_enabled = turn_context.apps_enabled();
+    let apps_enabled = turn_context.apps_enabled() && mcp.config().apps_enabled;
     let accessible_connectors =
         apps_enabled.then(|| connectors::accessible_connectors_from_mcp_tools(all_mcp_tools));
     let tool_suggest_is_enabled = tool_suggest_enabled(turn_context);

@@ -3160,6 +3160,7 @@ fn loaded_plugins_cache_evicts_least_recently_used_configuration() {
             skill_config_rules: SkillConfigRules::default(),
             remote_global_catalog_active: false,
             auth_identity: None,
+            debloat_policy: DebloatPolicy::default(),
         })
         .collect::<Vec<_>>();
     let generation = manager.loaded_plugins_cache_generation();
@@ -3204,6 +3205,7 @@ fn loaded_plugins_cache_invalidation_rejects_stale_load_completion() {
         skill_config_rules: SkillConfigRules::default(),
         remote_global_catalog_active: false,
         auth_identity: None,
+        debloat_policy: DebloatPolicy::default(),
     };
     let stale_generation = manager.loaded_plugins_cache_generation();
 

@@ -27,7 +27,7 @@ use crate::loader::load_plugin_hooks;
 use crate::loader::load_plugin_hooks_from_layer_stack;
 use crate::loader::load_plugin_mcp_servers_from_manifest_with_format;
 use crate::loader::load_plugin_skill_inventory;
-use crate::loader::load_plugins_from_layer_stack;
+use crate::loader::load_plugins_from_layer_stack_with_debloat_policy;
 use crate::loader::log_plugin_load_errors;
 use crate::loader::materialize_marketplace_plugin_source;
 use crate::loader::plugin_capability_summary_from_root;
@@ -90,6 +90,7 @@ use crate::tool_suggest_metadata::ToolSuggestMetadataCache;
 use codex_analytics::AnalyticsEventsClient;
 use codex_analytics::PluginInstallSource;
 use codex_config::ConfigLayerStack;
+use codex_config::DebloatPolicy;
 use codex_config::SkillConfigRules;
 use codex_config::clear_user_plugin;
 use codex_config::set_user_plugin_enabled;
@@ -158,6 +159,7 @@ pub struct PluginsConfigInput {
     pub remote_plugin_enabled: bool,
     pub chatgpt_base_url: String,
     http_client_factory: HttpClientFactory,
+    debloat_policy: DebloatPolicy,
 }
 
 impl PluginsConfigInput {
@@ -169,6 +171,7 @@ impl PluginsConfigInput {
         chatgpt_base_url: String,
         http_client_factory: HttpClientFactory,
     ) -> Self {
+        let debloat_policy = DebloatPolicy::from_layer_stack(&config_layer_stack);
         Self {
             config_layer_stack,
             model_provider_id,
@@ -176,6 +179,7 @@ impl PluginsConfigInput {
             remote_plugin_enabled,
             chatgpt_base_url,
             http_client_factory,
+            debloat_policy,
         }
     }
 
@@ -595,6 +599,7 @@ struct PluginLoadCacheKey {
     skill_config_rules: SkillConfigRules,
     remote_global_catalog_active: bool,
     auth_identity: Option<RemoteInstalledPluginsAuthIdentity>,
+    debloat_policy: DebloatPolicy,
 }
 
 impl PluginLoadCacheKey {
@@ -613,6 +618,7 @@ impl PluginLoadCacheKey {
             remote_global_catalog_active,
             // Local curated loads are auth-independent; only remote snapshots vary by account.
             auth_identity: remote_global_catalog_active.then_some(auth_identity),
+            debloat_policy: config.debloat_policy.clone(),
         }
     }
 }
@@ -839,7 +845,7 @@ impl PluginsManager {
             let plugin_skill_snapshots = new_plugin_skill_snapshots();
             cache_outcome = RequestOutcome::Load;
             let load_started = Instant::now();
-            let plugins = load_plugins_from_layer_stack(
+            let plugins = load_plugins_from_layer_stack_with_debloat_policy(
                 &config.config_layer_stack,
                 self.remote_installed_plugins_snapshot(),
                 &self.store,
@@ -847,6 +853,7 @@ impl PluginsManager {
                 self.restriction_product,
                 remote_global_catalog_active,
                 self.skill_root_loader.as_ref(),
+                &config.debloat_policy,
             )
             .await;
             loaded_cache_metrics::record_duration(
@@ -875,6 +882,16 @@ impl PluginsManager {
                 return PluginLoadOutcome::default();
             }
         }
+    }
+
+    /// Loads the complete configured plugin inventory without enabling debloated plugins.
+    pub async fn plugins_for_config_inventory(
+        &self,
+        config: &PluginsConfigInput,
+    ) -> PluginLoadOutcome {
+        let mut inventory_config = config.clone();
+        inventory_config.debloat_policy = DebloatPolicy::default();
+        self.plugins_for_config(&inventory_config).await
     }
 
     fn resolve_loaded_plugins_for_auth(

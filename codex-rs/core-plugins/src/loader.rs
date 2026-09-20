@@ -22,6 +22,7 @@ use crate::store::PluginStore;
 use crate::store::plugin_version_for_source;
 use crate::store::plugin_version_for_source_with_fallback_manifest;
 use codex_config::ConfigLayerStack;
+use codex_config::DebloatPolicy;
 use codex_config::HooksFile;
 use codex_config::SkillConfigRules;
 use codex_config::skill_config_rules_from_stack;
@@ -58,6 +59,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
+#[cfg(test)]
 use tracing::instrument;
 use tracing::warn;
 
@@ -129,6 +131,7 @@ pub(crate) fn log_plugin_load_errors(plugins: &[LoadedPlugin<McpServerConfig>]) 
 
 /// Load configured plugins without applying auth-dependent runtime policies.
 #[instrument(level = "trace", skip_all)]
+#[cfg(test)]
 pub(crate) async fn load_plugins_from_layer_stack(
     config_layer_stack: &ConfigLayerStack,
     remote_installed_plugins_snapshot: RemoteInstalledPluginsSnapshot,
@@ -137,6 +140,31 @@ pub(crate) async fn load_plugins_from_layer_stack(
     restriction_product: Option<Product>,
     remote_global_catalog_active: bool,
     skill_root_loader: &dyn SkillRootLoader<PluginSkillRoot>,
+) -> Vec<LoadedPlugin<McpServerConfig>> {
+    let debloat_policy = DebloatPolicy::from_layer_stack(config_layer_stack);
+    load_plugins_from_layer_stack_with_debloat_policy(
+        config_layer_stack,
+        remote_installed_plugins_snapshot,
+        store,
+        plugin_skill_snapshots,
+        restriction_product,
+        remote_global_catalog_active,
+        skill_root_loader,
+        &debloat_policy,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn load_plugins_from_layer_stack_with_debloat_policy(
+    config_layer_stack: &ConfigLayerStack,
+    remote_installed_plugins_snapshot: RemoteInstalledPluginsSnapshot,
+    store: &PluginStore,
+    plugin_skill_snapshots: Option<&SkillRootSnapshots<PluginSkillRoot>>,
+    restriction_product: Option<Product>,
+    remote_global_catalog_active: bool,
+    skill_root_loader: &dyn SkillRootLoader<PluginSkillRoot>,
+    debloat_policy: &DebloatPolicy,
 ) -> Vec<LoadedPlugin<McpServerConfig>> {
     let skill_config_rules = skill_config_rules_from_stack(config_layer_stack);
     let RemoteInstalledPluginsSnapshot {
@@ -155,6 +183,7 @@ pub(crate) async fn load_plugins_from_layer_stack(
             remote_plugin_id_resolver: &remote_plugin_id_resolver,
             skill_root_loader,
         },
+        debloat_policy,
     )
     .await
 }
@@ -165,13 +194,20 @@ async fn load_plugins_from_layer_stack_with_scope(
     store: &PluginStore,
     remote_global_catalog_active: bool,
     scope: PluginLoadScope<'_>,
+    debloat_policy: &DebloatPolicy,
 ) -> Vec<LoadedPlugin<McpServerConfig>> {
-    let configured_plugins = merge_configured_plugins_with_remote_installed(
+    let mut configured_plugins = merge_configured_plugins_with_remote_installed(
         configured_plugins_from_stack(config_layer_stack, store.codex_home().as_path()),
         extra_plugins,
         store,
         remote_global_catalog_active,
     );
+    configured_plugins.retain(|id, _| {
+        let openai_managed = PluginId::parse(id).is_ok_and(|plugin_id| {
+            crate::is_openai_managed_marketplace_name(&plugin_id.marketplace_name)
+        });
+        debloat_policy.allows_plugin(id, openai_managed)
+    });
     let mut configured_plugins: Vec<_> = configured_plugins.into_iter().collect();
     configured_plugins.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
 
@@ -205,12 +241,14 @@ pub async fn load_plugin_hooks_from_layer_stack(
     target_curated_marketplace: TargetCuratedMarketplace,
     remote_global_catalog_active: bool,
 ) -> PluginHookLoadOutcome {
+    let debloat_policy = DebloatPolicy::from_layer_stack(config_layer_stack);
     let mut plugins = load_plugins_from_layer_stack_with_scope(
         config_layer_stack,
         extra_plugins,
         store,
         remote_global_catalog_active,
         PluginLoadScope::HooksOnly,
+        &debloat_policy,
     )
     .await;
     plugins.retain(|plugin| {

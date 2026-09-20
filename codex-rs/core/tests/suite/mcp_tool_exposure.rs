@@ -1,5 +1,7 @@
 use anyhow::Result;
 use codex_config::Constrained;
+use codex_config::DebloatConfigToml;
+use codex_config::DebloatPolicy;
 use codex_core::EnvironmentConfig;
 use codex_core::TurnInputRequest;
 use codex_core::config::Config;
@@ -270,6 +272,51 @@ fn config_with_mcp_marker(base: &Config, marker: &str) -> Config {
         .set(HashMap::from([(marker.to_string(), server)]))
         .expect("test config should allow MCP servers");
     config
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn debloat_empty_whitelist_does_not_start_or_expose_extension_mcp() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let responses_server = responses::start_mock_server().await;
+    let mcp_server = responses::start_mock_server().await;
+    let (apps_server, startup_control) =
+        AppsTestServer::mount_with_startup_control(&mcp_server).await?;
+    let response = responses::mount_sse_once(
+        &responses_server,
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_assistant_message("msg-1", "done"),
+            ev_completed("resp-1"),
+        ]),
+    )
+    .await;
+    let mut extensions = ExtensionRegistryBuilder::new();
+    extensions.mcp_server_contributor(Arc::new(AppsMcpServerContributor {
+        id: "debloated_mcp_test",
+        url: format!("{}/api/codex/ps/mcp", apps_server.chatgpt_base_url),
+        root_resolved: None,
+    }));
+    let test = core_test_support::test_codex::test_codex()
+        .with_extensions(Arc::new(extensions.build()))
+        .with_config(|config| {
+            config.debloat_policy = DebloatPolicy::from_config(Some(&DebloatConfigToml {
+                enabled: true,
+                whitelist: Some(Vec::new()),
+            }));
+        })
+        .build_with_auto_env(&responses_server)
+        .await?;
+
+    test.submit_turn("answer without external tools").await?;
+
+    assert_eq!(startup_control.initialize_attempts(), 0);
+    let request = response.single_request().body_json();
+    assert!(
+        !request.to_string().contains("calendar_create_event"),
+        "debloated MCP tools must not be model-visible: {request}"
+    );
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

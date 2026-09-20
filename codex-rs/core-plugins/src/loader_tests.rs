@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::*;
 use crate::manifest::load_plugin_manifest;
 use crate::manifest::load_plugin_manifest_with_format;
@@ -25,6 +27,35 @@ fn user_layer(path: AbsolutePathBuf, config: &str) -> ConfigLayerEntry {
         },
         toml::from_str(config).expect("user config toml"),
     )
+}
+
+async fn loaded_plugin_ids_for_config(
+    temp_dir: &TempDir,
+    store: &PluginStore,
+    config: &str,
+) -> BTreeSet<String> {
+    let stack = ConfigLayerStack::new(
+        vec![user_layer(
+            user_config_path(temp_dir, "config.toml"),
+            config,
+        )],
+        ConfigRequirements::default(),
+        ConfigRequirementsToml::default(),
+    )
+    .expect("valid config layer stack");
+    load_plugins_from_layer_stack(
+        &stack,
+        RemoteInstalledPluginsSnapshot::default(),
+        store,
+        /*plugin_skill_snapshots*/ None,
+        Some(Product::Codex),
+        /*remote_global_catalog_active*/ false,
+        test_skill_root_loader().as_ref(),
+    )
+    .await
+    .into_iter()
+    .map(|plugin| plugin.config_name)
+    .collect()
 }
 
 #[tokio::test]
@@ -409,6 +440,67 @@ async fn installed_agent_plugin_uses_isolated_data_root_for_stdio_mcp() {
     assert!(expected_data_root.as_path().is_dir());
 }
 
+#[tokio::test]
+async fn debloat_filters_managed_plugins_by_default_and_uses_strict_whitelist() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let store = PluginStore::new(temp_dir.path().to_path_buf());
+
+    assert_eq!(
+        loaded_plugin_ids_for_config(
+            &temp_dir,
+            &store,
+            r#"
+[debloat]
+enabled = true
+
+[plugins."managed@openai-bundled"]
+enabled = true
+
+[plugins."global@openai-curated-remote"]
+enabled = true
+
+[plugins."created@created-by-me-remote"]
+enabled = true
+
+[plugins."workspace@workspace-directory"]
+enabled = true
+
+[plugins."shared@workspace-shared-with-me"]
+enabled = true
+
+[plugins."custom@test"]
+enabled = true
+"#,
+        )
+        .await,
+        BTreeSet::from([
+            "created@created-by-me-remote".to_string(),
+            "custom@test".to_string(),
+            "shared@workspace-shared-with-me".to_string(),
+            "workspace@workspace-directory".to_string(),
+        ])
+    );
+    assert_eq!(
+        loaded_plugin_ids_for_config(
+            &temp_dir,
+            &store,
+            r#"
+[debloat]
+enabled = true
+whitelist = ["plugin.managed@openai-bundled"]
+
+[plugins."managed@openai-bundled"]
+enabled = true
+
+[plugins."custom@test"]
+enabled = true
+"#,
+        )
+        .await,
+        BTreeSet::from(["managed@openai-bundled".to_string()])
+    );
+}
+
 #[test]
 fn configured_plugins_from_stack_merges_enabled_effective_layers() {
     let temp_dir = TempDir::new().expect("tempdir");
@@ -598,6 +690,7 @@ enabled = true
         &store,
         /*remote_global_catalog_active*/ false,
         PluginLoadScope::HooksOnly,
+        &codex_config::DebloatPolicy::default(),
     )
     .await;
 

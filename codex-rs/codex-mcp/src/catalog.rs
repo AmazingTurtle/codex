@@ -144,6 +144,21 @@ pub struct McpServerRegistration {
 }
 
 impl McpServerRegistration {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn source(&self) -> &McpServerSource {
+        &self.source
+    }
+
+    pub fn disable_by_debloat(&mut self) {
+        if self.config.enabled {
+            self.config.enabled = false;
+            self.config.disabled_reason = Some(McpServerDisabledReason::Debloat);
+        }
+    }
+
     pub fn from_config(name: String, config: McpServerConfig) -> Self {
         Self::new(
             name,
