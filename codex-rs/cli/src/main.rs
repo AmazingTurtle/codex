@@ -138,6 +138,9 @@ struct MultitoolCli {
     pub config_overrides: CliConfigOverrides,
 
     #[clap(flatten)]
+    pub debloat_toggle: DebloatToggle,
+
+    #[clap(flatten)]
     pub feature_toggles: FeatureToggles,
 
     #[clap(flatten)]
@@ -1038,6 +1041,43 @@ struct FeatureToggles {
     disable: Vec<String>,
 }
 
+#[derive(Debug, Default, Args, Clone)]
+struct DebloatToggle {
+    /// Start with optional capability providers filtered by the debloat policy.
+    #[arg(long, global = true, conflicts_with = "no_debloat")]
+    debloat: bool,
+
+    /// Disable debloat filtering for this invocation.
+    #[arg(long, global = true, conflicts_with = "debloat")]
+    no_debloat: bool,
+}
+
+impl DebloatToggle {
+    fn to_override(&self) -> Option<String> {
+        if self.debloat {
+            Some("debloat.enabled=true".to_string())
+        } else if self.no_debloat {
+            Some("debloat.enabled=false".to_string())
+        } else {
+            None
+        }
+    }
+}
+
+fn apply_startup_toggle_overrides(
+    config_overrides: &mut CliConfigOverrides,
+    feature_toggles: &FeatureToggles,
+    debloat_toggle: &DebloatToggle,
+) -> anyhow::Result<()> {
+    config_overrides
+        .raw_overrides
+        .extend(feature_toggles.to_overrides()?);
+    if let Some(debloat_override) = debloat_toggle.to_override() {
+        config_overrides.raw_overrides.push(debloat_override);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Default, Parser, Clone)]
 struct InteractiveRemoteOptions {
     /// Connect the TUI to a remote app server endpoint.
@@ -1128,6 +1168,7 @@ async fn cli_main(
 ) -> anyhow::Result<()> {
     let MultitoolCli {
         config_overrides: mut root_config_overrides,
+        debloat_toggle,
         feature_toggles,
         remote,
         mut interactive,
@@ -1143,8 +1184,11 @@ async fn cli_main(
         .and_then(|path| AbsolutePathBuf::from_absolute_path(path).ok());
     reject_unsupported_worktree_for_subcommand(interactive.shared.worktree, &subcommand)?;
     // Fold --enable/--disable into config overrides so they flow to all subcommands.
-    let toggle_overrides = feature_toggles.to_overrides()?;
-    root_config_overrides.raw_overrides.extend(toggle_overrides);
+    apply_startup_toggle_overrides(
+        &mut root_config_overrides,
+        &feature_toggles,
+        &debloat_toggle,
+    )?;
     let agents_options = match &subcommand {
         Some(Subcommand::Agents(options)) => Some(options),
         _ => None,
@@ -3219,6 +3263,7 @@ mod tests {
         let MultitoolCli {
             mut interactive,
             config_overrides: mut root_overrides,
+            debloat_toggle: _,
             subcommand,
             feature_toggles: _,
             remote: _,
@@ -3256,6 +3301,7 @@ mod tests {
         let MultitoolCli {
             mut interactive,
             config_overrides: mut root_overrides,
+            debloat_toggle: _,
             subcommand,
             feature_toggles: _,
             remote: _,
@@ -3300,6 +3346,7 @@ mod tests {
         let MultitoolCli {
             interactive,
             config_overrides: root_overrides,
+            debloat_toggle: _,
             subcommand,
             feature_toggles: _,
             remote: _,
@@ -5185,6 +5232,37 @@ mod tests {
             vec![
                 "features.web_search_request=true".to_string(),
                 "features.unified_exec=false".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn debloat_flags_are_global_and_mutually_exclusive() {
+        let enabled = MultitoolCli::try_parse_from(["codex", "mcp", "list", "--debloat"])
+            .expect("global debloat flag should parse after a subcommand");
+        assert!(enabled.debloat_toggle.debloat);
+
+        let disabled = MultitoolCli::try_parse_from(["codex", "--no-debloat", "plugin", "list"])
+            .expect("global no-debloat flag should parse before a subcommand");
+        assert!(disabled.debloat_toggle.no_debloat);
+
+        assert!(MultitoolCli::try_parse_from(["codex", "--debloat", "--no-debloat"]).is_err());
+    }
+
+    #[test]
+    fn dedicated_debloat_flag_overrides_generic_config_value() {
+        let cli =
+            MultitoolCli::try_parse_from(["codex", "-c", "debloat.enabled=false", "--debloat"])
+                .expect("debloat overrides should parse");
+        let mut overrides = cli.config_overrides;
+        apply_startup_toggle_overrides(&mut overrides, &cli.feature_toggles, &cli.debloat_toggle)
+            .expect("startup toggles should resolve");
+
+        assert_eq!(
+            overrides.raw_overrides,
+            vec![
+                "debloat.enabled=false".to_string(),
+                "debloat.enabled=true".to_string(),
             ]
         );
     }

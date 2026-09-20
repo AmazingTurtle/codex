@@ -896,6 +896,71 @@ async fn skills_for_config_excludes_bundled_skills_when_disabled_in_config() {
 }
 
 #[tokio::test]
+async fn debloat_default_excludes_bundled_skills_but_keeps_user_skills() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let cwd = tempfile::tempdir().expect("tempdir");
+    write_user_skill(&codex_home, "user", "user-skill", "from user root");
+    let bundled_skill_dir = codex_home.path().join("skills/.system/bundled");
+    fs::create_dir_all(&bundled_skill_dir).expect("create bundled skill dir");
+    fs::write(
+        bundled_skill_dir.join("SKILL.md"),
+        "---\nname: bundled-skill\ndescription: from bundled root\n---\n",
+    )
+    .expect("write bundled skill");
+    let stack = config_stack(&codex_home, "[debloat]\nenabled = true\n");
+    let service = HostSkillsService::new(codex_home.path().abs(), true);
+
+    let outcome = skills_for_config_with_stack(&service, &cwd, &stack, &[]).await;
+    let enabled_names = outcome
+        .skills
+        .iter()
+        .filter(|skill| outcome.is_skill_enabled(skill))
+        .map(|skill| skill.name.as_str())
+        .collect::<HashSet<_>>();
+    assert!(enabled_names.contains("user-skill"));
+    assert!(
+        !outcome
+            .skills
+            .iter()
+            .any(|skill| skill.scope == SkillScope::System)
+    );
+}
+
+#[tokio::test]
+async fn explicit_debloat_whitelist_filters_standalone_skills_not_plugin_skills() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let cwd = tempfile::tempdir().expect("tempdir");
+    write_user_skill(&codex_home, "keep", "keep", "kept user skill");
+    write_user_skill(&codex_home, "drop", "drop", "filtered user skill");
+    let plugin_skill_path = write_plugin_skill(
+        &codex_home,
+        "test",
+        "sample",
+        "plugin",
+        "plugin-skill",
+        "plugin-owned skill",
+    );
+    let plugin_root = plugin_skill_root_for_skill_path(&plugin_skill_path, "sample@test", "sample");
+    let stack = config_stack(
+        &codex_home,
+        "[debloat]\nenabled = true\nwhitelist = [\"skill.keep\"]\n",
+    );
+    let service = HostSkillsService::new(codex_home.path().abs(), true);
+
+    let outcome = skills_for_config_with_stack(&service, &cwd, &stack, &[plugin_root]).await;
+    let enabled = |name: &str| {
+        outcome
+            .skills
+            .iter()
+            .find(|skill| skill.name == name)
+            .is_some_and(|skill| outcome.is_skill_enabled(skill))
+    };
+    assert!(enabled("keep"));
+    assert!(!enabled("drop"));
+    assert!(enabled("sample:plugin-skill"));
+}
+
+#[tokio::test]
 async fn skills_for_cwd_uses_cached_result_until_force_reload() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");

@@ -21,8 +21,9 @@ Options:
           'sandbox_permissions=["disk-full-read-access"]'` - `-c
           shell_environment_policy.inherit=all`
 
-      --enable <FEATURE>
-          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+      --debloat
+          Start with optional capability providers filtered by the debloat
+          policy
 
       --strict-config
           Error out when config.toml contains fields that are not recognized by
@@ -33,13 +34,19 @@ Options:
 
           [default: 1]
 
-      --disable <FEATURE>
-          Disable a feature (repeatable). Equivalent to `-c
-          features.<name>=false`
+      --no-debloat
+          Disable debloat filtering for this invocation
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
 
       --listen <URL>
           Transport endpoint URL. Supported values: `ws://IP:PORT` (default),
           `stdio`, `stdio://`
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c
+          features.<name>=false`
 
       --remote <URL>
           Register this exec-server as a remote environment using the given base
