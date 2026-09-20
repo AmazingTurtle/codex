@@ -15,6 +15,8 @@ use codex_config::ConfigPathContext;
 use codex_config::ConfigRequirements;
 use codex_config::ConfigRequirementsToml;
 use codex_config::ConstrainedWithSource;
+use codex_config::DebloatCapabilitySource;
+use codex_config::DebloatPolicy;
 use codex_config::FeatureRequirementsToml;
 use codex_config::ManagedAuthPolicy;
 use codex_config::McpEnterpriseManagedAuthConfig;
@@ -37,12 +39,14 @@ use codex_config::loader::load_config_layers_state;
 use codex_config::loader::project_trust_key;
 use codex_config::permissions_toml::PermissionProfileToml;
 use codex_config::permissions_toml::PermissionsToml;
+use codex_config::repository_mcp_server_names;
 use codex_config::sandbox_mode_requirement_for_permission_profile;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_config::types::AuthKeyringBackendKind;
 use codex_config::types::History;
 use codex_config::types::McpServerConfig;
+use codex_config::types::McpServerDisabledReason;
 use codex_config::types::MemoriesConfig;
 use codex_config::types::ModelAvailabilityNuxConfig;
 use codex_config::types::Notice;
@@ -84,11 +88,13 @@ use codex_http_client::OutboundProxyPolicy;
 use codex_login::AuthManagerConfig;
 use codex_login::AuthRouteConfig;
 use codex_login::ChatgptAccountBinding;
+use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
 use codex_mcp::DEFAULT_OPTIONAL_MCP_STARTUP_GRACE;
 use codex_mcp::McpConfig;
 use codex_mcp::McpPluginAttribution;
 use codex_mcp::McpProtocolMode;
 use codex_mcp::McpServerRegistration;
+use codex_mcp::McpServerSource;
 use codex_mcp::ResolvedMcpCatalog;
 use codex_model_provider::ProviderCapabilities;
 use codex_model_provider_info::GCP_PROVIDER_ID;
@@ -924,6 +930,9 @@ pub struct Config {
 
     /// Trusted IdP shared by all permitted EMA MCP registrations.
     pub mcp_enterprise_managed_auth: Option<McpEnterpriseManagedAuthConfig>,
+
+    /// Effective policy for optional plugins, MCP servers, and standalone skills.
+    pub debloat_policy: DebloatPolicy,
 
     /// When present, only these MCP servers omit the legacy `mcp__` namespace prefix.
     pub non_prefixed_mcp_tool_servers: Option<Vec<String>>,
@@ -1856,6 +1865,20 @@ impl Config {
         self.to_mcp_config_with_loaded_plugins(&loaded_plugins, additional_plugin_registrations)
     }
 
+    pub(crate) async fn to_mcp_inventory_config(
+        &self,
+        plugins_manager: &codex_core_plugins::PluginsManager,
+    ) -> McpConfig {
+        let plugins_input = self.plugins_config_input();
+        let loaded_plugins = plugins_manager
+            .plugins_for_config_inventory(&plugins_input)
+            .await;
+        self.to_mcp_config_with_loaded_plugins(
+            &loaded_plugins,
+            std::iter::empty::<McpServerRegistration>(),
+        )
+    }
+
     pub(crate) fn to_mcp_config_with_loaded_plugins(
         &self,
         loaded_plugins: &PluginLoadOutcome,
@@ -1875,6 +1898,12 @@ impl Config {
         {
             let mut plugin_mcp_servers = plugin.mcp_servers.clone();
             self.apply_plugin_mcp_server_requirements(&plugin.config_name, &mut plugin_mcp_servers);
+            let plugin_allowed = self.debloat_policy.allows_plugin(&plugin.config_name);
+            if !plugin_allowed {
+                for server in plugin_mcp_servers.values_mut() {
+                    disable_mcp_server_by_debloat(server);
+                }
+            }
             let attribution = if plugin.is_agent_plugin() {
                 McpPluginAttribution::agent_plugin(
                     plugin.config_name.clone(),
@@ -1897,14 +1926,45 @@ impl Config {
             }
         }
         for registration in additional_plugin_registrations {
-            catalog.register(registration);
+            catalog.register(self.apply_debloat_to_mcp_registration(registration));
         }
+        let repository_mcp_servers = repository_mcp_server_names(&self.config_layer_stack);
         for (name, server) in self.mcp_servers.get() {
-            catalog.register(McpServerRegistration::from_config(
-                name.clone(),
-                server.clone(),
-            ));
+            let mut server = server.clone();
+            let source = if repository_mcp_servers.contains(name) {
+                DebloatCapabilitySource::Repository
+            } else {
+                DebloatCapabilitySource::External
+            };
+            if !self.debloat_policy.allows_mcp(name, source) {
+                disable_mcp_server_by_debloat(&mut server);
+            }
+            catalog.register(McpServerRegistration::from_config(name.clone(), server));
         }
+
+        let connector_snapshot =
+            codex_connectors::ConnectorSnapshot::from_plugin_capability_summaries(
+                loaded_plugins.capability_summaries(),
+            );
+        let allowed_app_connector_ids = if !self.debloat_policy.is_enabled()
+            || self.debloat_policy.allows_mcp(
+                CODEX_APPS_MCP_SERVER_NAME,
+                DebloatCapabilitySource::External,
+            ) {
+            None
+        } else {
+            Some(
+                connector_snapshot
+                    .connector_ids()
+                    .iter()
+                    .map(|connector_id| connector_id.0.clone())
+                    .collect::<HashSet<_>>(),
+            )
+        };
+        let apps_enabled = self.features.enabled(Feature::Apps)
+            && allowed_app_connector_ids
+                .as_ref()
+                .is_none_or(|allowed| !allowed.is_empty());
 
         McpConfig {
             chatgpt_base_url: self.chatgpt_base_url.clone(),
@@ -1941,7 +2001,8 @@ impl Config {
             codex_self_exe: self.codex_self_exe.clone(),
             codex_linux_sandbox_exe: self.codex_linux_sandbox_exe.clone(),
             use_legacy_landlock: self.features.use_legacy_landlock(),
-            apps_enabled: self.features.enabled(Feature::Apps),
+            apps_enabled,
+            allowed_app_connector_ids,
             prefix_mcp_tool_names: self.prefix_mcp_tool_names(),
             non_prefixed_mcp_tool_servers: if self
                 .features
@@ -1969,11 +2030,39 @@ impl Config {
                 ElicitationCapability::default()
             },
             mcp_server_catalog: catalog.build(),
-            connector_snapshot:
-                codex_connectors::ConnectorSnapshot::from_plugin_capability_summaries(
-                    loaded_plugins.capability_summaries(),
-                ),
+            connector_snapshot,
         }
+    }
+
+    pub(crate) fn apply_debloat_to_mcp_registration(
+        &self,
+        mut registration: McpServerRegistration,
+    ) -> McpServerRegistration {
+        let allowed = match registration.source() {
+            McpServerSource::Plugin(plugin) | McpServerSource::SelectedPlugin(plugin) => {
+                self.debloat_policy.allows_plugin(plugin.plugin_id())
+            }
+            McpServerSource::Config => {
+                let repository_mcp_servers = repository_mcp_server_names(&self.config_layer_stack);
+                let source = if repository_mcp_servers.contains(registration.name()) {
+                    DebloatCapabilitySource::Repository
+                } else {
+                    DebloatCapabilitySource::External
+                };
+                self.debloat_policy.allows_mcp(registration.name(), source)
+            }
+            McpServerSource::Compatibility { .. } | McpServerSource::Extension { .. } => self
+                .debloat_policy
+                .allows_mcp(registration.name(), DebloatCapabilitySource::External),
+        };
+        if !allowed {
+            registration.disable_by_debloat();
+        }
+        registration
+    }
+
+    pub(crate) fn allows_plugin_by_debloat(&self, plugin_id: &str) -> bool {
+        self.debloat_policy.allows_plugin(plugin_id)
     }
 
     pub(crate) fn prefix_mcp_tool_names(&self) -> bool {
@@ -2261,6 +2350,13 @@ fn load_model_catalog(
     model_catalog_json
         .map(|path| load_catalog_json(&path))
         .transpose()
+}
+
+fn disable_mcp_server_by_debloat(server: &mut McpServerConfig) {
+    if server.enabled {
+        server.enabled = false;
+        server.disabled_reason = Some(McpServerDisabledReason::Debloat);
+    }
 }
 
 fn filter_mcp_servers_by_requirements(
@@ -4359,6 +4455,7 @@ impl Config {
 
         let mcp_servers = constrain_mcp_servers(cfg.mcp_servers.clone(), mcp_servers.as_ref())
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{e}")))?;
+        let debloat_policy = DebloatPolicy::from_config(cfg.debloat.as_ref());
 
         let network_permission_profile = constrained_permission_profile.get().clone();
         let network = build_network_proxy_spec(
@@ -4544,6 +4641,7 @@ impl Config {
             chatgpt_account_selection: cfg.chatgpt_account_selection,
             session_chatgpt_account_binding: None,
             mcp_servers,
+            debloat_policy,
             non_prefixed_mcp_tool_servers,
             mcp_enterprise_managed_auth,
             // The config.toml omits "_mode" because it's a config file. However, "_mode"

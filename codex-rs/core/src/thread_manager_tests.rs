@@ -1889,13 +1889,21 @@ async fn start_thread_seeds_extension_data_for_mcp_and_lifecycle_contributors() 
             .get("originator"),
         Some(&"codex_work_desktop".to_string())
     );
-    for (policy, disabled_plugin_ids, selected_enabled, expected_mcp_loads) in [
-        ("", vec!["plugin-selected-a".to_string()], false, 1),
-        ("", vec![], true, 1),
-        ("[plugins._default]\nenabled = false", vec![], false, 0),
+    for (policy, disabled_plugin_ids, debloated, selected_enabled, expected_mcp_loads) in [
+        ("", vec!["plugin-selected-a".to_string()], false, false, 1),
+        ("", vec![], false, true, 1),
+        ("", vec![], true, false, 1),
+        (
+            "[plugins._default]\nenabled = false",
+            vec![],
+            false,
+            false,
+            0,
+        ),
         (
             "[plugins._default]\nenabled = false\n[plugins.plugin-selected-a]\nenabled = true",
             vec![],
+            false,
             true,
             1,
         ),
@@ -1911,6 +1919,13 @@ async fn start_thread_seeds_extension_data_for_mcp_and_lifecycle_contributors() 
         config.plugins = toml::from_str::<codex_config::config_toml::ConfigToml>(policy)
             .unwrap()
             .plugins;
+        if debloated {
+            config.debloat_policy =
+                codex_config::DebloatPolicy::from_config(Some(&codex_config::DebloatConfigToml {
+                    enabled: true,
+                    whitelist: Some(Vec::new()),
+                }));
+        }
         let loaded_before = mcp_loaded.load(Ordering::Relaxed);
         let projection = first_session
             .services
@@ -1951,7 +1966,7 @@ async fn start_thread_seeds_extension_data_for_mcp_and_lifecycle_contributors() 
                 .connector_snapshot
                 .disabled_connector_ids()
                 .contains("selected-a-connector"),
-            !disabled_plugin_ids.is_empty()
+            !disabled_plugin_ids.is_empty() || debloated
         );
         assert_eq!(
             projection.selected_plugins.plugins.len(),

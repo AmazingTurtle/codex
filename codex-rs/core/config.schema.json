@@ -1606,6 +1606,25 @@
       ],
       "type": "string"
     },
+    "DebloatConfigToml": {
+      "additionalProperties": false,
+      "description": "Configuration for suppressing optional capability providers at startup.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enables debloat filtering. Defaults to `false`.",
+          "type": "boolean"
+        },
+        "whitelist": {
+          "description": "Explicit allowlist for non-repository capabilities. When debloat is enabled, absence and an explicitly empty list both disable every plugin and every non-repository MCP server and standalone skill.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "ExperimentalRequestUserInput": {
       "additionalProperties": false,
       "properties": {
@@ -7284,6 +7303,14 @@
     "daybreak": {
       "description": "Default Daybreak preference for new threads and non-interactive turns.",
       "type": "boolean"
+    },
+    "debloat": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/DebloatConfigToml"
+        }
+      ],
+      "description": "Suppresses optional capability providers before they are loaded."
     },
     "default_permissions": {
       "description": "Default permissions profile to apply. Names starting with `:` refer to built-in profiles; other names are resolved from the `[permissions]` table.",

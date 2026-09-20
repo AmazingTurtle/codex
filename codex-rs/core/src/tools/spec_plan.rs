@@ -724,6 +724,7 @@ pub(crate) fn tool_suggest_enabled(turn_context: &TurnContext) -> bool {
     features.enabled(Feature::ToolSuggest)
         && features.enabled(Feature::Apps)
         && features.enabled(Feature::Plugins)
+        && !turn_context.config.debloat_policy.is_enabled()
 }
 
 fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {

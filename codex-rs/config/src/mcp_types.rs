@@ -64,6 +64,8 @@ pub enum McpServerDisabledReason {
     Requirements { source: RequirementSource },
     /// An explicit disable is also denied by requirements.
     ExplicitAndRequirements { source: RequirementSource },
+    /// The server was suppressed by the effective debloat policy.
+    Debloat,
 }
 
 impl fmt::Display for McpServerDisabledReason {
@@ -74,6 +76,7 @@ impl fmt::Display for McpServerDisabledReason {
             | McpServerDisabledReason::ExplicitAndRequirements { source } => {
                 write!(f, "requirements ({source})")
             }
+            McpServerDisabledReason::Debloat => write!(f, "debloat"),
         }
     }
 }
@@ -317,7 +320,10 @@ impl McpServerConfig {
     /// Disables this registration without losing an existing explicit disable.
     pub fn disable_by_requirements(&mut self, source: RequirementSource) {
         let explicitly_disabled = match self.disabled_reason {
-            Some(McpServerDisabledReason::Requirements { .. }) => false,
+            // Debloat is a per-registration policy, not an explicit user disable.
+            Some(
+                McpServerDisabledReason::Requirements { .. } | McpServerDisabledReason::Debloat,
+            ) => false,
             Some(McpServerDisabledReason::ExplicitAndRequirements { .. }) => true,
             Some(McpServerDisabledReason::Unknown) | None => !self.enabled,
         };

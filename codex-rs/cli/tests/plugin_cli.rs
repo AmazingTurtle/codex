@@ -724,6 +724,7 @@ async fn plugin_list_json_prints_available_plugins_when_requested() -> Result<()
                     "version": "1.2.3",
                     "installed": false,
                     "enabled": false,
+                    "debloated": false,
                     "source": {
                         "source": "local",
                         "path": plugin_path.display().to_string(),
@@ -781,6 +782,7 @@ async fn plugin_list_json_includes_configured_git_marketplace_source() -> Result
                     "version": "1.2.3",
                     "installed": false,
                     "enabled": false,
+                    "debloated": false,
                     "source": {
                         "source": "local",
                         "path": normalized_plugin_path.display().to_string(),
@@ -828,6 +830,7 @@ async fn plugin_list_json_prints_installed_plugins() -> Result<()> {
                     "version": "1.2.3",
                     "installed": true,
                     "enabled": true,
+                    "debloated": false,
                     "source": {
                         "source": "local",
                         "path": plugin_path.display().to_string(),
@@ -1287,6 +1290,7 @@ impl RemoteMarketplaceFixture {
             "pluginId": "sample@openai-curated", "name": "sample",
             "marketplaceName": "openai-curated", "version": "1.2.3",
             "installed": false, "enabled": false,
+            "debloated": false,
             "source": {"source": "local", "path": source.join("plugins").join("sample")},
             "installPolicy": "AVAILABLE", "authPolicy": "ON_INSTALL"
         }))
@@ -1344,6 +1348,7 @@ async fn remote_plugin_listing_replaces_local_curated_catalog() -> Result<()> {
         json!({"installed": [{
             "pluginId": PLUGIN_KEY, "name": "sample", "marketplaceName": MARKETPLACE,
             "version": "1.2.3", "installed": true, "enabled": true,
+            "debloated": false,
             "source": {"source": "remote", "id": REMOTE_ID},
             "installPolicy": "AVAILABLE", "authPolicy": "ON_USE"
         }], "available": []})
@@ -1473,6 +1478,7 @@ async fn remote_plugin_add_list_and_remove() -> Result<()> {
     let available = json!({
         "pluginId": PLUGIN_KEY, "name": "sample", "marketplaceName": MARKETPLACE,
         "version": "1.2.3", "installed": false, "enabled": false,
+        "debloated": false,
         "source": {"source": "remote", "id": REMOTE_ID}, "installPolicy": "AVAILABLE", "authPolicy": "ON_USE"
     });
     let listed = fixture
@@ -1898,6 +1904,7 @@ async fn remote_plugin_listing_uses_collection_when_remote_catalog_is_disabled()
         json!({"installed": [], "available": [local_plugin.clone(), {
             "pluginId": PLUGIN_KEY, "name": "sample", "marketplaceName": MARKETPLACE,
             "version": "1.2.3", "installed": false, "enabled": false,
+            "debloated": false,
             "source": {"source": "remote", "id": REMOTE_ID},
             "installPolicy": "AVAILABLE", "authPolicy": "ON_USE"
         }]})

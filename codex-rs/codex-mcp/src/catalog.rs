@@ -148,6 +148,21 @@ pub struct McpServerRegistration {
 }
 
 impl McpServerRegistration {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn source(&self) -> &McpServerSource {
+        &self.source
+    }
+
+    pub fn disable_by_debloat(&mut self) {
+        if self.config.enabled {
+            self.config.enabled = false;
+            self.config.disabled_reason = Some(McpServerDisabledReason::Debloat);
+        }
+    }
+
     /// Registers host-owned configuration, which may resolve credentials on the host.
     pub fn from_config(name: String, config: McpServerConfig) -> Self {
         Self::new(
@@ -549,6 +564,9 @@ impl McpCatalogBuilder {
                             Some(McpServerDisabledReason::Unknown) | None => {
                                 disabled_server_names.insert(name.clone());
                             }
+                            // Debloat is re-evaluated for every registration, so it never
+                            // becomes a persistent name veto.
+                            Some(McpServerDisabledReason::Debloat) => {}
                         }
                     }
                     if disabled_server_names.contains(&name) {

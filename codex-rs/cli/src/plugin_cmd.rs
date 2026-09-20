@@ -5,6 +5,7 @@ use anyhow::ensure;
 use clap::Parser;
 use codex_app_server_protocol::PluginAuthPolicy;
 use codex_app_server_protocol::PluginInstallPolicy;
+use codex_config::DebloatPolicy;
 use codex_core::config::Config;
 use codex_core::config::find_codex_home;
 use codex_core::plugins_manager_for_config;
@@ -260,6 +261,7 @@ pub async fn run_plugin_list(
         manager,
         ..
     } = context;
+    let debloat_policy = DebloatPolicy::from_layer_stack(&plugins_input.config_layer_stack);
     let outcome = manager
         .list_marketplaces_for_config(
             &plugins_input,
@@ -275,39 +277,38 @@ pub async fn run_plugin_list(
     )?;
 
     let marketplace_sources = configured_marketplace_sources(&plugins_input, codex_home.as_path());
-    let marketplaces = outcome
-        .marketplaces
-        .into_iter()
-        .map(|marketplace| {
-            let source = marketplace_sources.get(&marketplace.name).cloned();
-            PluginListMarketplace {
-                plugins: marketplace
-                    .plugins
-                    .into_iter()
-                    .map(|plugin| {
-                        PluginListEntry::from_configured_plugin(
-                            &marketplace.name,
-                            source.clone(),
-                            plugin,
-                        )
-                    })
-                    .collect(),
-                name: marketplace.name,
-                path: Some(marketplace.path),
-            }
-        })
-        .chain(
-            remote_listing
-                .marketplaces
-                .into_iter()
-                .map(PluginListMarketplace::from),
-        )
-        .filter(|marketplace| {
-            args.marketplace_name
-                .as_ref()
-                .is_none_or(|name| marketplace.name == *name)
-        })
-        .collect::<Vec<_>>();
+    let marketplaces =
+        outcome
+            .marketplaces
+            .into_iter()
+            .map(|marketplace| {
+                let source = marketplace_sources.get(&marketplace.name).cloned();
+                PluginListMarketplace {
+                    plugins: marketplace
+                        .plugins
+                        .into_iter()
+                        .map(|plugin| {
+                            PluginListEntry::from_configured_plugin(
+                                &marketplace.name,
+                                source.clone(),
+                                plugin,
+                                &debloat_policy,
+                            )
+                        })
+                        .collect(),
+                    name: marketplace.name,
+                    path: Some(marketplace.path),
+                }
+            })
+            .chain(remote_listing.marketplaces.into_iter().map(|marketplace| {
+                PluginListMarketplace::from_remote(marketplace, &debloat_policy)
+            }))
+            .filter(|marketplace| {
+                args.marketplace_name
+                    .as_ref()
+                    .is_none_or(|name| marketplace.name == *name)
+            })
+            .collect::<Vec<_>>();
 
     write_plugin_list(&mut io::stdout().lock(), marketplaces, args)
 }
@@ -361,13 +362,7 @@ fn render_plugin_list(
             let mut installed_version_width = "VERSION".len();
 
             for plugin in &marketplace.plugins {
-                let state = if plugin.installed && plugin.enabled {
-                    "installed, enabled"
-                } else if plugin.installed {
-                    "installed, disabled"
-                } else {
-                    "not installed"
-                };
+                let state = plugin_status(plugin);
                 let installed_version = plugin.display_version.clone().unwrap_or_default();
                 let path = match &plugin.source {
                     JsonPluginSource::Remote { id } => id.clone(),
@@ -442,14 +437,17 @@ struct PluginListMarketplace {
     plugins: Vec<PluginListEntry>,
 }
 
-impl From<RemoteMarketplace> for PluginListMarketplace {
-    fn from(marketplace: RemoteMarketplace) -> Self {
+impl PluginListMarketplace {
+    fn from_remote(marketplace: RemoteMarketplace, debloat_policy: &DebloatPolicy) -> Self {
         Self {
             plugins: marketplace
                 .plugins
                 .into_iter()
                 .map(|plugin| {
                     let version = plugin.local_version.or(plugin.version);
+                    let debloated = plugin.installed
+                        && plugin.enabled
+                        && !debloat_policy.allows_plugin(&plugin.id);
                     PluginListEntry {
                         plugin_id: plugin.id,
                         name: plugin.name,
@@ -458,6 +456,7 @@ impl From<RemoteMarketplace> for PluginListMarketplace {
                         version,
                         installed: plugin.installed,
                         enabled: plugin.enabled,
+                        debloated,
                         source: JsonPluginSource::Remote {
                             id: plugin.remote_plugin_id,
                         },
@@ -523,6 +522,7 @@ struct PluginListEntry {
     display_version: Option<String>,
     installed: bool,
     enabled: bool,
+    debloated: bool,
     source: JsonPluginSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     marketplace_source: Option<JsonMarketplaceSource>,
@@ -535,9 +535,12 @@ impl PluginListEntry {
         marketplace_name: &str,
         marketplace_source: Option<JsonMarketplaceSource>,
         plugin: codex_core_plugins::ConfiguredMarketplacePlugin,
+        debloat_policy: &DebloatPolicy,
     ) -> Self {
         let display_version = plugin.installed_version;
         let version = display_version.clone().or(plugin.local_version);
+        let debloated =
+            plugin.installed && plugin.enabled && !debloat_policy.allows_plugin(&plugin.id);
         Self {
             plugin_id: plugin.id,
             name: plugin.name,
@@ -546,11 +549,24 @@ impl PluginListEntry {
             display_version,
             installed: plugin.installed,
             enabled: plugin.enabled,
+            debloated,
             source: JsonPluginSource::from_marketplace_source(plugin.source),
             marketplace_source,
             install_policy: install_policy_label(plugin.policy.installation),
             auth_policy: auth_policy_label(plugin.policy.authentication),
         }
+    }
+}
+
+fn plugin_status(plugin: &PluginListEntry) -> &'static str {
+    if plugin.installed && plugin.enabled && plugin.debloated {
+        "installed, enabled, debloated"
+    } else if plugin.installed && plugin.enabled {
+        "installed, enabled"
+    } else if plugin.installed {
+        "installed, disabled"
+    } else {
+        "not installed"
     }
 }
 
