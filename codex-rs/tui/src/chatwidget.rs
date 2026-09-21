@@ -1350,6 +1350,7 @@ impl ChatWidget {
         self.flush_interrupt_queue();
         self.flush_active_cell();
         self.review.is_review_mode = false;
+        self.update_task_running_state();
         self.restore_pre_review_token_info();
         self.add_to_history(history_cell::new_review_status_line(
             "<< Code review finished >>".to_string(),
