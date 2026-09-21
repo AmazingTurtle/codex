@@ -15,6 +15,7 @@ use codex_config::ConfigPathContext;
 use codex_config::ConfigRequirements;
 use codex_config::ConfigRequirementsToml;
 use codex_config::ConstrainedWithSource;
+use codex_config::DebloatCapabilitySource;
 use codex_config::DebloatPolicy;
 use codex_config::FeatureRequirementsToml;
 use codex_config::ManagedAuthPolicy;
@@ -37,6 +38,7 @@ use codex_config::loader::load_config_layers_state;
 use codex_config::loader::project_trust_key;
 use codex_config::permissions_toml::PermissionProfileToml;
 use codex_config::permissions_toml::PermissionsToml;
+use codex_config::repository_mcp_server_names;
 use codex_config::sandbox_mode_requirement_for_permission_profile;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::AuthCredentialsStoreMode;
@@ -59,10 +61,8 @@ use codex_config::types::TuiNotificationSettings;
 use codex_config::types::TuiPetAnchor;
 use codex_config::types::UriBasedFileOpener;
 use codex_config::types::WindowsSandboxModeToml;
-use codex_config::user_controlled_mcp_server_names;
 use codex_core_plugins::PluginLoadOutcome;
 use codex_core_plugins::PluginsConfigInput;
-use codex_core_plugins::is_openai_managed_marketplace_name;
 use codex_exec_server::ExecutorFileSystem;
 use codex_exec_server::LOCAL_FS;
 use codex_exec_server::ReadFileOptions;
@@ -1774,10 +1774,7 @@ impl Config {
         {
             let mut plugin_mcp_servers = plugin.mcp_servers.clone();
             self.apply_plugin_mcp_server_requirements(&plugin.config_name, &mut plugin_mcp_servers);
-            let plugin_allowed = self.debloat_policy.allows_plugin(
-                &plugin.config_name,
-                plugin_marketplace_is_openai_managed(&plugin.config_name),
-            );
+            let plugin_allowed = self.debloat_policy.allows_plugin(&plugin.config_name);
             if !plugin_allowed {
                 for server in plugin_mcp_servers.values_mut() {
                     disable_mcp_server_by_debloat(server);
@@ -1807,14 +1804,15 @@ impl Config {
         for registration in additional_plugin_registrations {
             catalog.register(self.apply_debloat_to_mcp_registration(registration));
         }
-        let user_controlled_mcp_servers =
-            user_controlled_mcp_server_names(&self.config_layer_stack);
+        let repository_mcp_servers = repository_mcp_server_names(&self.config_layer_stack);
         for (name, server) in self.mcp_servers.get() {
             let mut server = server.clone();
-            if !self
-                .debloat_policy
-                .allows_mcp(name, user_controlled_mcp_servers.contains(name))
-            {
+            let source = if repository_mcp_servers.contains(name) {
+                DebloatCapabilitySource::Repository
+            } else {
+                DebloatCapabilitySource::External
+            };
+            if !self.debloat_policy.allows_mcp(name, source) {
                 disable_mcp_server_by_debloat(&mut server);
             }
             catalog.register(McpServerRegistration::from_config(name.clone(), server));
@@ -1825,10 +1823,10 @@ impl Config {
                 loaded_plugins.capability_summaries(),
             );
         let allowed_app_connector_ids = if !self.debloat_policy.is_enabled()
-            || self
-                .debloat_policy
-                .allows_mcp(CODEX_APPS_MCP_SERVER_NAME, /*user_controlled*/ false)
-        {
+            || self.debloat_policy.allows_mcp(
+                CODEX_APPS_MCP_SERVER_NAME,
+                DebloatCapabilitySource::External,
+            ) {
             None
         } else {
             Some(
@@ -1912,22 +1910,20 @@ impl Config {
     ) -> McpServerRegistration {
         let allowed = match registration.source() {
             McpServerSource::Plugin(plugin) | McpServerSource::SelectedPlugin(plugin) => {
-                self.debloat_policy.allows_plugin(
-                    plugin.plugin_id(),
-                    plugin_marketplace_is_openai_managed(plugin.plugin_id()),
-                )
+                self.debloat_policy.allows_plugin(plugin.plugin_id())
             }
             McpServerSource::Config => {
-                let user_controlled_mcp_servers =
-                    user_controlled_mcp_server_names(&self.config_layer_stack);
-                self.debloat_policy.allows_mcp(
-                    registration.name(),
-                    user_controlled_mcp_servers.contains(registration.name()),
-                )
+                let repository_mcp_servers = repository_mcp_server_names(&self.config_layer_stack);
+                let source = if repository_mcp_servers.contains(registration.name()) {
+                    DebloatCapabilitySource::Repository
+                } else {
+                    DebloatCapabilitySource::External
+                };
+                self.debloat_policy.allows_mcp(registration.name(), source)
             }
             McpServerSource::Compatibility { .. } | McpServerSource::Extension { .. } => self
                 .debloat_policy
-                .allows_mcp(registration.name(), /*user_controlled*/ false),
+                .allows_mcp(registration.name(), DebloatCapabilitySource::External),
         };
         if !allowed {
             registration.disable_by_debloat();
@@ -1936,8 +1932,7 @@ impl Config {
     }
 
     pub(crate) fn allows_plugin_by_debloat(&self, plugin_id: &str) -> bool {
-        self.debloat_policy
-            .allows_plugin(plugin_id, plugin_marketplace_is_openai_managed(plugin_id))
+        self.debloat_policy.allows_plugin(plugin_id)
     }
 
     pub(crate) fn prefix_mcp_tool_names(&self) -> bool {
@@ -2229,12 +2224,6 @@ fn load_model_catalog(
     model_catalog_json
         .map(|path| load_catalog_json(&path))
         .transpose()
-}
-
-fn plugin_marketplace_is_openai_managed(plugin_id: &str) -> bool {
-    plugin_id
-        .rsplit_once('@')
-        .is_some_and(|(_, marketplace)| is_openai_managed_marketplace_name(marketplace))
 }
 
 fn disable_mcp_server_by_debloat(server: &mut McpServerConfig) {

@@ -22,7 +22,7 @@ Options:
           shell_environment_policy.inherit=all`
 
       --debloat
-          Start with optional capability providers filtered by the debloat
+          Start with non-repository capability providers filtered by the debloat
           policy
 
       --strict-config

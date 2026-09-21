@@ -6,21 +6,6 @@ use crate::config_toml::ConfigToml;
 use codex_utils_absolute_path::AbsolutePathBuf;
 
 #[test]
-fn parses_absent_and_explicit_empty_whitelists_distinctly() {
-    let absent: ConfigToml = toml::from_str("[debloat]\nenabled = true").unwrap();
-    let empty: ConfigToml = toml::from_str("[debloat]\nenabled = true\nwhitelist = []").unwrap();
-
-    assert_eq!(
-        DebloatPolicy::from_config(absent.debloat.as_ref()).has_explicit_whitelist(),
-        false
-    );
-    assert_eq!(
-        DebloatPolicy::from_config(empty.debloat.as_ref()).has_explicit_whitelist(),
-        true
-    );
-}
-
-#[test]
 fn rejects_malformed_identifiers() {
     for identifier in ["plugin.browser", "mcp.", "skill.two words", "other.value"] {
         let config = format!("[debloat]\nwhitelist = [\"{identifier}\"]");
@@ -32,35 +17,43 @@ fn rejects_malformed_identifiers() {
 }
 
 #[test]
-fn default_policy_keeps_custom_plugins_user_mcp_and_non_bundled_skills() {
-    let policy = DebloatPolicy::from_config(Some(&DebloatConfigToml {
-        enabled: true,
-        whitelist: None,
-    }));
+fn default_policy_keeps_only_repository_capabilities() {
+    for whitelist in [None, Some(Vec::new())] {
+        let policy = DebloatPolicy::from_config(Some(&DebloatConfigToml {
+            enabled: true,
+            whitelist,
+        }));
 
-    assert!(!policy.allows_plugin("browser@openai-bundled", true));
-    assert!(policy.allows_plugin("custom@personal", false));
-    assert!(!policy.allows_mcp("product", false));
-    assert!(policy.allows_mcp("user", true));
-    assert!(!policy.allows_standalone_skill("imagegen", true));
-    assert!(policy.allows_standalone_skill("personal", false));
+        assert!(!policy.allows_plugin("browser@openai-bundled"));
+        assert!(!policy.allows_plugin("custom@personal"));
+        assert!(!policy.allows_mcp("user", DebloatCapabilitySource::External));
+        assert!(policy.allows_mcp("repo", DebloatCapabilitySource::Repository));
+        assert!(!policy.allows_standalone_skill("personal", DebloatCapabilitySource::External));
+        assert!(policy.allows_standalone_skill("repo", DebloatCapabilitySource::Repository));
+        assert!(!policy.allows_external_skill_discovery());
+    }
 }
 
 #[test]
-fn explicit_whitelist_is_strict_and_deduplicated() {
-    let config: ConfigToml =
-        toml::from_str("[debloat]\nenabled = true\nwhitelist = [\"mcp.kept\", \"mcp.kept\"]")
-            .unwrap();
+fn explicit_whitelist_allows_matching_external_capabilities() {
+    let config: ConfigToml = toml::from_str(
+        "[debloat]\nenabled = true\nwhitelist = [\"mcp.kept\", \"mcp.kept\", \"skill.kept\", \"plugin.kept@test\"]",
+    )
+    .unwrap();
     let policy = DebloatPolicy::from_config(config.debloat.as_ref());
 
-    assert!(policy.allows_mcp("kept", false));
-    assert!(!policy.allows_mcp("other", true));
-    assert!(!policy.allows_plugin("custom@personal", false));
-    assert!(!policy.allows_standalone_skill("personal", false));
+    assert!(policy.allows_mcp("kept", DebloatCapabilitySource::External));
+    assert!(!policy.allows_mcp("other", DebloatCapabilitySource::External));
+    assert!(policy.allows_mcp("other", DebloatCapabilitySource::Repository));
+    assert!(policy.allows_plugin("kept@test"));
+    assert!(!policy.allows_plugin("custom@personal"));
+    assert!(policy.allows_standalone_skill("kept", DebloatCapabilitySource::External));
+    assert!(!policy.allows_standalone_skill("personal", DebloatCapabilitySource::External));
+    assert!(policy.allows_external_skill_discovery());
 }
 
 #[test]
-fn user_controlled_mcp_names_only_include_supported_layers() {
+fn repository_mcp_names_only_include_effective_project_definitions() {
     let base = AbsolutePathBuf::from_absolute_path(std::env::current_dir().unwrap())
         .expect("current directory should be absolute");
     let layer = |name, server: &str| {
@@ -91,11 +84,14 @@ fn user_controlled_mcp_names_only_include_supported_layers() {
                 },
                 "user",
             ),
-            layer(
+            ConfigLayerEntry::new(
                 ConfigLayerSource::Project {
                     dot_codex_folder: base.join("repo/.codex"),
                 },
-                "project",
+                toml::from_str(
+                    "[mcp_servers.project]\ncommand = \"true\"\n[mcp_servers.overridden]\ncommand = \"true\"",
+                )
+                .unwrap(),
             ),
             layer(ConfigLayerSource::SessionFlags, "session"),
             layer(
@@ -111,11 +107,7 @@ fn user_controlled_mcp_names_only_include_supported_layers() {
     .unwrap();
 
     assert_eq!(
-        user_controlled_mcp_server_names(&stack),
-        HashSet::from([
-            "project".to_string(),
-            "session".to_string(),
-            "user".to_string(),
-        ])
+        repository_mcp_server_names(&stack),
+        HashSet::from(["project".to_string()])
     );
 }

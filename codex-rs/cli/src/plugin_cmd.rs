@@ -19,7 +19,6 @@ use codex_core_plugins::RemotePluginInstallRequest;
 use codex_core_plugins::allowed_configured_marketplace_names;
 use codex_core_plugins::installed_marketplaces::marketplace_install_root;
 use codex_core_plugins::installed_marketplaces::resolve_configured_marketplace_root;
-use codex_core_plugins::is_openai_managed_marketplace_name;
 use codex_core_plugins::marketplace::MarketplaceListError;
 use codex_core_plugins::marketplace::MarketplacePluginAuthPolicy;
 use codex_core_plugins::marketplace::MarketplacePluginInstallPolicy;
@@ -412,10 +411,7 @@ impl PluginListMarketplace {
                     let version = plugin.local_version.or(plugin.version);
                     let debloated = plugin.installed
                         && plugin.enabled
-                        && !debloat_policy.allows_plugin(
-                            &plugin.id,
-                            is_openai_managed_marketplace_name(&marketplace.name),
-                        );
+                        && !debloat_policy.allows_plugin(&plugin.id);
                     PluginListEntry {
                         plugin_id: plugin.id,
                         name: plugin.name,
@@ -507,12 +503,8 @@ impl PluginListEntry {
     ) -> Self {
         let display_version = plugin.installed_version;
         let version = display_version.clone().or(plugin.local_version);
-        let debloated = plugin.installed
-            && plugin.enabled
-            && !debloat_policy.allows_plugin(
-                &plugin.id,
-                is_openai_managed_marketplace_name(marketplace_name),
-            );
+        let debloated =
+            plugin.installed && plugin.enabled && !debloat_policy.allows_plugin(&plugin.id);
         Self {
             plugin_id: plugin.id,
             name: plugin.name,

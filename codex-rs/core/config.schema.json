@@ -1375,7 +1375,7 @@
           "type": "boolean"
         },
         "whitelist": {
-          "description": "Explicit capability allowlist. Absence selects the default debloat policy; an explicitly empty list disables every plugin, MCP server, and standalone skill.",
+          "description": "Explicit allowlist for non-repository capabilities. When debloat is enabled, absence and an explicitly empty list both disable every plugin and every non-repository MCP server and standalone skill.",
           "items": {
             "type": "string"
           },

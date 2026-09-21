@@ -441,7 +441,7 @@ async fn installed_agent_plugin_uses_isolated_data_root_for_stdio_mcp() {
 }
 
 #[tokio::test]
-async fn debloat_filters_managed_plugins_by_default_and_uses_strict_whitelist() {
+async fn debloat_filters_all_plugins_by_default_and_uses_strict_whitelist() {
     let temp_dir = TempDir::new().expect("tempdir");
     let store = PluginStore::new(temp_dir.path().to_path_buf());
 
@@ -473,12 +473,7 @@ enabled = true
 "#,
         )
         .await,
-        BTreeSet::from([
-            "created@created-by-me-remote".to_string(),
-            "custom@test".to_string(),
-            "shared@workspace-shared-with-me".to_string(),
-            "workspace@workspace-directory".to_string(),
-        ])
+        BTreeSet::new()
     );
     assert_eq!(
         loaded_plugin_ids_for_config(

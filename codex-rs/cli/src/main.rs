@@ -1043,7 +1043,7 @@ struct FeatureToggles {
 
 #[derive(Debug, Default, Args, Clone)]
 struct DebloatToggle {
-    /// Start with optional capability providers filtered by the debloat policy.
+    /// Start with non-repository capability providers filtered by the debloat policy.
     #[arg(long, global = true, conflicts_with = "no_debloat")]
     debloat: bool,
 

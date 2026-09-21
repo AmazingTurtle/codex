@@ -25,8 +25,9 @@ pub struct DebloatConfigToml {
     #[serde(default)]
     pub enabled: bool,
 
-    /// Explicit capability allowlist. Absence selects the default debloat policy;
-    /// an explicitly empty list disables every plugin, MCP server, and standalone skill.
+    /// Explicit allowlist for non-repository capabilities. When debloat is enabled,
+    /// absence and an explicitly empty list both disable every plugin and every
+    /// non-repository MCP server and standalone skill.
     pub whitelist: Option<Vec<DebloatIdentifier>>,
 }
 
@@ -95,6 +96,15 @@ pub struct DebloatPolicy {
     whitelist: Option<BTreeSet<String>>,
 }
 
+/// Provenance used when applying debloat to a directly configured capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DebloatCapabilitySource {
+    /// A capability loaded directly from repository configuration or discovery.
+    Repository,
+    /// A capability loaded from outside the repository, including user and bundled sources.
+    External,
+}
+
 impl DebloatPolicy {
     pub fn from_config(config: Option<&DebloatConfigToml>) -> Self {
         let Some(config) = config else {
@@ -131,43 +141,43 @@ impl DebloatPolicy {
         self.enabled
     }
 
-    pub fn has_explicit_whitelist(&self) -> bool {
-        self.enabled && self.whitelist.is_some()
+    pub fn allows_plugin(&self, plugin_id: &str) -> bool {
+        self.allows(PLUGIN_PREFIX, plugin_id, DebloatCapabilitySource::External)
     }
 
-    pub fn allows_plugin(&self, plugin_id: &str, openai_managed: bool) -> bool {
-        self.allows(PLUGIN_PREFIX, plugin_id, !openai_managed)
+    pub fn allows_mcp(&self, name: &str, source: DebloatCapabilitySource) -> bool {
+        self.allows(MCP_PREFIX, name, source)
     }
 
-    pub fn allows_mcp(&self, name: &str, user_controlled: bool) -> bool {
-        self.allows(MCP_PREFIX, name, user_controlled)
+    pub fn allows_standalone_skill(&self, name: &str, source: DebloatCapabilitySource) -> bool {
+        self.allows(SKILL_PREFIX, name, source)
     }
 
-    pub fn allows_standalone_skill(&self, name: &str, bundled: bool) -> bool {
-        self.allows(SKILL_PREFIX, name, !bundled)
+    /// Returns whether discovery needs to inspect non-repository standalone skill roots.
+    pub fn allows_external_skill_discovery(&self) -> bool {
+        !self.enabled
+            || self.whitelist.as_ref().is_some_and(|whitelist| {
+                whitelist
+                    .iter()
+                    .any(|identifier| identifier.starts_with(SKILL_PREFIX))
+            })
     }
 
-    fn allows(&self, prefix: &str, name: &str, default_when_enabled: bool) -> bool {
-        if !self.enabled {
-            return true;
-        }
-        match &self.whitelist {
-            Some(whitelist) => whitelist.contains(&format!("{prefix}{name}")),
-            None => default_when_enabled,
-        }
+    fn allows(&self, prefix: &str, name: &str, source: DebloatCapabilitySource) -> bool {
+        !self.enabled
+            || source == DebloatCapabilitySource::Repository
+            || self
+                .whitelist
+                .as_ref()
+                .is_some_and(|whitelist| whitelist.contains(&format!("{prefix}{name}")))
     }
 }
 
-/// Returns MCP server names explicitly supplied by user-controlled config layers.
-pub fn user_controlled_mcp_server_names(stack: &ConfigLayerStack) -> HashSet<String> {
+/// Returns MCP server names whose effective definition comes from project configuration.
+pub fn repository_mcp_server_names(stack: &ConfigLayerStack) -> HashSet<String> {
     let mut sources = HashMap::new();
     for layer in stack.layers_low_to_high() {
-        let user_controlled = matches!(
-            layer.name,
-            ConfigLayerSource::User { .. }
-                | ConfigLayerSource::Project { .. }
-                | ConfigLayerSource::SessionFlags
-        );
+        let repository = matches!(layer.name, ConfigLayerSource::Project { .. });
         let Some(servers) = layer
             .config
             .get("mcp_servers")
@@ -175,11 +185,11 @@ pub fn user_controlled_mcp_server_names(stack: &ConfigLayerStack) -> HashSet<Str
         else {
             continue;
         };
-        sources.extend(servers.keys().cloned().map(|name| (name, user_controlled)));
+        sources.extend(servers.keys().cloned().map(|name| (name, repository)));
     }
     sources
         .into_iter()
-        .filter_map(|(name, user_controlled)| user_controlled.then_some(name))
+        .filter_map(|(name, repository)| repository.then_some(name))
         .collect()
 }
 

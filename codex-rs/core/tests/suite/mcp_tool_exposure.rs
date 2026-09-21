@@ -1,4 +1,7 @@
 use anyhow::Result;
+use codex_config::ConfigLayerEntry;
+use codex_config::ConfigLayerSource;
+use codex_config::ConfigLayerStack;
 use codex_config::Constrained;
 use codex_config::DebloatConfigToml;
 use codex_config::DebloatPolicy;
@@ -45,6 +48,7 @@ use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_function_call_with_namespace;
 use core_test_support::responses::ev_response_created;
+use core_test_support::responses::ev_tool_search_call;
 use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::namespace_child_tool;
@@ -272,6 +276,78 @@ fn config_with_mcp_marker(base: &Config, marker: &str) -> Config {
         .set(HashMap::from([(marker.to_string(), server)]))
         .expect("test config should allow MCP servers");
     config
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn debloat_empty_whitelist_exposes_project_mcp() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let responses_server = responses::start_mock_server().await;
+    let mcp_server = responses::start_mock_server().await;
+    let (apps_server, startup_control) =
+        AppsTestServer::mount_with_startup_control(&mcp_server).await?;
+    let search_call_id = "search-project-mcp";
+    let response = mount_sse_sequence(
+        &responses_server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-1"),
+                ev_tool_search_call(search_call_id, &json!({"query": "calendar create event"})),
+                ev_completed("resp-1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-1", "done"),
+                ev_completed("resp-2"),
+            ]),
+        ],
+    )
+    .await;
+    let project_mcp_url = format!("{}/api/codex/ps/mcp", apps_server.chatgpt_base_url);
+    let test = core_test_support::test_codex::test_codex()
+        .with_config(move |config| {
+            let project_config: toml::Value = toml::from_str(&format!(
+                "[mcp_servers.project]\nurl = \"{project_mcp_url}\"\n"
+            ))
+            .expect("project MCP config should parse");
+            config.config_layer_stack = ConfigLayerStack::new(
+                vec![ConfigLayerEntry::new(
+                    ConfigLayerSource::Project {
+                        dot_codex_folder: config.cwd.join(".codex"),
+                    },
+                    project_config,
+                )],
+                Default::default(),
+                Default::default(),
+            )
+            .expect("project config layer should be valid");
+            config
+                .mcp_servers
+                .set(HashMap::from([(
+                    "project".to_string(),
+                    serde_json::from_value(json!({ "url": project_mcp_url }))
+                        .expect("project MCP server should deserialize"),
+                )]))
+                .expect("project MCP server should satisfy requirements");
+            config.debloat_policy = DebloatPolicy::from_config(Some(&DebloatConfigToml {
+                enabled: true,
+                whitelist: Some(Vec::new()),
+            }));
+        })
+        .build_with_auto_env(&responses_server)
+        .await?;
+
+    wait_for_mcp_server(&test.codex, "project").await?;
+    test.submit_turn("answer without using the project tool")
+        .await?;
+
+    assert_eq!(startup_control.initialize_attempts(), 1);
+    let search_output = response.requests()[1].tool_search_output(search_call_id);
+    assert!(
+        namespace_child_tool(&search_output, "mcp__project", "calendar_create_event").is_some(),
+        "project MCP tools must remain discoverable: {search_output}"
+    );
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -7,6 +7,7 @@ use std::sync::RwLock;
 use std::sync::Weak;
 
 use codex_config::ConfigLayerStack;
+use codex_config::DebloatCapabilitySource;
 use codex_config::DebloatPolicy;
 use codex_config::SkillConfigRules;
 use codex_config::bundled_skills_enabled_from_stack;
@@ -224,9 +225,8 @@ impl HostSkillsService {
     ) -> Vec<HostSkillRoot> {
         let bundled_skills_enabled = bundled_skills_enabled_from_stack(&input.config_layer_stack);
         let debloat_policy = DebloatPolicy::from_layer_stack(&input.config_layer_stack);
-        if bundled_skills_enabled
-            && (!debloat_policy.is_enabled() || debloat_policy.has_explicit_whitelist())
-        {
+        let discover_external_skills = debloat_policy.allows_external_skill_discovery();
+        if bundled_skills_enabled && discover_external_skills {
             self.ensure_system_skills_installed();
         }
         let mut roots = resolve_skill_roots(
@@ -237,11 +237,12 @@ impl HostSkillsService {
             self.extra_roots(),
         )
         .await;
-        if !bundled_skills_enabled
-            || debloat_policy.is_enabled() && !debloat_policy.has_explicit_whitelist()
-        {
-            roots.retain(|root| root.scope != SkillScope::System);
-        }
+        roots.retain(|root| {
+            root.plugin_identity().is_some()
+                || root.scope == SkillScope::Repo
+                || discover_external_skills
+                    && (root.scope != SkillScope::System || bundled_skills_enabled)
+        });
         roots
     }
 
@@ -252,13 +253,7 @@ impl HostSkillsService {
         fs: Option<Arc<dyn ExecutorFileSystem>>,
         request_root_snapshots: Option<&RequestSkillRootSnapshots>,
     ) -> HostSkillsSnapshot {
-        let bundled_skills_enabled = bundled_skills_enabled_from_stack(&input.config_layer_stack);
         let debloat_policy = DebloatPolicy::from_layer_stack(&input.config_layer_stack);
-        if bundled_skills_enabled
-            && (!debloat_policy.is_enabled() || debloat_policy.has_explicit_whitelist())
-        {
-            self.ensure_system_skills_installed();
-        }
         let use_cwd_cache = fs.is_some();
         let cache_snapshot_by_cwd =
             use_cwd_cache && input.effective_skill_roots.is_empty() && !debloat_policy.is_enabled();
@@ -269,19 +264,7 @@ impl HostSkillsService {
             return snapshot;
         }
 
-        let mut roots = resolve_skill_roots(
-            fs.clone(),
-            &input.config_layer_stack,
-            &input.cwd,
-            input.effective_skill_roots.clone(),
-            self.extra_roots(),
-        )
-        .await;
-        if !bundled_skills_enabled
-            || debloat_policy.is_enabled() && !debloat_policy.has_explicit_whitelist()
-        {
-            roots.retain(|root| root.scope != SkillScope::System);
-        }
+        let roots = self.skill_roots_for_config(input, fs.clone()).await;
         let skill_config_rules = skill_config_rules_from_stack(&input.config_layer_stack);
         let snapshot = if use_cwd_cache {
             let cache_key = config_skills_cache_key(
@@ -391,9 +374,13 @@ impl HostSkillsService {
                 .skills
                 .iter()
                 .filter(|skill| {
+                    let source = if skill.scope == SkillScope::Repo {
+                        DebloatCapabilitySource::Repository
+                    } else {
+                        DebloatCapabilitySource::External
+                    };
                     skill.plugin_id.is_none()
-                        && !debloat_policy
-                            .allows_standalone_skill(&skill.name, skill.scope == SkillScope::System)
+                        && !debloat_policy.allows_standalone_skill(&skill.name, source)
                 })
                 .map(|skill| skill.path_to_skills_md.clone()),
         );

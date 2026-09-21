@@ -6046,7 +6046,8 @@ enabled = true
 }
 
 #[tokio::test]
-async fn debloat_default_keeps_user_mcp_and_disables_packaged_mcp() -> anyhow::Result<()> {
+async fn debloat_empty_whitelist_keeps_project_mcp_and_disables_external_mcp() -> anyhow::Result<()>
+{
     let codex_home = TempDir::new()?;
     let packaged = ConfigLayerEntry::new(
         ConfigLayerSource::PackagedDefaults {
@@ -6068,14 +6069,29 @@ command = "product-server"
             r#"
 [debloat]
 enabled = true
+whitelist = []
 
 [mcp_servers.user]
 command = "user-server"
 "#,
         )?,
     );
-    let config_layer_stack =
-        ConfigLayerStack::new(vec![packaged, user], Default::default(), Default::default())?;
+    let project = ConfigLayerEntry::new(
+        ConfigLayerSource::Project {
+            dot_codex_folder: codex_home.path().join("repo/.codex").abs(),
+        },
+        toml::from_str(
+            r#"
+[mcp_servers.project]
+command = "project-server"
+"#,
+        )?,
+    );
+    let config_layer_stack = ConfigLayerStack::new(
+        vec![packaged, user, project],
+        Default::default(),
+        Default::default(),
+    )?;
     let config = Config::load_config_with_layer_stack(
         LOCAL_FS.as_ref(),
         config_layer_stack.effective_config().try_into()?,
@@ -6103,7 +6119,11 @@ command = "user-server"
                 "product".to_string(),
                 (false, Some(McpServerDisabledReason::Debloat)),
             ),
-            ("user".to_string(), (true, None)),
+            (
+                "user".to_string(),
+                (false, Some(McpServerDisabledReason::Debloat)),
+            ),
+            ("project".to_string(), (true, None)),
         ])
     );
     Ok(())

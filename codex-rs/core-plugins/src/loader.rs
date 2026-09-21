@@ -202,12 +202,7 @@ async fn load_plugins_from_layer_stack_with_scope(
         store,
         remote_global_catalog_active,
     );
-    configured_plugins.retain(|id, _| {
-        let openai_managed = PluginId::parse(id).is_ok_and(|plugin_id| {
-            crate::is_openai_managed_marketplace_name(&plugin_id.marketplace_name)
-        });
-        debloat_policy.allows_plugin(id, openai_managed)
-    });
+    configured_plugins.retain(|id, _| debloat_policy.allows_plugin(id));
     let mut configured_plugins: Vec<_> = configured_plugins.into_iter().collect();
     configured_plugins.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
 

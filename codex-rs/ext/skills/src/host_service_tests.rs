@@ -896,9 +896,11 @@ async fn skills_for_config_excludes_bundled_skills_when_disabled_in_config() {
 }
 
 #[tokio::test]
-async fn debloat_default_excludes_bundled_skills_but_keeps_user_skills() {
+async fn debloat_empty_whitelist_loads_only_repo_standalone_skills() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");
+    let admin_home = tempfile::tempdir().expect("tempdir");
+    let extra_home = tempfile::tempdir().expect("tempdir");
     write_user_skill(&codex_home, "user", "user-skill", "from user root");
     let bundled_skill_dir = codex_home.path().join("skills/.system/bundled");
     fs::create_dir_all(&bundled_skill_dir).expect("create bundled skill dir");
@@ -907,22 +909,80 @@ async fn debloat_default_excludes_bundled_skills_but_keeps_user_skills() {
         "---\nname: bundled-skill\ndescription: from bundled root\n---\n",
     )
     .expect("write bundled skill");
-    let stack = config_stack(&codex_home, "[debloat]\nenabled = true\n");
-    let service = HostSkillsService::new(codex_home.path().abs(), true);
+    let admin_skill_dir = admin_home.path().join("skills/admin");
+    fs::create_dir_all(&admin_skill_dir).expect("create admin skill dir");
+    fs::write(
+        admin_skill_dir.join("SKILL.md"),
+        "---\nname: admin-skill\ndescription: from admin root\n---\n",
+    )
+    .expect("write admin skill");
+    let extra_skill_dir = extra_home.path().join("extra");
+    fs::create_dir_all(&extra_skill_dir).expect("create extra skill dir");
+    fs::write(
+        extra_skill_dir.join("SKILL.md"),
+        "---\nname: extra-skill\ndescription: from extra root\n---\n",
+    )
+    .expect("write extra skill");
+    let repo_dot_codex = cwd.path().join(".codex");
+    let repo_codex_skill_dir = repo_dot_codex.join("skills/repo-codex");
+    fs::create_dir_all(&repo_codex_skill_dir).expect("create repo .codex skill dir");
+    fs::write(
+        repo_codex_skill_dir.join("SKILL.md"),
+        "---\nname: repo-codex\ndescription: from repo .codex root\n---\n",
+    )
+    .expect("write repo .codex skill");
+    let repo_agents_skill_dir = cwd.path().join(".agents/skills/repo-agents");
+    fs::create_dir_all(&repo_agents_skill_dir).expect("create repo .agents skill dir");
+    fs::write(
+        repo_agents_skill_dir.join("SKILL.md"),
+        "---\nname: repo-agents\ndescription: from repo .agents root\n---\n",
+    )
+    .expect("write repo .agents skill");
+    let stack = ConfigLayerStack::new(
+        vec![
+            ConfigLayerEntry::new(
+                ConfigLayerSource::System {
+                    file: admin_home.path().join("config.toml").abs(),
+                },
+                toml::Value::Table(toml::map::Map::new()),
+            ),
+            user_config_layer(&codex_home, "[debloat]\nenabled = true\nwhitelist = []\n"),
+            ConfigLayerEntry::new(
+                ConfigLayerSource::Project {
+                    dot_codex_folder: repo_dot_codex.abs(),
+                },
+                toml::Value::Table(toml::map::Map::new()),
+            ),
+        ],
+        Default::default(),
+        ConfigRequirementsToml::default(),
+    )
+    .expect("valid config layer stack");
+    let service = HostSkillsService::new(
+        codex_home.path().abs(),
+        /*bundled_skills_enabled*/ false,
+    );
+    service.set_extra_roots(vec![extra_home.path().abs()]);
 
     let outcome = skills_for_config_with_stack(&service, &cwd, &stack, &[]).await;
-    let enabled_names = outcome
+    let mut discovered = outcome
         .skills
         .iter()
-        .filter(|skill| outcome.is_skill_enabled(skill))
-        .map(|skill| skill.name.as_str())
-        .collect::<HashSet<_>>();
-    assert!(enabled_names.contains("user-skill"));
+        .map(|skill| (skill.name.as_str(), skill.scope))
+        .collect::<Vec<_>>();
+    discovered.sort_by(|left, right| left.0.cmp(right.0));
+    assert_eq!(
+        discovered,
+        vec![
+            ("repo-agents", SkillScope::Repo),
+            ("repo-codex", SkillScope::Repo),
+        ]
+    );
     assert!(
-        !outcome
+        outcome
             .skills
             .iter()
-            .any(|skill| skill.scope == SkillScope::System)
+            .all(|skill| outcome.is_skill_enabled(skill))
     );
 }
 
@@ -943,7 +1003,7 @@ async fn explicit_debloat_whitelist_filters_standalone_skills_not_plugin_skills(
     let plugin_root = plugin_skill_root_for_skill_path(&plugin_skill_path, "sample@test", "sample");
     let stack = config_stack(
         &codex_home,
-        "[debloat]\nenabled = true\nwhitelist = [\"skill.keep\"]\n",
+        "[debloat]\nenabled = true\nwhitelist = [\"skill.keep\", \"plugin.sample@test\"]\n",
     );
     let service = HostSkillsService::new(codex_home.path().abs(), true);
 
