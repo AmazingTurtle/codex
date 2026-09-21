@@ -128,6 +128,62 @@ async fn entered_review_mode_defaults_to_current_changes_banner() {
 }
 
 #[tokio::test]
+async fn review_capacity_error_exit_clears_running_state_and_allows_restart() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.thread_id = Some(ThreadId::new());
+    handle_turn_started(&mut chat, "turn-1");
+    handle_entered_review_mode(&mut chat, "current changes");
+    let _ = drain_insert_history(&mut rx);
+
+    let message = "Selected model is at capacity. Please try a different model.";
+    handle_error(&mut chat, message, Some(CodexErrorInfo::ServerOverloaded));
+    assert!(chat.bottom_pane.is_task_running());
+
+    handle_exited_review_mode(&mut chat);
+    chat.handle_server_notification(
+        ServerNotification::TurnCompleted(TurnCompletedNotification {
+            thread_id: chat.thread_id.expect("thread id").to_string(),
+            turn: app_server_turn(
+                "turn-1",
+                AppServerTurnStatus::Failed,
+                /*duration_ms*/ None,
+                Some(AppServerTurnError {
+                    misalignment: None,
+                    message: message.to_string(),
+                    codex_error_info: Some(CodexErrorInfo::ServerOverloaded),
+                    additional_details: None,
+                }),
+            ),
+        }),
+        /*replay_kind*/ None,
+    );
+
+    assert!(!chat.review.is_review_mode);
+    assert!(!chat.bottom_pane.is_task_running());
+    let _ = drain_insert_history(&mut rx);
+
+    chat.dispatch_command(SlashCommand::Review);
+
+    assert!(!chat.bottom_pane.no_modal_or_popup_active());
+    assert!(drain_insert_history(&mut rx).is_empty());
+
+    let width: u16 = 80;
+    let height: u16 = 18;
+    let backend = VT100Backend::new(width, height);
+    let mut term = crate::custom_terminal::Terminal::with_options(backend).expect("terminal");
+    let desired_height = chat.desired_height(width).min(height);
+    term.set_viewport_area(Rect::new(0, height - desired_height, width, desired_height));
+    term.draw(|f| {
+        chat.render(f.area(), f.buffer_mut());
+    })
+    .unwrap();
+    assert_chatwidget_snapshot!(
+        "review_capacity_error_exit_allows_restart",
+        normalize_snapshot_paths(term.backend().vt100().screen().contents())
+    );
+}
+
+#[tokio::test]
 async fn live_review_prompt_item_is_not_rendered() {
     let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
 
