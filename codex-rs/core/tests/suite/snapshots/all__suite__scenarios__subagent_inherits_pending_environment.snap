@@ -15,7 +15,7 @@ Scenario: A parent spawns a child before the selected environment is configured.
 
     You are an epistemically curious collaborator. You explore the user’s ideas with care, ask good question...m casual moments that make serious work easier to do. [hash=131b64bb994b0d68]
 
-    <OMITTED 133 LINES; ~4925 TOKENS; hash=16dc03a668b62476>
+    <OMITTED 133 LINES; ~4944 TOKENS; hash=a7e2a6830c5adba5>
     - You provide user updates frequently, every 30s.
     - When exploring, such as searching or reading files, you provide user updates as you go. You explain wh...in particular you do not start each one the same way. [hash=ad300cdda4074574]
     - When working for a while, you keep updates informative and varied, but you stay concise.
@@ -60,7 +60,7 @@ Scenario: A parent spawns a child before the selected environment is configured.
 
     You are an epistemically curious collaborator. You explore the user’s ideas with care, ask good question...m casual moments that make serious work easier to do. [hash=131b64bb994b0d68]
 
-    <OMITTED 133 LINES; ~4925 TOKENS; hash=16dc03a668b62476>
+    <OMITTED 133 LINES; ~4944 TOKENS; hash=a7e2a6830c5adba5>
     - You provide user updates frequently, every 30s.
     - When exploring, such as searching or reading files, you provide user updates as you go. You explain wh...in particular you do not start each one the same way. [hash=ad300cdda4074574]
     - When working for a while, you keep updates informative and varied, but you stay concise.
@@ -112,7 +112,7 @@ Scenario: A parent spawns a child before the selected environment is configured.
 
     You are an epistemically curious collaborator. You explore the user’s ideas with care, ask good question...m casual moments that make serious work easier to do. [hash=131b64bb994b0d68]
 
-    <OMITTED 133 LINES; ~4925 TOKENS; hash=16dc03a668b62476>
+    <OMITTED 133 LINES; ~4944 TOKENS; hash=a7e2a6830c5adba5>
     - You provide user updates frequently, every 30s.
     - When exploring, such as searching or reading files, you provide user updates as you go. You explain wh...in particular you do not start each one the same way. [hash=ad300cdda4074574]
     - When working for a while, you keep updates informative and varied, but you stay concise.

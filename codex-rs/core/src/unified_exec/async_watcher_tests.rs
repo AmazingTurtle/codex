@@ -110,6 +110,8 @@ async fn completed_output_preserves_bytes_before_subscription(
         Instant::now(),
         /*network_denial_monitor*/ None,
         /*plugin_metrics_sidecar*/ None,
+        Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        /*wake_generation*/ 0,
     );
     stdout_tx.send(late_output.to_vec())?;
     drop(stdout_tx);
@@ -326,6 +328,7 @@ async fn exit_watcher_waits_for_late_network_denial_before_classifying_end() -> 
         Instant::now(),
         Some(network_denial_monitor),
         /*plugin_metrics_sidecar*/ None,
+        Arc::new(std::sync::atomic::AtomicBool::new(false)),
     );
 
     let exited_at = Instant::now();
