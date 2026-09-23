@@ -1,4 +1,7 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
+
+use tokio_util::sync::CancellationToken;
 
 use super::TurnInput as PendingTurnInput;
 use super::session::Session;
@@ -75,8 +78,18 @@ impl Session {
         clippy::await_holding_invalid_type,
         reason = "active turn reservation and input delivery must remain atomic"
     )]
-    pub(crate) async fn inject_or_start(self: &Arc<Self>, input: Vec<ResponseItem>) {
+    pub(crate) async fn inject_or_start(
+        self: &Arc<Self>,
+        input: Vec<ResponseItem>,
+        wake_generation: u64,
+        cancellation_token: &CancellationToken,
+    ) {
         let _turn_start_guard = self.turn_start_lock.lock().await;
+        if cancellation_token.is_cancelled()
+            || self.wake_generation.load(Ordering::Acquire) != wake_generation
+        {
+            return;
+        }
         let input = input
             .into_iter()
             .map(ResponseItemEnvelope::new)

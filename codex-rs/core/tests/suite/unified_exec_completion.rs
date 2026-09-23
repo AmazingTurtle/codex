@@ -6,6 +6,7 @@ use codex_protocol::config_types::Settings;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
@@ -113,6 +114,158 @@ async fn completed_background_exec_wakes_idle_turn(
     assert!(requests[2].body_contains_text("<exec-command-completed"));
     assert!(requests[2].body_contains_text("IDLE_DONE"));
     assert!(requests[2].body_contains_text(&format!("exit-code=\"{exit_code}\"")));
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn interrupt_while_idle_suppresses_background_exec_wake() -> Result<()> {
+    skip_if_target_windows!(Ok(()), "uses a POSIX-only command fixture");
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+
+    let server = start_mock_server().await;
+    let mut builder = test_codex();
+    let test = builder.build_with_auto_env(&server).await?;
+    let args = json!({"cmd": "while [ ! -f wake-release ]; do sleep 0.05; done; printf INTERRUPTED_DONE", "yield_time_ms": 250});
+    let mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-1"),
+                ev_function_call("background-idle", "exec_command", &args.to_string()),
+                ev_completed("resp-1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-1", "waiting"),
+                ev_completed("resp-2"),
+            ]),
+        ],
+    )
+    .await;
+
+    submit_exec_turn(&test, ModeKind::Default).await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    test.codex.submit(Op::Interrupt).await?;
+    // This response confirms the preceding interrupt was handled before the process exits.
+    test.codex
+        .submit(Op::RealtimeConversationListVoices)
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
+    })
+    .await;
+    std::fs::write(test.workspace_path("wake-release"), "")?;
+    wait_for_event(
+        &test.codex,
+        |event| matches!(event, EventMsg::ExecCommandEnd(end) if end.call_id == "background-idle"),
+    )
+    .await;
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            wait_for_event(&test.codex, |event| matches!(
+                event,
+                EventMsg::TurnComplete(_)
+            ))
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(mock.requests().len(), 2);
+    assert_eq!(
+        server
+            .received_requests()
+            .await
+            .expect("recorded requests")
+            .iter()
+            .filter(|request| request.url.path() == "/v1/responses")
+            .count(),
+        2
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn interrupt_active_turn_suppresses_earlier_background_exec_wake() -> Result<()> {
+    skip_if_target_windows!(Ok(()), "uses POSIX-only command fixtures");
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+
+    let server = start_mock_server().await;
+    let mut builder = test_codex();
+    let test = builder.build_with_auto_env(&server).await?;
+    let background = json!({"cmd": "while [ ! -f wake-release ]; do sleep 0.05; done; printf INTERRUPTED_DONE", "yield_time_ms": 250});
+    let foreground = json!({"cmd": "sleep 10", "yield_time_ms": 10_000});
+    let mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-1"),
+                ev_function_call("background-active", "exec_command", &background.to_string()),
+                ev_completed("resp-1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-1", "waiting"),
+                ev_completed("resp-2"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-3"),
+                ev_function_call("foreground", "exec_command", &foreground.to_string()),
+                ev_completed("resp-3"),
+            ]),
+        ],
+    )
+    .await;
+
+    submit_exec_turn(&test, ModeKind::Default).await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    submit_exec_turn(&test, ModeKind::Default).await?;
+    wait_for_event(
+        &test.codex,
+        |event| matches!(event, EventMsg::ExecCommandBegin(begin) if begin.call_id == "foreground"),
+    )
+    .await;
+    test.codex.submit(Op::Interrupt).await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnAborted(_))
+    })
+    .await;
+    std::fs::write(test.workspace_path("wake-release"), "")?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::ExecCommandEnd(end) if end.call_id == "background-active")
+    })
+    .await;
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            wait_for_event(&test.codex, |event| matches!(
+                event,
+                EventMsg::TurnComplete(_)
+            ))
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(mock.requests().len(), 3);
+    assert_eq!(
+        server
+            .received_requests()
+            .await
+            .expect("recorded requests")
+            .iter()
+            .filter(|request| request.url.path() == "/v1/responses")
+            .count(),
+        3
+    );
+    test.codex.submit(Op::CleanBackgroundTerminals).await?;
     Ok(())
 }
 

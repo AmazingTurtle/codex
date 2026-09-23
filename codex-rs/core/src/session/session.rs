@@ -92,6 +92,8 @@ pub(crate) struct Session {
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
     /// Serializes user turn starts with runtime-initiated idle wakeups.
     pub(crate) turn_start_lock: Mutex<()>,
+    /// Invalidates completion wakeups from commands started before an interrupt.
+    pub(crate) wake_generation: std::sync::atomic::AtomicU64,
     pub(crate) async_hook_results: async_channel::Receiver<HookCompletedEvent>,
     pub(crate) input_queue: InputQueue,
     pub(crate) services: SessionServices,
@@ -1802,6 +1804,7 @@ impl Session {
                 .then(|| Mutex::new(Default::default())),
                 active_turn: Mutex::new(None),
                 turn_start_lock: Mutex::new(()),
+                wake_generation: std::sync::atomic::AtomicU64::new(0),
                 async_hook_results,
                 input_queue: InputQueue::new(),
                 services,

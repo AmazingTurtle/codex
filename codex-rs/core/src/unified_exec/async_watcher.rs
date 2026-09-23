@@ -180,6 +180,8 @@ pub(crate) fn spawn_exit_watcher(
     wake_on_exit: Arc<AtomicBool>,
 ) {
     let session_ref = Arc::clone(&context.session);
+    let wake_generation = session_ref.wake_generation.load(Ordering::Acquire);
+    let cancellation_token = context.cancellation_token.clone();
     let turn_ref = Arc::clone(&context.step_context.turn);
     let model_info = Arc::clone(&context.step_context.settings.model_info);
     let model_context = context.step_context.model_context();
@@ -261,7 +263,9 @@ pub(crate) fn spawn_exit_watcher(
             .await;
         }
         if let Some(completion) = completion {
-            session_ref.inject_or_start(vec![completion]).await;
+            session_ref
+                .inject_or_start(vec![completion], wake_generation, &cancellation_token)
+                .await;
         }
     });
 }

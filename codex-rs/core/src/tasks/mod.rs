@@ -533,6 +533,14 @@ impl Session {
     }
 
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) {
+        if matches!(
+            reason,
+            TurnAbortReason::Interrupted | TurnAbortReason::BudgetLimited
+        ) {
+            let _turn_start_guard = self.turn_start_lock.lock().await;
+            self.wake_generation
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        }
         let mut aborted_turn = false;
         let mut active_turn_to_clear = None;
         let mut turn_context = None;
@@ -568,6 +576,7 @@ impl Session {
         turn_id: &str,
         reason: TurnAbortReason,
     ) -> bool {
+        let _turn_start_guard = self.turn_start_lock.lock().await;
         let active_turn = {
             let mut active = self.active_turn.lock().await;
             if active
@@ -580,6 +589,8 @@ impl Session {
                     TurnAbortReason::Interrupted | TurnAbortReason::BudgetLimited
                 ) {
                     self.mark_interrupted();
+                    self.wake_generation
+                        .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
                 }
                 active.take()
             } else {
@@ -589,6 +600,7 @@ impl Session {
         let Some(mut active_turn) = active_turn else {
             return false;
         };
+        drop(_turn_start_guard);
 
         let task = active_turn.task.take();
         let turn_context = task.as_ref().map(|task| Arc::clone(&task.turn_context));
