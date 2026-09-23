@@ -316,11 +316,16 @@ pub(super) async fn handle_recovery(
     result
 }
 
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "turn steering and idle start reservation must be atomic with runtime wakeups"
+)]
 async fn start_or_steer(
     session: &Arc<Session>,
     request: WithTurnExtensionData<TurnInputRequest>,
     submission_id: String,
 ) -> CodexResult<TurnInputSubmission> {
+    let _turn_start_guard = session.turn_start_lock.lock().await;
     let WithTurnExtensionData {
         request,
         turn_extension_init,
@@ -442,6 +447,7 @@ async fn start_if_idle(
     kind: TurnStartKind,
     expected_previous_turn_id: Option<String>,
 ) -> CodexResult<TurnInputSubmission> {
+    let _turn_start_guard = session.turn_start_lock.lock().await;
     let WithTurnExtensionData {
         request,
         turn_extension_init,

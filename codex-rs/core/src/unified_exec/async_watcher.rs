@@ -1,5 +1,6 @@
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
 use tokio::sync::Mutex;
@@ -13,6 +14,8 @@ use super::process::OutputBuffers;
 use super::process::OutputHandles;
 use super::process::UnifiedExecProcess;
 use super::take_plugin_metrics_sidecar;
+use crate::context::ContextualUserFragment;
+use crate::context::ExecCompletion;
 use crate::exec::MAX_EXEC_OUTPUT_DELTAS_PER_CALL;
 use crate::plugins::metrics::finish_and_track_measurements;
 use crate::session::session::Session;
@@ -166,8 +169,11 @@ pub(crate) fn spawn_exit_watcher(
     started_at: Instant,
     network_denial_monitor: Option<tokio::task::JoinHandle<()>>,
     plugin_metrics_sidecar: Option<SharedPluginMetricsSidecar>,
+    wake_on_exit: Arc<AtomicBool>,
 ) {
     let session_ref = Arc::clone(&context.session);
+    let wake_generation = session_ref.wake_generation.load(Ordering::Acquire);
+    let cancellation_token = context.cancellation_token.clone();
     let turn_ref = Arc::clone(&context.step_context.turn);
     let model_info = Arc::clone(&context.step_context.settings.model_info);
     let model_context = context.step_context.model_context();
@@ -191,11 +197,23 @@ pub(crate) fn spawn_exit_watcher(
         let plugin_metrics_sidecar = plugin_metrics_sidecar
             .as_ref()
             .and_then(take_plugin_metrics_sidecar);
-        if let Some(message) = process.failure_message() {
+        let failure = process.failure_message();
+        let exit_code = failure
+            .as_ref()
+            .map_or_else(|| process.exit_code().unwrap_or(-1), |_| -1);
+        let completion = if wake_on_exit.load(Ordering::Acquire) {
+            let output = resolve_aggregated_output(&output_buffer, String::new()).await;
+            Some(ContextualUserFragment::into(ExecCompletion::new(
+                &call_id, process_id, &command, exit_code, &output,
+            )))
+        } else {
+            None
+        };
+        if let Some(message) = failure {
             drop(plugin_metrics_sidecar);
             emit_failed_exec_end_for_unified_exec(
                 process.sandbox_type(),
-                session_ref,
+                Arc::clone(&session_ref),
                 turn_ref,
                 model_info,
                 call_id,
@@ -210,7 +228,6 @@ pub(crate) fn spawn_exit_watcher(
             )
             .await;
         } else {
-            let exit_code = process.exit_code().unwrap_or(-1);
             let timed_out = process.timed_out();
             finish_and_track_measurements(
                 plugin_metrics_sidecar,
@@ -223,7 +240,7 @@ pub(crate) fn spawn_exit_watcher(
             .await;
             emit_exec_end_for_unified_exec(
                 process.sandbox_type(),
-                session_ref,
+                Arc::clone(&session_ref),
                 turn_ref,
                 model_info,
                 call_id,
@@ -238,6 +255,11 @@ pub(crate) fn spawn_exit_watcher(
                 timed_out,
             )
             .await;
+        }
+        if let Some(completion) = completion {
+            session_ref
+                .inject_or_start(vec![completion], wake_generation, &cancellation_token)
+                .await;
         }
     });
 }

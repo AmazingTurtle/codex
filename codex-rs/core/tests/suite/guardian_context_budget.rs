@@ -214,8 +214,11 @@ enum ReviewerResponse {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[test_case(1, ReviewerResponse::Decision; "required_context_fails_closed")]
-#[test_case(4_500, ReviewerResponse::ToolContinuation; "oversized_tool_continuation_compacts")]
-#[test_case(4_500, ReviewerResponse::FileImageContinuation; "uploaded_original_image_history_compacts")]
+// The downstream completion guidance enlarges the required tool prefix. Keep enough
+// room for that first review while the large tool output or original image still
+// exceeds the window and must compact before the reviewer can continue.
+#[test_case(5_000, ReviewerResponse::ToolContinuation; "oversized_tool_continuation_compacts")]
+#[test_case(5_000, ReviewerResponse::FileImageContinuation; "uploaded_original_image_history_compacts")]
 #[test_case(5_000, ReviewerResponse::UncompactableContinuation; "ineffective_compaction_fails_closed")]
 #[test_case(5_000, ReviewerResponse::CompactionError; "compaction_service_error_does_not_request_user_approval")]
 #[test_case(6_000, ReviewerResponse::NextReview; "incoming_review_compacts_existing_history")]

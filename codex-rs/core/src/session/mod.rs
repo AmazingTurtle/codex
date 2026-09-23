@@ -236,6 +236,7 @@ use codex_protocol::error::Result as CodexResult;
 #[cfg(test)]
 use codex_protocol::exec_output::StreamOutput;
 
+mod background_exec;
 mod code_mode_warning;
 mod config_refresh;
 pub(crate) mod context_window;

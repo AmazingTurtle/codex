@@ -92,16 +92,21 @@ pub(crate) fn create_exec_command_tool_with_environment_id(
         options.exec_permission_approvals_enabled,
     ));
 
+    let description = concat!(
+        "Runs a command in a PTY, returning output or a session ID for ongoing interaction. ",
+        "If the command is still running after yielding, treat it as background work. ",
+        "Do not poll for completion with write_stdin, ps, pgrep, or similar liveness checks just to see whether it finished. ",
+        "Wait for the runtime completion notification instead. ",
+        "Only check again if you need intermediate output for the next step, must interact with the process, or are diagnosing a problem. ",
+        "If there is no other independent work to do, end your turn."
+    );
+
     ToolSpec::Function(ResponsesApiTool {
         name: "exec_command".to_string(),
         description: if include_windows_shell_guidance {
-            format!(
-                "Runs a command in a PTY, returning output or a session ID for ongoing interaction.\n\n{}",
-                windows_shell_guidance()
-            )
+            format!("{description}\n\n{}", windows_shell_guidance())
         } else {
-            "Runs a command in a PTY, returning output or a session ID for ongoing interaction."
-                .to_string()
+            description.to_string()
         },
         strict: false,
         defer_loading: None,
@@ -144,9 +149,13 @@ pub fn create_write_stdin_tool() -> ToolSpec {
 
     ToolSpec::Function(ResponsesApiTool {
         name: "write_stdin".to_string(),
-        description:
-            "Writes characters to an existing unified exec session and returns recent output."
-                .to_string(),
+        description: concat!(
+            "Writes characters to an existing unified exec session and returns recent output. ",
+            "Do not use empty polls to check whether a background command has finished. ",
+            "Use this only when you need intermediate output for the next step or must interact with the running process. ",
+            "Background exec completions arrive through a separate runtime completion notification."
+        )
+        .to_string(),
         strict: false,
         defer_loading: None,
         parameters: JsonSchema::object(
