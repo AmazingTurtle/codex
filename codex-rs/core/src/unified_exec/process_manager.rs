@@ -1145,6 +1145,7 @@ impl UnifiedExecProcessManager {
                 entry: Box::new(entry),
             }
         } else {
+            entry.wake_on_exit.store(true, Ordering::Release);
             ProcessStatus::Alive {
                 exit_code,
                 call_id: entry.call_id.clone(),
@@ -1209,6 +1210,7 @@ impl UnifiedExecProcessManager {
     ) {
         let plugin_metrics_sidecar =
             metrics_sidecar.map(|sidecar| Arc::new(std::sync::Mutex::new(Some(sidecar))));
+        let wake_on_exit = Arc::new(AtomicBool::new(false));
         let entry = ProcessEntry {
             process: Arc::clone(&process),
             plugin_metrics_sidecar: plugin_metrics_sidecar.clone(),
@@ -1216,6 +1218,7 @@ impl UnifiedExecProcessManager {
             process_id,
             cwd: cwd.clone(),
             initial_exec_command_active,
+            wake_on_exit: Arc::clone(&wake_on_exit),
             hook_command,
             tty,
             environment_id,
@@ -1248,6 +1251,7 @@ impl UnifiedExecProcessManager {
             started_at,
             network_denial_monitor,
             plugin_metrics_sidecar,
+            wake_on_exit,
         );
     }
 

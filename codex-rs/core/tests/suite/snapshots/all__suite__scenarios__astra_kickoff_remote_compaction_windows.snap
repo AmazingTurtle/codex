@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios.rs
+assertion_line: 420
 expression: "context_snapshot::format_request_history_snapshot(\"Astra plans a kickoff with local and plugin skills, remotely compacts, and checks an image brief.\",\n&requests, &ContextSnapshotOptions::default().include_request_settings(),)"
 ---
 Scenario: Astra plans a kickoff with local and plugin skills, remotely compacts, and checks an image brief.
@@ -16,8 +17,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=fbbc8f2ad7c8ce86):
-        - namespace/functions; hash=e7db0a45c4ec3157
+00:additional_tools/developer (3; hash=7e204d23266923b5):
+        - namespace/functions; hash=61eb45c9bb1e2480
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -190,8 +191,8 @@ Settings:
 ## Window 2 (after request 3: input diverged at item 02)
 Settings: same as window 1
 -- request 4 (turn) --
-00:additional_tools/developer (3; hash=fbbc8f2ad7c8ce86):
-        - namespace/functions; hash=e7db0a45c4ec3157
+00:additional_tools/developer (3; hash=7e204d23266923b5):
+        - namespace/functions; hash=61eb45c9bb1e2480
           - custom/exec
           - function/wait
           - function/request_user_input

@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
 use super::TurnInput as PendingTurnInput;
 use super::session::Session;
 use super::turn_context::TurnContext;
+use crate::state::ActiveTurn;
+use crate::tasks::RegularTask;
 use codex_analytics::ImagePreparationMetadata;
 use codex_features::Feature;
 use codex_history::CodexHarnessMetadata;
@@ -64,6 +68,37 @@ impl Session {
             )
             .await;
         Ok(())
+    }
+
+    /// Injects model input into an active turn or wakes the session when idle.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "active turn reservation and input delivery must remain atomic"
+    )]
+    pub(crate) async fn inject_or_start(self: &Arc<Self>, input: Vec<ResponseItem>) {
+        let _turn_start_guard = self.turn_start_lock.lock().await;
+        let input = input
+            .into_iter()
+            .map(ResponseItemEnvelope::new)
+            .map(PendingTurnInput::ResponseItem)
+            .collect::<Vec<_>>();
+        let mut active = self.active_turn.lock().await;
+        if let Some(active_turn) = active.as_mut() {
+            self.input_queue
+                .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
+                    active_turn.turn_state.as_ref(),
+                    input,
+                )
+                .await;
+            return;
+        }
+        *active = Some(ActiveTurn::default());
+        drop(active);
+        let turn_context = self.new_default_turn().await;
+        self.maybe_emit_model_warnings_for_turn(turn_context.as_ref())
+            .await;
+        self.start_task(turn_context, input, RegularTask::new())
+            .await;
     }
 
     /// Preserves trusted client provenance while items wait for an active turn.

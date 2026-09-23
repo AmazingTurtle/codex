@@ -90,6 +90,8 @@ pub(crate) struct Session {
     pub(crate) conversation: Arc<RealtimeConversationManager>,
     pub(crate) realtime_history: Option<Mutex<crate::realtime_history::RealtimeHistoryState>>,
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
+    /// Serializes user turn starts with runtime-initiated idle wakeups.
+    pub(crate) turn_start_lock: Mutex<()>,
     pub(crate) async_hook_results: async_channel::Receiver<HookCompletedEvent>,
     pub(crate) input_queue: InputQueue,
     pub(crate) services: SessionServices,
@@ -1799,6 +1801,7 @@ impl Session {
                     && services.live_thread.is_some())
                 .then(|| Mutex::new(Default::default())),
                 active_turn: Mutex::new(None),
+                turn_start_lock: Mutex::new(()),
                 async_hook_results,
                 input_queue: InputQueue::new(),
                 services,

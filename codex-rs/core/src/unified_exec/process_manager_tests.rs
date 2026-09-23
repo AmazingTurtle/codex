@@ -627,6 +627,7 @@ async fn pruning_does_not_evict_live_process_while_exited_process_is_finalizing(
                 process_id,
                 cwd: cwd.clone(),
                 initial_exec_command_active: Arc::new(AtomicBool::new(false)),
+                wake_on_exit: Arc::new(AtomicBool::new(false)),
                 hook_command: format!("command-{process_id}"),
                 tty: false,
                 environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),

@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios.rs
+assertion_line: 703
 expression: "context_snapshot::format_request_history_snapshot(\"Astra checks a Settings release using direct collaboration and Code Mode tools.\",\n&mock.requests(),\n&ContextSnapshotOptions::default().include_request_settings(),)"
 ---
 Scenario: Astra checks a Settings release using direct collaboration and Code Mode tools.
@@ -16,8 +17,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=175a24d9dd32c0c4):
-        - namespace/functions; hash=8c17932a39355f2d
+00:additional_tools/developer (3; hash=2d26e3f2a0093353):
+        - namespace/functions; hash=2f75ddc4f6975d1e
           - custom/exec
           - function/wait
           - function/request_user_input
