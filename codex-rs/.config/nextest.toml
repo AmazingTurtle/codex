@@ -40,6 +40,31 @@ max-threads = 4
 [test-groups.core_apply_patch_cli_integration]
 max-threads = 1
 
+[test-groups.core_mcp_exposure_matrix]
+max-threads = 1
+
+[test-groups.oauth_callback_port]
+max-threads = 1
+
+[[profile.default.overrides]]
+# Browser-login fixtures share registered callback ports. Their serial_test
+# locks are process-local; nextest launches each case in a separate process.
+filter = '(package(codex-app-server) & test(/login_account_chatgpt|set_auth_token_cancels_active_chatgpt_login|browser_login_bootstraps_through_system_proxy|config_requirements_login::/)) | (package(codex-login) & test(=suite::login_server_e2e::falls_back_to_registered_fallback_port_when_default_port_is_in_use))'
+test-group = 'oauth_callback_port'
+
+[[profile.local.overrides]]
+# Preserve the callback-port lock while allowing other app-server tests in parallel.
+filter = '(package(codex-app-server) & test(/login_account_chatgpt|set_auth_token_cancels_active_chatgpt_login|browser_login_bootstraps_through_system_proxy|config_requirements_login::/)) | (package(codex-login) & test(=suite::login_server_e2e::falls_back_to_registered_fallback_port_when_default_port_is_in_use))'
+test-group = 'oauth_callback_port'
+
+[[profile.default.overrides]]
+# Each matrix cold-starts 64 MCP sessions. Reserve two slots and run one matrix
+# at a time; under concurrent load these exceed the ordinary 60-second ceiling.
+filter = 'package(codex-core) & (test(=suite::code_mode::code_mode_excludes_mcp_servers_using_their_configured_identity) | test(=suite::code_mode::mcp_code_mode_exclusion_does_not_change_direct_mode_tool_exposure))'
+test-group = 'core_mcp_exposure_matrix'
+threads-required = 2
+slow-timeout = { period = "1m", terminate-after = 2 }
+
 [test-groups.windows_sandbox_legacy_sessions]
 max-threads = 1
 
