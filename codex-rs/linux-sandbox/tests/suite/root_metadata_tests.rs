@@ -35,6 +35,12 @@ async fn root_metadata_symlinks_cannot_reopen_approved_denials() {
     fs::write(private.join("sibling"), "sibling").unwrap();
     codex_utils_cargo_bin::copy_executable(&codex_linux_sandbox_exe(), &work.join("sandbox"))
         .unwrap();
+    // Preserve bundled bubblewrap beside the copied sandbox in this isolated root.
+    codex_utils_cargo_bin::copy_executable(
+        &codex_utils_cargo_bin::cargo_bin("bwrap").expect("bundled bubblewrap binary"),
+        &work.join("bwrap"),
+    )
+    .unwrap();
 
     let path_entry = |path: &str, access| {
         FileSystemSandboxEntry::new(
