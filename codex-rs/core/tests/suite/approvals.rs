@@ -2880,6 +2880,16 @@ ZDOTDIR = "{}"
             EnvironmentVariablePattern::new_case_insensitive("EXCLUDED_SETTING"),
         );
         if request_extra_permissions {
+            // The test checkout may be under /tmp, which is writable by default.
+            // Keep the outside-path fixture outside the command sandbox.
+            config
+                .set_legacy_sandbox_policy(SandboxPolicy::WorkspaceWrite {
+                    writable_roots: vec![],
+                    network_access: true,
+                    exclude_tmpdir_env_var: true,
+                    exclude_slash_tmp: true,
+                })
+                .expect("set sandbox policy");
             config
                 .features
                 .enable(Feature::ExecPermissionApprovals)
