@@ -216,6 +216,7 @@ mod truncation;
 mod turn_input_submission;
 mod turn_state;
 mod unified_exec;
+mod unified_exec_completion;
 #[path = "unified_exec_launch_failure_tests.rs"]
 mod unified_exec_launch_failure;
 mod unified_exec_process_events;

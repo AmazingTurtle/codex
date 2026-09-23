@@ -1,4 +1,5 @@
 use super::AuthRequestTelemetryContext;
+use super::ClientRouting;
 use super::ModelClient;
 use super::PendingUnauthorizedRetry;
 use super::Prompt;
@@ -156,6 +157,7 @@ async fn bedrock_endpoint_resolution_ignores_chatgpt_account_binding() {
         "test_originator".to_string(),
         /*model_verbosity*/ None,
         /*content_item_kinds_enabled*/ true,
+        /*reasoning_effort_override_enabled*/ false,
         /*enable_request_compression*/ false,
         /*include_timing_metrics*/ false,
         /*beta_features_header*/ None,
