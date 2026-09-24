@@ -63,14 +63,31 @@ fn check_mounts(
             return Err(invalid());
         };
         let destination = mount_path(destination)?;
-        // Only roots on the socket filesystem can identify aliases. Other
-        // filesystems can use non-path roots such as nsfs `mnt:[inode]`, but
-        // their destinations still matter for ancestry and nested-mount checks.
-        let root = (*mount_device == device.as_bytes())
-            .then(|| mount_path(root))
-            .transpose()?;
-        mounts.push((*id, *parent, *mount_device, root, destination));
+        mounts.push((*id, *parent, *mount_device, *root, destination));
     }
+    // Btrfs subvolumes can report a different st_dev than their mountinfo
+    // entry. When the opened directory has a mount ID, use that entry's device
+    // to identify other mounts of the same filesystem.
+    let socket_mount_device = if let Some(mount_id) = mount_id {
+        mounts
+            .iter()
+            .find(|(id, ..)| *id == mount_id.as_bytes())
+            .map(|(_, _, mount_device, ..)| *mount_device)
+            .ok_or_else(invalid)?
+    } else {
+        device.as_bytes()
+    };
+    let mounts: Vec<_> = mounts
+        .into_iter()
+        .map(|(id, parent, mount_device, root, destination)| {
+            // Other filesystems can use non-path roots such as nsfs
+            // `mnt:[inode]`; their destinations still matter for ancestry.
+            let root = (mount_device == socket_mount_device)
+                .then(|| mount_path(root))
+                .transpose()?;
+            Ok((id, parent, mount_device, root, destination))
+        })
+        .collect::<io::Result<_>>()?;
     let (location, containing_mount) = if let Some(mount_id) = mount_id {
         // fdinfo/statx identifies the opened mount, which may have been covered
         // by another mount before we read mountinfo.
@@ -78,10 +95,7 @@ fn check_mounts(
             .iter()
             .find(|(id, ..)| *id == mount_id.as_bytes())
             .ok_or_else(invalid)?;
-        let (_, _, mount_device, root, destination) = selected;
-        if *mount_device != device.as_bytes() {
-            return Err(invalid());
-        }
+        let (_, _, _, root, destination) = selected;
         let root = root.as_ref().ok_or_else(invalid)?;
         let relative = directory.strip_prefix(destination).map_err(|_| invalid())?;
         let mut current = Some(selected);

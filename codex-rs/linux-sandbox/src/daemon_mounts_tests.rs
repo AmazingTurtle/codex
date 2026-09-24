@@ -127,6 +127,22 @@ fn masks_alias_when_tmp_is_itself_a_bind_mount() {
 }
 
 #[test]
+fn btrfs_subvolume_device_mismatch_still_masks_ancestor_alias() {
+    let directory = Path::new("/tmp/codex-daemon-1000");
+    let mounts = b"1 0 0:35 /@ / rw - btrfs disk rw\n\
+                   2 1 0:35 /@tmp/.disk-tmp /tmp rw - btrfs disk rw\n\
+                   3 1 0:35 /@tmp /var/tmp rw - btrfs disk rw\n";
+    assert_eq!(
+        check_mounts(directory, "0:60", Some("2"), mounts).unwrap(),
+        BTreeSet::from([
+            PathBuf::from("/tmp/codex-daemon-1000"),
+            PathBuf::from("/var/tmp/.disk-tmp/codex-daemon-1000"),
+        ])
+    );
+    assert!(check_mounts(directory, "0:60", /*mount_id*/ None, mounts).is_err());
+}
+
+#[test]
 fn accepts_private_tmp_filesystem_and_resolves_stacked_mounts() {
     let mounts = "1 0 0:1 / / rw - ext4 disk rw\n2 1 0:2 / /tmp rw - tmpfs tmpfs rw\n";
     let directory = Path::new("/tmp/codex-daemon-1000");
