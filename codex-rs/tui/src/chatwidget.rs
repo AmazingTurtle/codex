@@ -1254,7 +1254,7 @@ impl ChatWidget {
     }
 
     fn flush_active_cell(&mut self) {
-        if let Some(active) = self.transcript.take_active_cell() {
+        if let Some(active) = self.take_active_cell_for_history() {
             self.app_event_tx.send(AppEvent::InsertHistoryCell(active));
             self.request_pending_usage_output_insertion();
         }
@@ -1318,13 +1318,13 @@ impl ChatWidget {
         {
             // Only break exec grouping if the cell renders visible lines.
             if !self.has_active_stream_tail() {
-                return self.transcript.take_active_cell();
+                return self.take_active_cell_for_history();
             }
         } else if !keep_placeholder_header_active
             && self.has_completed_tool_activity()
             && !cell.transcript_lines(history_width).is_empty()
         {
-            return self.transcript.take_active_cell();
+            return self.take_active_cell_for_history();
         }
         None
     }
@@ -1481,7 +1481,7 @@ impl ChatWidget {
 
     /// Mark the active cell as failed (✗) and flush it into history.
     fn finalize_active_cell_as_failed(&mut self) {
-        if let Some(mut cell) = self.transcript.take_active_cell() {
+        if let Some(mut cell) = self.take_active_cell_for_history() {
             // Insert finalized cell into history and keep grouping consistent.
             if let Some(exec) = cell.as_any_mut().downcast_mut::<ExecCell>() {
                 exec.mark_failed();

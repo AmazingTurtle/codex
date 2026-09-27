@@ -320,6 +320,9 @@ fn wrap_user_message(
     (!wrapped.is_empty()).then_some(wrapped)
 }
 
+/// Inline preview budget for reasoning cells promoted by `show_raw_agent_reasoning`.
+const REASONING_PREVIEW_LINES: usize = 2;
+
 #[derive(Debug)]
 pub(crate) struct ReasoningSummaryCell {
     _header: String,
@@ -327,6 +330,15 @@ pub(crate) struct ReasoningSummaryCell {
     /// Session cwd used to render local file links inside the reasoning body.
     cwd: PathBuf,
     transcript_only: bool,
+    /// Raw reasoning display promotes transcript-only cells to a collapsed inline preview.
+    inline_preview: bool,
+    /// Streaming variant of the inline preview that owns the active-cell slot while reasoning
+    /// summaries arrive; it never commits itself and is replaced by the finalized cell.
+    live: bool,
+    /// The bounded live preview source may omit additional content from the full reasoning item.
+    live_preview_truncated: bool,
+    /// Resolved key label for opening the transcript, when available.
+    transcript_shortcut_hint: Option<String>,
     /// Persisted identity verifies page folds without comparing rendered reasoning text.
     source_item_id: Option<String>,
 }
@@ -344,8 +356,40 @@ impl ReasoningSummaryCell {
         self.source_item_id.as_deref()
     }
 
+    /// Whether the cell stays out of the inline scrollback. A preview cell renders inline, so it
+    /// no longer counts as transcript-only for grouping and fold decisions.
     pub(crate) fn is_transcript_only(&self) -> bool {
-        self.transcript_only
+        self.transcript_only && !self.inline_preview
+    }
+
+    /// Render a collapsed preview of the reasoning body inline while keeping the full text in the
+    /// transcript overlay. Enabled when `show_raw_agent_reasoning` makes reasoning persistent.
+    pub(crate) fn with_inline_preview(mut self, transcript_shortcut_hint: Option<String>) -> Self {
+        self.inline_preview = true;
+        self.transcript_shortcut_hint = transcript_shortcut_hint;
+        self
+    }
+
+    /// Streamed live variant of the inline preview shown while a reasoning summary is in flight.
+    pub(crate) fn with_live_preview(
+        mut self,
+        source_truncated: bool,
+        transcript_shortcut_hint: Option<String>,
+    ) -> Self {
+        self.inline_preview = true;
+        self.live = true;
+        self.live_preview_truncated = source_truncated;
+        self.transcript_shortcut_hint = transcript_shortcut_hint;
+        self
+    }
+
+    /// Whether this cell is the transient streaming preview occupying the active-cell slot.
+    pub(crate) fn is_live_preview(&self) -> bool {
+        self.live
+    }
+
+    pub(crate) fn live_preview_truncated(&self) -> bool {
+        self.live_preview_truncated
     }
 
     /// Create a reasoning summary cell that will render local file links relative to the session
@@ -356,18 +400,23 @@ impl ReasoningSummaryCell {
             content,
             cwd: cwd.to_path_buf(),
             transcript_only,
+            inline_preview: false,
+            live: false,
+            live_preview_truncated: false,
+            transcript_shortcut_hint: None,
             source_item_id: None,
         }
     }
 
-    fn lines(&self, width: u16) -> Vec<HyperlinkLine> {
+    /// Styled but unwrapped markdown lines of the reasoning body.
+    fn summary_logical_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         let lines = crate::markdown_render::render_markdown_lines_with_width_and_cwd(
             &self.content,
             crate::width::usable_content_width_u16(width, /*reserved_cols*/ 2),
             Some(self.cwd.as_path()),
         );
         let summary_style = Style::default().dim().italic();
-        let summary_lines = lines
+        lines
             .into_iter()
             .map(|mut line| {
                 line.line.spans = line
@@ -381,14 +430,74 @@ impl ReasoningSummaryCell {
                 }
                 line
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    }
 
+    fn lines(&self, width: u16) -> Vec<HyperlinkLine> {
         crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
-            &summary_lines,
+            &self.summary_logical_lines(width),
             RtOptions::new(width as usize)
                 .initial_indent("• ".dim().into())
                 .subsequent_indent("  ".into()),
         )
+    }
+
+    /// Collapsed scrollback presentation: the body starts inline after a bold `Reasoning:`
+    /// label on the first bullet line, and a dim notice points at the full text in the transcript.
+    fn preview_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        let lines = self.summary_logical_lines(width);
+        let has_text = |line: &HyperlinkLine| {
+            line.line
+                .spans
+                .iter()
+                .any(|span| !span.content.trim().is_empty())
+        };
+        // The first wrapped line can be an empty soft-break continuation; the label belongs on
+        // the first line that carries text so it never strands a bare bullet.
+        let Some(label_index) = lines.iter().position(has_text) else {
+            return Vec::new();
+        };
+        let labeled = crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
+            std::slice::from_ref(&lines[label_index]),
+            RtOptions::new(width as usize)
+                .initial_indent(Line::from(vec![
+                    "• ".dim(),
+                    "Reasoning".dim().bold(),
+                    ": ".dim(),
+                ]))
+                .subsequent_indent("  ".into()),
+        );
+        let rest = lines
+            .iter()
+            .enumerate()
+            .filter(|(index, line)| *index != label_index && has_text(line))
+            .flat_map(|(_, line)| {
+                crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
+                    std::slice::from_ref(line),
+                    RtOptions::new(width as usize)
+                        .initial_indent("• ".dim().into())
+                        .subsequent_indent("  ".into()),
+                )
+            });
+        let mut wrapped = labeled.into_iter().chain(rest);
+        let mut preview: Vec<HyperlinkLine> =
+            wrapped.by_ref().take(REASONING_PREVIEW_LINES).collect();
+        let hidden = wrapped.count();
+        if hidden > 0 || self.live_preview_truncated {
+            let unit = if hidden == 1 { "line" } else { "lines" };
+            let transcript_hint = self
+                .transcript_shortcut_hint
+                .as_deref()
+                .map(|hint| format!(" ({hint})"))
+                .unwrap_or_default();
+            let notice = if self.live_preview_truncated {
+                format!("  … more lines in transcript{transcript_hint}")
+            } else {
+                format!("  … {hidden} more {unit} in transcript{transcript_hint}")
+            };
+            preview.push(HyperlinkLine::new(notice.dim().into()));
+        }
+        preview
     }
 }
 
@@ -398,7 +507,9 @@ impl HistoryCell for ReasoningSummaryCell {
     }
 
     fn display_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
-        if self.transcript_only {
+        if self.inline_preview {
+            self.preview_hyperlink_lines(width)
+        } else if self.transcript_only {
             Vec::new()
         } else {
             self.lines(width)
@@ -414,7 +525,7 @@ impl HistoryCell for ReasoningSummaryCell {
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
-        if self.transcript_only {
+        if self.transcript_only && !self.inline_preview {
             Vec::new()
         } else {
             raw_lines_from_source(self.markdown_source().trim())

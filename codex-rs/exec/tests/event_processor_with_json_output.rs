@@ -139,7 +139,9 @@ fn session_configured_produces_thread_started_event() {
 
 #[test]
 fn turn_started_emits_turn_started_event() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected =
         processor.collect_thread_events(ServerNotification::TurnStarted(TurnStartedNotification {
@@ -167,7 +169,9 @@ fn turn_started_emits_turn_started_event() {
 
 #[test]
 fn command_execution_started_and_completed_translate_to_thread_events() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
     let command_item = ThreadItem::CommandExecution {
         model_context: None,
         id: "cmd-1".to_string(),
@@ -252,7 +256,9 @@ fn command_execution_started_and_completed_translate_to_thread_events() {
 
 #[test]
 fn empty_reasoning_items_are_ignored() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -278,7 +284,9 @@ fn empty_reasoning_items_are_ignored() {
 
 #[test]
 fn unsupported_items_do_not_consume_synthetic_ids() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let ignored = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -334,7 +342,9 @@ fn unsupported_items_do_not_consume_synthetic_ids() {
 
 #[test]
 fn reasoning_items_emit_summary_not_raw_content() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -367,7 +377,9 @@ fn reasoning_items_emit_summary_not_raw_content() {
 
 #[test]
 fn web_search_completion_preserves_query_and_action() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -432,7 +444,9 @@ fn web_search_page_actions_and_results_survive_json_output() {
             Some(vec![json!({"url": url, "content": "configuration"})]),
             Some(vec![json!({"url": url, "error": {"status": 404}})]),
         ] {
-            let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+            let mut processor = EventProcessorWithJsonOutput::new(
+                /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+            );
             let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
                 ItemCompletedNotification {
                     item: ThreadItem::WebSearch(ApiWebSearchItem {
@@ -466,7 +480,9 @@ fn web_search_page_actions_and_results_survive_json_output() {
 
 #[test]
 fn web_search_start_and_completion_reuse_item_id() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let started =
         processor.collect_thread_events(ServerNotification::ItemStarted(ItemStartedNotification {
@@ -539,7 +555,9 @@ fn web_search_start_and_completion_reuse_item_id() {
 
 #[test]
 fn mcp_tool_call_begin_and_end_emit_item_events() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let started =
         processor.collect_thread_events(ServerNotification::ItemStarted(ItemStartedNotification {
@@ -635,7 +653,9 @@ fn mcp_tool_call_begin_and_end_emit_item_events() {
 
 #[test]
 fn mcp_tool_call_failure_sets_failed_status() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -687,7 +707,9 @@ fn mcp_tool_call_failure_sets_failed_status() {
 
 #[test]
 fn mcp_tool_call_defaults_arguments_and_preserves_structured_content() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let started =
         processor.collect_thread_events(ServerNotification::ItemStarted(ItemStartedNotification {
@@ -789,7 +811,9 @@ fn mcp_tool_call_defaults_arguments_and_preserves_structured_content() {
 
 #[test]
 fn collab_spawn_begin_and_end_emit_item_events() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let started =
         processor.collect_thread_events(ServerNotification::ItemStarted(ItemStartedNotification {
@@ -881,7 +905,9 @@ fn collab_spawn_begin_and_end_emit_item_events() {
 
 #[test]
 fn file_change_completion_maps_change_kinds() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -944,7 +970,9 @@ fn file_change_completion_maps_change_kinds() {
 
 #[test]
 fn file_change_declined_maps_to_failed_status() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -985,7 +1013,9 @@ fn file_change_declined_maps_to_failed_status() {
 
 #[test]
 fn agent_message_item_updates_final_message() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -1022,7 +1052,9 @@ fn agent_message_item_updates_final_message() {
 
 #[test]
 fn agent_message_item_started_is_ignored() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected =
         processor.collect_thread_events(ServerNotification::ItemStarted(ItemStartedNotification {
@@ -1050,7 +1082,9 @@ fn agent_message_item_started_is_ignored() {
 
 #[test]
 fn reasoning_item_completed_uses_synthetic_id() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -1083,7 +1117,9 @@ fn reasoning_item_completed_uses_synthetic_id() {
 
 #[test]
 fn warning_event_produces_error_item() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_warning(
         "Heads up: Long conversations and multiple compactions can cause the model to be less accurate. Start a new conversation when possible to keep conversations small and targeted.".to_string(),
@@ -1107,7 +1143,9 @@ fn warning_event_produces_error_item() {
 
 #[test]
 fn plan_update_emits_started_then_updated_then_completed() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let started = processor.collect_thread_events(ServerNotification::TurnPlanUpdated(
         TurnPlanUpdatedNotification {
@@ -1238,7 +1276,9 @@ fn plan_update_emits_started_then_updated_then_completed() {
 
 #[test]
 fn plan_update_after_completion_starts_new_todo_list_with_new_id() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let _ = processor.collect_thread_events(ServerNotification::TurnPlanUpdated(
         TurnPlanUpdatedNotification {
@@ -1300,7 +1340,9 @@ fn plan_update_after_completion_starts_new_todo_list_with_new_id() {
 
 #[test]
 fn token_usage_update_is_emitted_on_turn_completion() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let usage_update =
         processor.collect_thread_events(ServerNotification::ThreadTokenUsageUpdated(
@@ -1370,7 +1412,9 @@ fn token_usage_update_is_emitted_on_turn_completion() {
 
 #[test]
 fn turn_completion_recovers_final_message_from_turn_items() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let completed = processor.collect_thread_events(ServerNotification::TurnCompleted(
         TurnCompletedNotification {
@@ -1409,7 +1453,9 @@ fn turn_completion_recovers_final_message_from_turn_items() {
 
 #[test]
 fn turn_completion_reconciles_started_items_from_turn_items() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let started =
         processor.collect_thread_events(ServerNotification::ItemStarted(ItemStartedNotification {
@@ -1506,7 +1552,9 @@ fn turn_completion_reconciles_started_items_from_turn_items() {
 
 #[test]
 fn turn_completion_overwrites_stale_final_message_from_turn_items() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
     let _ = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
             item: ThreadItem::AgentMessage {
@@ -1560,7 +1608,9 @@ fn turn_completion_overwrites_stale_final_message_from_turn_items() {
 
 #[test]
 fn turn_completion_preserves_streamed_final_message_when_turn_items_are_empty() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
     let _ = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
             item: ThreadItem::AgentMessage {
@@ -1607,7 +1657,9 @@ fn turn_completion_preserves_streamed_final_message_when_turn_items_are_empty() 
 
 #[test]
 fn failed_turn_clears_stale_final_message() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         ItemCompletedNotification {
@@ -1655,7 +1707,9 @@ fn failed_turn_clears_stale_final_message() {
 
 #[test]
 fn turn_completion_falls_back_to_final_plan_text() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let completed = processor.collect_thread_events(ServerNotification::TurnCompleted(
         TurnCompletedNotification {
@@ -1690,7 +1744,9 @@ fn turn_completion_falls_back_to_final_plan_text() {
 
 #[test]
 fn turn_failure_prefers_structured_error_message() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let error = processor.collect_thread_events(ServerNotification::Error(ErrorNotification {
         error: TurnError {
@@ -1743,7 +1799,9 @@ fn turn_failure_prefers_structured_error_message() {
 
 #[test]
 fn model_reroute_surfaces_as_error_item() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ModelRerouted(
         codex_app_server_protocol::ModelReroutedNotification {

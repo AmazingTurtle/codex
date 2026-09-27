@@ -6,6 +6,14 @@
 use super::*;
 use crate::markdown_render::ListSpacing;
 
+const LIVE_REASONING_PREVIEW_MAX_BYTES: usize = 4 * 1024;
+
+enum ReasoningPreviewSync {
+    Updated,
+    Unchanged,
+    Unavailable,
+}
+
 fn latest_summary_line(text: &str) -> Option<String> {
     text.lines().rev().find_map(|line| {
         let line = line.trim();
@@ -33,6 +41,10 @@ impl ChatWidget {
         if self.status_state.reasoning_item_id.as_ref() == Some(&id) {
             return;
         }
+        self.clear_active_reasoning_tail();
+        self.status_state.reasoning_live_flushed_source = None;
+        self.status_state.reasoning_live_preview_source.clear();
+        self.status_state.reasoning_live_preview_truncated = false;
         self.status_state.reasoning_item_id = Some(id);
         self.status_state.reasoning_recovered_after_refresh = false;
         self.reasoning_buffer.clear();
@@ -302,6 +314,9 @@ impl ChatWidget {
     pub(super) fn on_agent_reasoning_delta(&mut self, delta: String) {
         // Accumulate the current reasoning block for history and activity text.
         self.reasoning_buffer.push_str(&delta);
+        if self.config.show_raw_agent_reasoning {
+            self.append_reasoning_live_preview_source(&delta);
+        }
 
         if self.safety_buffering_is_waiting() {
             return;
@@ -318,6 +333,24 @@ impl ChatWidget {
 
         self.reasoning_header =
             latest_summary_line(&self.reasoning_buffer).or(self.reasoning_header.take());
+
+        if self.config.show_raw_agent_reasoning {
+            match self.sync_active_reasoning_tail() {
+                ReasoningPreviewSync::Updated => {
+                    self.status_state.terminal_title_status_kind =
+                        TerminalTitleStatusKind::Thinking;
+                    self.request_redraw();
+                    return;
+                }
+                ReasoningPreviewSync::Unchanged => {
+                    self.status_state.terminal_title_status_kind =
+                        TerminalTitleStatusKind::Thinking;
+                    return;
+                }
+                ReasoningPreviewSync::Unavailable => {}
+            }
+        }
+
         let Some(header) = self.reasoning_header.as_deref() else {
             // No usable summary has arrived yet.
             return;
@@ -345,6 +378,8 @@ impl ChatWidget {
     }
 
     pub(super) fn on_agent_reasoning_final(&mut self) {
+        // Completion ends the transient preview even if this item was already committed.
+        self.clear_active_reasoning_tail();
         // At the end of a reasoning block, record transcript-only content.
         if !self.reasoning_buffer.is_empty() {
             self.reasoning_summary_parts
@@ -356,21 +391,69 @@ impl ChatWidget {
             .rev()
             .find_map(|part| latest_summary_line(part))
             .or(self.reasoning_header.take());
+        let source_item_id = self.status_state.reasoning_item_id.clone();
+        let already_committed = source_item_id
+            .as_deref()
+            .is_some_and(|id| self.status_state.reasoning_committed_item_ids.contains(id));
         if !self.reasoning_summary_parts.is_empty() {
             let reasoning_parts = std::mem::take(&mut self.reasoning_summary_parts);
             let mut cell =
                 history_cell::new_reasoning_summary_block(reasoning_parts, &self.config.cwd);
-            if let Some(id) = &self.status_state.reasoning_item_id {
-                cell.set_source_item_id(id.clone());
+            let flushed_source = self.status_state.reasoning_live_flushed_source.as_deref();
+            let flushed_source_matches =
+                flushed_source.is_some_and(|flushed| flushed == cell.markdown_source());
+            let needs_flushed_reconciliation = self.config.show_raw_agent_reasoning
+                && already_committed
+                && flushed_source.is_some()
+                && !flushed_source_matches;
+            let mut should_commit = !already_committed || needs_flushed_reconciliation;
+            if needs_flushed_reconciliation && let Some(flushed_source) = flushed_source {
+                let completed_source = cell.markdown_source();
+                let remaining_source = completed_source
+                    .strip_prefix(flushed_source)
+                    .unwrap_or(completed_source);
+                if remaining_source.trim().is_empty() {
+                    should_commit = false;
+                } else {
+                    cell = history_cell::new_reasoning_summary_block(
+                        vec![remaining_source.to_string()],
+                        &self.config.cwd,
+                    );
+                }
             }
-            let cell: Box<dyn HistoryCell> = cell;
-            let result = match self.transcript.active_cell.as_mut() {
-                Some(active) => active.append_reasoning(cell),
-                None => Err(cell),
-            };
-            match result {
-                Ok(()) => self.bump_active_cell_revision(),
-                Err(cell) => self.add_boxed_history(cell),
+            if should_commit {
+                if let Some(id) = &source_item_id {
+                    cell.set_source_item_id(id.clone());
+                    self.status_state
+                        .reasoning_committed_item_ids
+                        .insert(id.clone());
+                }
+                if self.config.show_raw_agent_reasoning {
+                    // Raw reasoning display keeps the completed block as a standalone inline
+                    // preview before the next item instead of hiding it inside an activity group.
+                    if !flushed_source_matches {
+                        let transcript_hint = self
+                            .bottom_pane
+                            .transcript_shortcut_hint()
+                            .map(super::super::key_hint::ShortcutHint::display_label);
+                        let cell: Box<dyn HistoryCell> =
+                            Box::new(cell.with_inline_preview(transcript_hint));
+                        // A running tool still owns its output and completion events. Only
+                        // finished activity can move into history ahead of this reasoning.
+                        self.flush_completed_tool_activity();
+                        self.app_event_tx.send(AppEvent::InsertHistoryCell(cell));
+                    }
+                } else {
+                    let cell: Box<dyn HistoryCell> = cell;
+                    let result = match self.transcript.active_cell.as_mut() {
+                        Some(active) => active.append_reasoning(cell),
+                        None => Err(cell),
+                    };
+                    match result {
+                        Ok(()) => self.bump_active_cell_revision(),
+                        Err(cell) => self.add_boxed_history(cell),
+                    }
+                }
             }
         }
         self.reasoning_buffer.clear();
@@ -378,8 +461,100 @@ impl ChatWidget {
         self.status_state.reasoning_item_id = None;
         self.status_state.reasoning_resume_turn_id = None;
         self.status_state.reasoning_recovered_after_refresh = false;
+        self.status_state.reasoning_live_flushed_source = None;
+        self.status_state.reasoning_live_preview_source.clear();
+        self.status_state.reasoning_live_preview_truncated = false;
         self.reasoning_summary_parts.clear();
         self.request_redraw();
+    }
+
+    /// Keeps a bounded raw-mode reasoning preview in the active-cell slot while summary deltas
+    /// stream. The full source remains in `reasoning_buffer` for completion and transcript use.
+    ///
+    /// Returns whether the active cell was updated, unchanged, or belongs to another stream.
+    fn sync_active_reasoning_tail(&mut self) -> ReasoningPreviewSync {
+        let content = &self.status_state.reasoning_live_preview_source;
+        if content.trim().is_empty() {
+            return ReasoningPreviewSync::Unavailable;
+        }
+        // Once a live preview is committed to history, keep it as the sole preview for this item.
+        // The completed item will append any source received after that flush.
+        if self.status_state.reasoning_live_flushed_source.is_some() {
+            return ReasoningPreviewSync::Unchanged;
+        }
+        let item_id = self.status_state.reasoning_item_id.clone();
+        if self.transcript.active_cell.is_some() && !self.active_cell_is_reasoning_tail() {
+            return ReasoningPreviewSync::Unavailable;
+        }
+        let transcript_hint = self
+            .bottom_pane
+            .transcript_shortcut_hint()
+            .map(super::super::key_hint::ShortcutHint::display_label);
+        let mut cell =
+            history_cell::new_reasoning_summary_block(vec![content.clone()], &self.config.cwd)
+                .with_live_preview(
+                    self.status_state.reasoning_live_preview_truncated,
+                    transcript_hint,
+                );
+        if self
+            .transcript
+            .active_cell
+            .as_ref()
+            .and_then(|cell| {
+                cell.as_any()
+                    .downcast_ref::<history_cell::ReasoningSummaryCell>()
+            })
+            .is_some_and(|active| {
+                active.is_live_preview()
+                    && active.source_item_id() == item_id.as_deref()
+                    && active.markdown_source() == cell.markdown_source()
+                    && active.live_preview_truncated()
+                        == self.status_state.reasoning_live_preview_truncated
+            })
+        {
+            return ReasoningPreviewSync::Unchanged;
+        }
+        if let Some(id) = item_id {
+            cell.set_source_item_id(id);
+        }
+        self.transcript.active_cell = Some(Box::new(cell));
+        self.bump_active_cell_revision();
+        ReasoningPreviewSync::Updated
+    }
+
+    fn append_reasoning_live_preview_source(&mut self, delta: &str) {
+        let source = &mut self.status_state.reasoning_live_preview_source;
+        let available = LIVE_REASONING_PREVIEW_MAX_BYTES.saturating_sub(source.len());
+        if delta.len() <= available {
+            source.push_str(delta);
+            return;
+        }
+
+        let end = delta
+            .char_indices()
+            .take_while(|(start, character)| start + character.len_utf8() <= available)
+            .map(|(start, character)| start + character.len_utf8())
+            .last()
+            .unwrap_or_default();
+        source.push_str(&delta[..end]);
+        self.status_state.reasoning_live_preview_truncated = true;
+    }
+
+    fn active_cell_is_reasoning_tail(&self) -> bool {
+        self.transcript.active_cell.as_ref().is_some_and(|cell| {
+            cell.as_any()
+                .downcast_ref::<history_cell::ReasoningSummaryCell>()
+                .is_some_and(history_cell::ReasoningSummaryCell::is_live_preview)
+        })
+    }
+
+    /// Drops an uncommitted live reasoning preview on teardown or item switches without
+    /// persisting it; any other active cell is left untouched.
+    pub(super) fn clear_active_reasoning_tail(&mut self) {
+        if self.active_cell_is_reasoning_tail() {
+            self.transcript.take_active_cell();
+            self.bump_active_cell_revision();
+        }
     }
 
     pub(super) fn on_reasoning_section_break(&mut self) {
@@ -387,6 +562,7 @@ impl ChatWidget {
         if !self.reasoning_buffer.is_empty() {
             self.reasoning_summary_parts
                 .push(std::mem::take(&mut self.reasoning_buffer));
+            self.append_reasoning_live_preview_source("\n\n");
         }
     }
 
@@ -648,6 +824,7 @@ impl ChatWidget {
             {
                 return false;
             }
+            self.clear_active_reasoning_tail();
             self.transcript.active_cell = Some(Box::new(cell));
             self.bump_active_cell_revision();
             return true;
@@ -677,6 +854,7 @@ impl ChatWidget {
             {
                 return false;
             }
+            self.clear_active_reasoning_tail();
             self.transcript.active_cell = Some(Box::new(cell));
             self.bump_active_cell_revision();
             return true;

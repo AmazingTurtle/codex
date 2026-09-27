@@ -348,10 +348,23 @@ impl ChatWidget {
                 summary,
                 content,
             } => {
-                let recover_completion = self.status_state.reasoning_recovered_after_refresh
-                    && (!summary.is_empty()
-                        || (self.config.show_raw_agent_reasoning && !content.is_empty()));
-                if from_replay || recover_completion {
+                let payload_visible_content = if self.config.show_raw_agent_reasoning {
+                    content.as_slice()
+                } else {
+                    &[]
+                };
+                let has_payload = !summary.is_empty() || !payload_visible_content.is_empty();
+                let recover_completion =
+                    self.status_state.reasoning_recovered_after_refresh && has_payload;
+                // A completion can arrive for an item whose deltas never reached the buffer
+                // (for example, filtered or lost streams). Commit the completed payload so the
+                // reasoning still lands in the transcript instead of vanishing with the status row.
+                let missed_live_stream = !from_replay
+                    && !recover_completion
+                    && has_payload
+                    && self.reasoning_buffer.is_empty()
+                    && self.reasoning_summary_parts.is_empty();
+                if from_replay || recover_completion || missed_live_stream {
                     if from_replay {
                         self.on_reasoning_item_started(id);
                     } else {
@@ -359,6 +372,9 @@ impl ChatWidget {
                         // Reconcile with the complete item before committing the transcript.
                         self.reasoning_buffer.clear();
                         self.reasoning_summary_parts.clear();
+                        if self.status_state.reasoning_item_id.is_none() {
+                            self.status_state.reasoning_item_id = Some(id);
+                        }
                     }
                     let reasoning_parts = summary.into_iter().chain(
                         self.config

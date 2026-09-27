@@ -2,7 +2,8 @@
 source: tui/src/chatwidget/tests/compaction_tests.rs
 expression: "normalize_compaction_snapshot(render_bottom_popup(&chat, 40))"
 ---
-• Compacting context (<elapsed> • esc to i…
+• Compacting context
+  (<elapsed> • esc to interrupt)
   └ Making room to continue.
 
 

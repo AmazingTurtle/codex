@@ -2,4 +2,4 @@
 source: tui/src/screen_reader_tests.rs
 expression: terminal.backend()
 ---
-"Reading the terminal output (0s • esc to interrupt)         "
+"Reading the terminal output                                 "

@@ -3,7 +3,8 @@ source: tui/src/chatwidget/tests/status_and_layout.rs
 expression: normalized_backend_snapshot(terminal.backend())
 ---
 "                                                                                "
-"• Analyzing (0s • esc to interrupt)                                             "
+"• Analyzing                                                                     "
+"  (0s • esc to interrupt)                                                       "
 "                                                                                "
 "                                                                                "
 "› Ask Better Codex to do anything                                               "

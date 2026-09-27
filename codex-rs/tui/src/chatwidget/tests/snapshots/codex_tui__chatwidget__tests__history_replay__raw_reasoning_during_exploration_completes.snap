@@ -1,0 +1,8 @@
+---
+source: tui/src/chatwidget/tests/history_replay.rs
+expression: "format!(\"{}{}\", lines_to_single_string(&committed[0].display_lines(80)),\nlines_to_single_string(&completed[0].transcript_lines(80)))"
+---
+• Reasoning: List first, then read.
+$ ls
+listed-file.rs
+✓ • 5ms
