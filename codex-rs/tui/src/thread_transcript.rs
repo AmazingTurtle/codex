@@ -44,6 +44,14 @@ pub(crate) use exploration_groups::older_exploration_group;
 
 pub(crate) type TranscriptCells = Vec<Arc<dyn HistoryCell>>;
 
+/// Whether a projected cell is reasoning that stays out of the inline scrollback; only hidden
+/// reasoning may be absorbed into an activity group.
+fn is_transcript_only_reasoning(cell: &Arc<dyn HistoryCell>) -> bool {
+    cell.as_any()
+        .downcast_ref::<ReasoningSummaryCell>()
+        .is_some_and(ReasoningSummaryCell::is_transcript_only)
+}
+
 enum PendingActivity {
     Computer(crate::history_cell::ComputerActivityCell),
     Exploration(crate::exec_cell::ExecCell),
@@ -135,22 +143,37 @@ pub(crate) fn thread_items_to_transcript_cells(
     let inline_visualization_context = config.and_then(|config| {
         thread_id.and_then(|thread_id| InlineVisualizationContext::from_config(config, thread_id))
     });
+    let transcript_shortcut_hint = config
+        .and_then(|config| crate::keymap::RuntimeKeymap::from_config(&config.tui_keymap).ok())
+        .unwrap_or_else(crate::keymap::RuntimeKeymap::defaults)
+        .primary_hint(crate::keymap::KeymapContext::Global, "open_transcript")
+        .map(crate::key_hint::ShortcutHint::display_label);
     let mut cells: TranscriptCells = Vec::new();
     let mut pending = None;
     for item in items {
-        if matches!(item, ThreadItem::Reasoning { .. })
-            && let Some(group) = &mut pending
-        {
-            for cell in item_to_cells(
+        if matches!(item, ThreadItem::Reasoning { .. }) && pending.is_some() {
+            let reasoning_cells = item_to_cells(
                 item,
                 cwd,
                 raw_reasoning_visibility,
                 inline_visualization_context.clone(),
                 tool_call_display,
-            ) {
-                match group {
-                    PendingActivity::Computer(group) => group.group.push_detail(cell),
-                    PendingActivity::Exploration(group) => group.group.push_detail(cell),
+                transcript_shortcut_hint.as_deref(),
+            );
+            // Visible raw reasoning renders as a standalone inline block, so the pending group
+            // must flush first to keep it strictly before the next call.
+            if reasoning_cells
+                .iter()
+                .any(|cell| !is_transcript_only_reasoning(cell))
+            {
+                PendingActivity::flush(&mut pending, &mut cells);
+                cells.extend(reasoning_cells);
+            } else if let Some(group) = &mut pending {
+                for cell in reasoning_cells {
+                    match group {
+                        PendingActivity::Computer(group) => group.group.push_detail(cell),
+                        PendingActivity::Exploration(group) => group.group.push_detail(cell),
+                    }
                 }
             }
             continue;
@@ -213,6 +236,7 @@ pub(crate) fn thread_items_to_transcript_cells(
                     raw_reasoning_visibility,
                     inline_visualization_context.clone(),
                     tool_call_display,
+                    transcript_shortcut_hint.as_deref(),
                 );
                 if !projected.is_empty() {
                     PendingActivity::flush(&mut pending, &mut cells);
@@ -232,6 +256,7 @@ fn item_to_cells(
     raw_reasoning_visibility: RawReasoningVisibility,
     inline_visualization_context: Option<InlineVisualizationContext>,
     tool_call_display: ToolCallDisplay,
+    transcript_shortcut_hint: Option<&str>,
 ) -> TranscriptCells {
     let mut cells: TranscriptCells = Vec::new();
     match item {
@@ -333,6 +358,9 @@ fn item_to_cells(
                     cwd.as_path(),
                     /*transcript_only*/ true,
                 );
+                if matches!(raw_reasoning_visibility, RawReasoningVisibility::Visible) {
+                    cell = cell.with_inline_preview(transcript_shortcut_hint.map(str::to_owned));
+                }
                 cell.set_source_item_id(id);
                 cells.push(Arc::new(cell));
             }

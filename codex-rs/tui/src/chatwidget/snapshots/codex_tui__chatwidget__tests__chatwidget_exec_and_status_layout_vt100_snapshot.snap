@@ -29,14 +29,14 @@ expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
 
 
 
-
 • I’m going to search the repo for where “Change Approved” is rendered to update
   that view.
 
 • Ran rg "Change Approved"
   └ (no output)
 
-• Investigating rendering code (0s • esc to interrupt)
+• Investigating rendering code
+  (0s • esc to interrupt)
 
 
 › Summarize recent commits

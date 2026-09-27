@@ -107,6 +107,7 @@ impl ChatWidget {
         self.reasoning_header = None;
         self.status_state.reasoning_item_id = None;
         self.status_state.reasoning_resume_turn_id = None;
+        self.clear_active_reasoning_tail();
         self.set_ambient_pet_notification(
             crate::pets::PetNotificationKind::Running,
             /*body*/ None,
@@ -327,6 +328,7 @@ impl ChatWidget {
         // Drop preview-only stream tail content on any termination path before
         // failed-cell finalization, so transient tail cells are never persisted.
         self.clear_active_stream_tail();
+        self.clear_active_reasoning_tail();
         // Ensure any spinner is replaced by a red ✗ and flushed into history.
         self.finalize_active_cell_as_failed();
         // Turn-scoped hook rows are transient live state; once the turn is over,
