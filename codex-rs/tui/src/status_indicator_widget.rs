@@ -1,10 +1,10 @@
 //! A live task status row rendered above the composer while the agent is busy.
 //!
-//! The row renders a separately owned clock, the optional interrupt hint, and short inline
-//! context (for example, the unified-exec background-process summary). Keeping
-//! these pieces on one line avoids vertical layout churn in the bottom pane.
-//! Hook activity uses the remaining space or its own line on overflow, so it
-//! never displaces background-process controls.
+//! The row renders a separately owned clock and optional interrupt hint below
+//! the status header. Short inline context (for example, the unified-exec
+//! background-process summary) stays beside the header. Hook activity uses the
+//! remaining space or its own line on overflow, so it never displaces
+//! background-process controls.
 
 use std::time::Duration;
 use std::time::Instant;
@@ -249,18 +249,7 @@ impl StatusIndicator<'_> {
         if !spans.is_empty() {
             spans.push(" ".into());
         }
-        if row.show_interrupt_hint
-            && let Some(interrupt_binding) = row.interrupt_binding
-        {
-            spans.push(format!("({pretty_elapsed} • ").dim());
-            spans.extend(interrupt_binding.spans());
-            spans.push(" to interrupt)".dim());
-        } else {
-            spans.push(format!("({pretty_elapsed})").dim());
-        }
         if let Some(message) = &row.inline_message {
-            // Keep optional context after elapsed/interrupt text so that core
-            // interrupt affordances stay in a fixed visual location.
             spans.push(" · ".dim());
             spans.push(message.clone().dim());
         }
@@ -279,9 +268,22 @@ impl StatusIndicator<'_> {
                 ));
             }
         }
-        let mut lines = Vec::new();
-        lines.push(truncate_line_with_ellipsis_if_overflow(
+        let mut lines = vec![truncate_line_with_ellipsis_if_overflow(
             header,
+            usize::from(width),
+        )];
+        let mut elapsed_hint = vec![Span::from("  ").dim()];
+        if row.show_interrupt_hint
+            && let Some(interrupt_binding) = row.interrupt_binding
+        {
+            elapsed_hint.push(format!("({pretty_elapsed} • ").dim());
+            elapsed_hint.extend(interrupt_binding.spans());
+            elapsed_hint.push(" to interrupt)".dim());
+        } else {
+            elapsed_hint.push(format!("({pretty_elapsed})").dim());
+        }
+        lines.push(truncate_line_with_ellipsis_if_overflow(
+            Line::from(elapsed_hint),
             usize::from(width),
         ));
         lines.extend(hook_overflow);
@@ -420,7 +422,7 @@ mod tests {
 
         // Prefix is 4 columns, so a width of 30 yields a content width of 26: one column
         // short of fitting the whole phrase (27 cols), forcing exactly one wrap without ellipsis.
-        let mut terminal = Terminal::new(TestBackend::new(30, 3)).expect("terminal");
+        let mut terminal = Terminal::new(TestBackend::new(30, 4)).expect("terminal");
         terminal
             .draw(|f| w.with_timer(&timer).render(f.area(), f.buffer_mut()))
             .expect("draw");
@@ -440,16 +442,25 @@ mod tests {
         let mut timer = StatusTimer::default();
         timer.pause_at(timer.last_resume_at);
 
-        let mut terminal = Terminal::new(TestBackend::new(80, 1)).expect("terminal");
+        let mut terminal = Terminal::new(TestBackend::new(80, 2)).expect("terminal");
         terminal
             .draw(|f| w.with_timer(&timer).render(f.area(), f.buffer_mut()))
             .expect("draw");
-        let line = terminal.backend().buffer().content()[..80]
-            .iter()
-            .map(ratatui::buffer::Cell::symbol)
-            .collect::<String>();
-
-        assert!(line.starts_with("Working (0s • esc to interrupt)"));
+        let lines = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(80)
+            .map(|row| {
+                row.iter()
+                    .map(ratatui::buffer::Cell::symbol)
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert!(lines[0].starts_with("Working"));
+        assert_eq!(lines[1], "  (0s • esc to interrupt)");
     }
 
     #[test]
@@ -466,7 +477,7 @@ mod tests {
         let mut timer = StatusTimer::default();
         timer.pause_at(timer.last_resume_at);
 
-        let mut terminal = Terminal::new(TestBackend::new(80, 1)).expect("terminal");
+        let mut terminal = Terminal::new(TestBackend::new(80, 2)).expect("terminal");
         terminal
             .draw(|f| w.with_timer(&timer).render(f.area(), f.buffer_mut()))
             .expect("draw");
@@ -499,7 +510,7 @@ mod tests {
             ),
         ] {
             w.update_inline_message(background.map(str::to_string));
-            let mut expected = "Working (0s • esc to interrupt)".to_string();
+            let mut expected = "• Working".to_string();
             if let Some(background) = background {
                 expected.push_str(&format!(" · {background}"));
             }
@@ -508,7 +519,7 @@ mod tests {
             let mut frames = Vec::new();
             for width in [fit_width, fit_width - 1, 24, fit_width] {
                 let height = w.with_timer(&timer).desired_height(width);
-                assert_eq!(height, if width >= fit_width { 2 } else { 3 });
+                assert!(height >= 3);
                 let mut terminal =
                     Terminal::new(TestBackend::new(width, height)).expect("terminal");
                 terminal

@@ -853,7 +853,10 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
     } = args;
 
     let mut event_processor: Box<dyn EventProcessor> = match json_mode {
-        true => Box::new(EventProcessorWithJsonOutput::new(last_message_file.clone())),
+        true => Box::new(EventProcessorWithJsonOutput::new(
+            last_message_file.clone(),
+            config.show_raw_agent_reasoning,
+        )),
         _ => Box::new(EventProcessorWithHumanOutput::create_with_ansi(
             stderr_with_ansi,
             &config,

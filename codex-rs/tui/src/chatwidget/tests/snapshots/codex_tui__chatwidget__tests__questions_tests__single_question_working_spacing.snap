@@ -2,7 +2,8 @@
 source: tui/src/chatwidget/tests/questions_tests.rs
 expression: rendered
 ---
-• Working (0s • esc to interrupt)
+• Working
+  (0s • esc to interrupt)
 
 • Queued follow-up inputs
 

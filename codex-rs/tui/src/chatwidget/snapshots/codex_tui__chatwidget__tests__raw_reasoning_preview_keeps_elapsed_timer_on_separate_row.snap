@@ -1,0 +1,8 @@
+---
+source: tui/src/chatwidget/tests/reasoning_status_tests.rs
+expression: "format!(\"{live}{}\", render_status_row(&chat))"
+---
+• Reasoning: Line one of the plan.
+• Line two of the plan.
+• Working
+  (0s • esc to interrupt)

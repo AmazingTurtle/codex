@@ -2,20 +2,23 @@
 source: tui/src/status_indicator_widget.rs
 expression: "frames.join(\"\\n\")"
 ---
-124 columns:
-"Working (0s • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close · checking 日本語 ｶﾞﾊﾟ policy" Hidden by multi-width symbols: [(107, " "), (109, " "), (111, " "), (114, " "), (116, " ")]
-"  └ existing details                                                                                                        "
+102 columns:
+"Working  · 1 background terminal running · /ps to view · /stop to close · checking 日本語 ｶﾞﾊﾟ policy " Hidden by multi-width symbols: [(84, " "), (86, " "), (88, " "), (91, " "), (93, " ")]
+"  (0s • esc to interrupt)                                                                             "
+"  └ existing details                                                                                  "
 
-123 columns:
-"Working (0s • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close                             "
-"  └ checking 日本語 ｶﾞﾊﾟ policy                                                                                            " Hidden by multi-width symbols: [(14, " "), (16, " "), (18, " "), (21, " "), (23, " ")]
-"  └ existing details                                                                                                       "
+101 columns:
+"Working  · 1 background terminal running · /ps to view · /stop to close · checking 日本語 ｶﾞﾊﾟ policy" Hidden by multi-width symbols: [(84, " "), (86, " "), (88, " "), (91, " "), (93, " ")]
+"  (0s • esc to interrupt)                                                                            "
+"  └ existing details                                                                                 "
 
 24 columns:
-"Working (0s • esc to in…"
+"Working  · 1 background…"
+"  (0s • esc to interrup…"
 "  └ checking 日本語 ｶﾞ… " Hidden by multi-width symbols: [(14, " "), (16, " "), (18, " "), (21, " ")]
 "  └ existing details    "
 
-124 columns:
-"Working (0s • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close · checking 日本語 ｶﾞﾊﾟ policy" Hidden by multi-width symbols: [(107, " "), (109, " "), (111, " "), (114, " "), (116, " ")]
-"  └ existing details                                                                                                        "
+102 columns:
+"Working  · 1 background terminal running · /ps to view · /stop to close · checking 日本語 ｶﾞﾊﾟ policy " Hidden by multi-width symbols: [(84, " "), (86, " "), (88, " "), (91, " "), (93, " ")]
+"  (0s • esc to interrupt)                                                                             "
+"  └ existing details                                                                                  "

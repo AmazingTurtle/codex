@@ -2,4 +2,5 @@
 source: tui/src/chatwidget/tests/reasoning_status_tests.rs
 expression: terminal.backend()
 ---
-"• Preparing evidence report (42s • esc to interrupt) · 1 background terminal ru…"
+"• Preparing evidence report  · 1 background terminal running · /ps to view · /s…"
+"  (42s • esc to interrupt)                                                      "

@@ -5,6 +5,27 @@ use super::HistoryRenderMode;
 use std::cell::Cell;
 use std::sync::Arc;
 
+impl super::ChatWidget {
+    /// Record a committed preview regardless of which history insertion path takes it.
+    pub(super) fn take_active_cell_for_history(&mut self) -> Option<Box<dyn HistoryCell>> {
+        let active = self.transcript.take_active_cell()?;
+        if let Some(cell) = active
+            .as_any()
+            .downcast_ref::<crate::history_cell::ReasoningSummaryCell>()
+            .filter(|cell| cell.is_live_preview())
+        {
+            self.status_state.reasoning_live_flushed_source =
+                Some(cell.markdown_source().to_string());
+            if let Some(id) = cell.source_item_id() {
+                self.status_state
+                    .reasoning_committed_item_ids
+                    .insert(id.to_string());
+            }
+        }
+        Some(active)
+    }
+}
+
 /// Identifies the render state that determines an active cell's viewport height.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ActiveCellLayoutCacheKey {
