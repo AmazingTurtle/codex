@@ -190,6 +190,22 @@ async fn capture_reaches_remote_rtp_and_mute_discards_queued_and_partial_audio()
         let (media, _) = AudioTrack::new().unwrap();
         let mut settings = webrtc::peer_connection::SettingEngine::default();
         settings.set_lite(/*lite*/ true);
+        // One interface keeps this audio test independent of the host's number
+        // of bridges/VPNs and within the transport's remote-candidate budget.
+        let bind_ip = rtc::shared::ifaces::ifaces()
+            .unwrap()
+            .into_iter()
+            .filter_map(|interface| interface.addr.map(|address| address.ip()))
+            .find(|address| {
+                matches!(
+                    address,
+                    std::net::IpAddr::V4(address)
+                        if !address.is_loopback()
+                            && !address.is_unspecified()
+                            && !address.is_link_local()
+                )
+            })
+            .expect("voice capture test requires a usable IPv4 interface");
         let remote = PeerConnectionBuilder::new()
             .with_media_engine(media)
             .with_setting_engine(settings)
@@ -198,7 +214,7 @@ async fn capture_reaches_remote_rtp_and_mute_discards_queued_and_partial_audio()
                 next: NoopInterceptor::new(),
                 sender,
             }))
-            .with_udp_addrs(vec!["0.0.0.0:0"])
+            .with_udp_addrs(vec![std::net::SocketAddr::new(bind_ip, 0)])
             .build()
             .await
             .unwrap();
