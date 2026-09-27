@@ -202,6 +202,8 @@ pub struct ThreadSectionAppearance {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct Thread {
+    /// Current runtime wake registrations. Null when unloaded or unavailable.
+    pub wake_state: Option<super::ThreadWakeState>,
     /// Identifier for this thread. Codex-generated thread IDs are UUIDv7.
     pub id: String,
     /// Current environments for a loaded thread, in priority order, primary first.
@@ -298,6 +300,8 @@ pub struct Thread {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadCompatibility {
+    #[serde(default)]
+    wake_state: Option<super::ThreadWakeState>,
     id: String,
     #[serde(default)]
     environments: Option<Vec<ThreadEnvironment>>,
@@ -344,6 +348,7 @@ impl<'de> Deserialize<'de> for Thread {
     {
         let thread = ThreadCompatibility::deserialize(deserializer)?;
         Ok(Self {
+            wake_state: thread.wake_state,
             id: thread.id,
             environments: thread.environments,
             extra: thread.extra,

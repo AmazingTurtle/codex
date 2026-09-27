@@ -1,0 +1,45 @@
+---
+source: tui/src/chatwidget/tests/wake_state_tests.rs
+expression: "layouts.join(\"\\n\\n\")"
+---
+idle:
+"                                                                                                    "
+"  Waiting for 1 wake signal · 1 background terminal running · /ps to view · /stop to close          "
+"                                                                                                    "
+"                                                                                                    "
+"› Ask Better Codex to do anything                                                                   "
+"                                                                                                    "
+"  Waiting                                                                                           "
+
+
+idle_narrow:
+"                                  "
+"  Waiting for 2 wake signals · 1 b"
+"                                  "
+"                                  "
+"› Ask Better Codex to do anything "
+"                                  "
+"  Waiting                         "
+
+
+working:
+"                                                                                                    "
+"• Working  · 2 wake signals pending · 1 background terminal running · /ps to view · /stop to close  "
+"  (0s • esc to interrupt)                                                                           "
+"                                                                                                    "
+"                                                                                                    "
+"› Ask Better Codex to do anything                                                                   "
+"                                                                                                    "
+"  Working                                                                                           "
+
+
+sleeping:
+"                                                                                                    "
+"• Waiting  · Waiting for 1 wake signal · 1 background terminal running · /ps to view · /stop to clo…"
+"  (0s • esc to interrupt)                                                                           "
+"  └ Running hook                                                                                    "
+"                                                                                                    "
+"                                                                                                    "
+"› Ask Better Codex to do anything                                                                   "
+"                                                                                                    "
+"  Waiting                                                                                           "

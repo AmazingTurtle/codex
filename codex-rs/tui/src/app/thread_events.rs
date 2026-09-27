@@ -180,6 +180,23 @@ impl ThreadEventStore {
     }
 
     fn push_notification_inner(&mut self, notification: Cow<'_, ServerNotification>) {
+        if (matches!(
+            notification.as_ref(),
+            ServerNotification::ThreadClosed(_) | ServerNotification::ThreadDeleted(_)
+        ) || matches!(notification.as_ref(), ServerNotification::ThreadStatusChanged(update)
+                if update.status == codex_app_server_protocol::ThreadStatus::NotLoaded))
+            && let Some(session) = self.session.as_mut()
+        {
+            session.wake_state = None;
+        }
+        if let ServerNotification::ThreadWakeStateChanged(update) = notification.as_ref() {
+            if let Some(session) = self.session.as_mut() {
+                session.wake_state = Some(update.wake_state);
+            }
+            // The latest snapshot survives buffer eviction. Old wake notifications
+            // must not override it during historical replay.
+            return;
+        }
         let user_item = match notification.as_ref() {
             ServerNotification::ItemStarted(n) => Some((&n.turn_id, &n.item)),
             ServerNotification::ItemCompleted(n) => Some((&n.turn_id, &n.item)),
@@ -661,6 +678,7 @@ mod tests {
 
     fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
         ThreadSessionState {
+            wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,
             forked_from_id: None,
@@ -696,6 +714,33 @@ mod tests {
             completed_at: None,
             duration_ms: None,
         }
+    }
+
+    #[test]
+    fn wake_state_snapshot_survives_buffer_eviction_and_refresh() {
+        let id = ThreadId::new();
+        let session = test_thread_session(id, test_path_buf("/project"));
+        let mut store =
+            ThreadEventStore::new_with_session(/*capacity*/ 1, session, Vec::new());
+        let wake_state = codex_app_server_protocol::ThreadWakeState {
+            pending_count: 2,
+            waiting: true,
+        };
+        store.push_notification_ref(&ServerNotification::ThreadWakeStateChanged(
+            codex_app_server_protocol::ThreadWakeStateChangedNotification {
+                thread_id: id.to_string(),
+                wake_state,
+            },
+        ));
+        store.buffer.clear();
+        store.rebase_buffer_after_session_refresh();
+        assert_eq!(
+            store.snapshot().session.unwrap().wake_state,
+            Some(wake_state)
+        );
+        let fresh = test_thread_session(id, test_path_buf("/project"));
+        store.set_session(fresh, Vec::new());
+        assert_eq!(store.snapshot().session.unwrap().wake_state, None);
     }
 
     fn turn_started_notification(thread_id: ThreadId, turn_id: &str) -> ServerNotification {

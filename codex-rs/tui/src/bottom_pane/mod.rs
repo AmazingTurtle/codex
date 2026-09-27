@@ -1624,6 +1624,14 @@ impl BottomPane {
         }
     }
 
+    /// Refresh live wake activity without changing composer input behavior.
+    pub(crate) fn set_wake_state(&mut self, state: codex_app_server_protocol::ThreadWakeState) {
+        if self.unified_exec_footer.set_wake_state(state) {
+            self.sync_status_inline_message();
+            self.request_redraw();
+        }
+    }
+
     /// Update hook activity after the lifecycle reveal delay, even outside a turn.
     pub(crate) fn set_hook_status_message(&mut self, message: Option<String>) {
         if self.hook_status_message == message {

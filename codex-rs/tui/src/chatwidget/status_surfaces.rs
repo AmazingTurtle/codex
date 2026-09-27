@@ -983,11 +983,18 @@ impl ChatWidget {
 
     /// Computes the compact runtime status label used by word-based status items.
     ///
-    /// Startup takes precedence over normal task states, and idle state renders
-    /// as `Ready` regardless of the last active status bucket.
+    /// Startup takes precedence; live runtime waits distinguish waiting from ready.
     pub(super) fn run_state_status_text(&self) -> String {
         if self.mcp_startup_status.is_some() {
             return "Starting".to_string();
+        }
+
+        if self
+            .status_state
+            .wake_state
+            .is_some_and(|state| state.waiting)
+        {
+            return "Waiting".to_string();
         }
 
         match self.status_state.terminal_title_status_kind {

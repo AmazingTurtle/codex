@@ -47,6 +47,18 @@ impl ChatWidget {
             details: details.clone(),
             details_max_lines,
         });
+        let (header, details) = if self
+            .status_state
+            .wake_state
+            .is_some_and(|state| state.waiting)
+            && self.mcp_startup_status.is_none()
+            && self.status_state.compaction.is_none()
+            && self.status_state.pending_guardian_review_status.is_empty()
+        {
+            ("Waiting".to_owned(), None)
+        } else {
+            (header, details)
+        };
         let status_indicator_updated = self.bottom_pane.update_status(
             header,
             details,
