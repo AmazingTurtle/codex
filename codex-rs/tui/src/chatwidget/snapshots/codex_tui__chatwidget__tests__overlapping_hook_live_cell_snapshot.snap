@@ -5,10 +5,11 @@ expression: "format!(\"{first_running_snapshot}\\n\\n{second_running_snapshot}\\
 pre running
 activity:
 "                                                                                "
-"• Thinking (0s • esc to interrupt) · checking command policy                    "
+"• Thinking  · checking command policy                                           "
+"  (0s • esc to interrupt)                                                       "
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "
 history:
@@ -17,10 +18,11 @@ history:
 post running
 activity:
 "                                                                                "
-"• Thinking (0s • esc to interrupt) · Running hooks                              "
+"• Thinking  · Running hooks                                                     "
+"  (0s • esc to interrupt)                                                       "
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "
 history:
@@ -29,10 +31,11 @@ history:
 pre completed
 activity:
 "                                                                                "
-"• Thinking (0s • esc to interrupt) · checking output policy                     "
+"• Thinking  · checking output policy                                            "
+"  (0s • esc to interrupt)                                                       "
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "
 history:
@@ -41,10 +44,11 @@ history:
 all completed
 activity:
 "                                                                                "
-"• Thinking (0s • esc to interrupt)                                              "
+"• Thinking                                                                      "
+"  (0s • esc to interrupt)                                                       "
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "
 history:

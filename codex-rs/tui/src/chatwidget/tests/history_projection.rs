@@ -178,6 +178,46 @@ async fn older_tool_projection_matches_initial_replay() {
 }
 
 #[tokio::test]
+async fn projected_reasoning_uses_remapped_and_disabled_transcript_shortcuts() {
+    use codex_config::types::KeybindingSpec;
+    use codex_config::types::KeybindingsSpec;
+
+    for bindings in [
+        KeybindingsSpec::One(KeybindingSpec("ctrl-alt-t".to_string())),
+        KeybindingsSpec::Many(Vec::new()),
+    ] {
+        let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+        drain_insert_history(&mut rx);
+        chat.config.show_raw_agent_reasoning = true;
+        chat.config.tui_keymap.global.open_transcript = Some(bindings);
+        let keymap = crate::keymap::RuntimeKeymap::from_config(&chat.config.tui_keymap)
+            .expect("valid transcript shortcut");
+        chat.bottom_pane.set_keymap_bindings(&keymap);
+        let item = AppServerThreadItem::Reasoning {
+            id: "reasoning".to_string(),
+            summary: vec!["First line.\nSecond line.\nThird line.".to_string()],
+            content: Vec::new(),
+        };
+        let projected = thread_items_to_transcript_cells(
+            chat.thread_id,
+            &chat.config.cwd,
+            [item.clone()],
+            RawReasoningVisibility::Visible,
+            Some(&chat.config),
+        );
+        chat.replay_thread_item(item, "turn".to_string(), ReplayKind::ThreadSnapshot);
+        let replayed = take_history_cells(&mut rx);
+        assert_eq!((projected.len(), replayed.len()), (1, 1));
+        for width in [28, 80] {
+            assert_eq!(
+                projected[0].display_hyperlink_lines(width),
+                replayed[0].display_hyperlink_lines(width)
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn snapshot_formatter_reasoning_matches_compact_and_detailed_replay() {
     let mut snapshots = Vec::new();
     for visibility in [
@@ -205,12 +245,25 @@ async fn snapshot_formatter_reasoning_matches_compact_and_detailed_replay() {
         chat.replay_thread_item(item.clone(), "turn".to_string(), ReplayKind::ThreadSnapshot);
         let replayed = take_history_cells(&mut rx);
         assert_eq!((projected.len(), replayed.len()), (1, 1));
-        assert!(
-            projected[0]
-                .display_hyperlink_lines(/*width*/ 80)
-                .is_empty()
-        );
-        assert!(replayed[0].display_hyperlink_lines(/*width*/ 80).is_empty());
+        if visibility == RawReasoningVisibility::Hidden {
+            assert!(
+                projected[0]
+                    .display_hyperlink_lines(/*width*/ 80)
+                    .is_empty()
+            );
+            assert!(replayed[0].display_hyperlink_lines(/*width*/ 80).is_empty());
+        } else {
+            // Visible raw reasoning renders the same collapsed preview inline from both paths.
+            assert_eq!(
+                projected[0].display_hyperlink_lines(/*width*/ 80),
+                replayed[0].display_hyperlink_lines(/*width*/ 80)
+            );
+            assert!(
+                !projected[0]
+                    .display_hyperlink_lines(/*width*/ 80)
+                    .is_empty()
+            );
+        }
         for width in [28, 80] {
             assert_eq!(
                 projected[0].transcript_hyperlink_lines(width),
@@ -222,6 +275,8 @@ async fn snapshot_formatter_reasoning_matches_compact_and_detailed_replay() {
             projected[0].display_lines(/*width*/ 80),
             lines_to_single_string(&projected[0].transcript_lines(/*width*/ 80)),
         ));
+        // Replaying the same completed item after its cell is committed must not insert a second
+        // copy; the first cell keeps its persisted identity for older-page joins.
         chat.replay_thread_turns(
             vec![AppServerTurn {
                 items: vec![item],
@@ -234,15 +289,7 @@ async fn snapshot_formatter_reasoning_matches_compact_and_detailed_replay() {
             }],
             ReplayKind::ResumeInitialMessages,
         );
-        let replayed = take_history_cells(&mut rx);
-        let reasoning = replayed
-            .iter()
-            .find_map(|cell| {
-                cell.as_any()
-                    .downcast_ref::<history_cell::ReasoningSummaryCell>()
-            })
-            .expect("initial replay retains reasoning for older-page joins");
-        assert_eq!(reasoning.source_item_id(), Some("reasoning"));
+        assert!(take_history_cells(&mut rx).is_empty());
     }
     insta::assert_snapshot!(snapshots.join("\n"));
 }
@@ -264,6 +311,96 @@ fn raw_reasoning_keeps_its_own_heading() {
     • Raw investigation
       Keep this heading and its details.
     ");
+}
+
+#[tokio::test]
+async fn visible_raw_reasoning_projects_as_a_standalone_block_between_calls() {
+    let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.tui_tool_call_display = codex_config::types::ToolCallDisplay::Summary;
+    chat.local_settings.tui.tool_call_display = codex_config::types::ToolCallDisplay::Summary;
+    let read = |id: &str| {
+        let command = format!("cat {id}.rs");
+        AppServerThreadItem::CommandExecution {
+            id: id.to_string(),
+            plugin_id: None,
+            script_path: None,
+            model_context: None,
+            sandbox_type: None,
+            command: command.clone(),
+            cwd: chat.config.cwd.clone().into(),
+            process_id: None,
+            source: ExecCommandSource::Agent,
+            status: AppServerCommandExecutionStatus::Completed,
+            command_actions: vec![AppServerCommandAction::Read {
+                command,
+                name: format!("{id}.rs"),
+                path: chat.config.cwd.join(format!("{id}.rs")).into(),
+            }],
+            aggregated_output: Some("fn main() {}".to_string()),
+            exit_code: Some(0),
+            duration_ms: Some(5),
+        }
+    };
+    let items = vec![
+        read("one"),
+        AppServerThreadItem::Reasoning {
+            id: "seg".to_string(),
+            summary: Vec::new(),
+            content: vec!["Plan the follow-up read.".to_string()],
+        },
+        read("two"),
+    ];
+
+    let hidden = thread_items_to_transcript_cells(
+        chat.thread_id,
+        &chat.config.cwd,
+        items.clone(),
+        RawReasoningVisibility::Hidden,
+        Some(&chat.config),
+    );
+    assert_eq!(
+        hidden.len(),
+        1,
+        "hidden reasoning folds into the shared exploration group"
+    );
+    let group = hidden[0]
+        .as_any()
+        .downcast_ref::<ExecCell>()
+        .expect("adjacent reads share one exploration group");
+    assert_eq!(group.iter_calls().count(), 2);
+
+    let visible = thread_items_to_transcript_cells(
+        chat.thread_id,
+        &chat.config.cwd,
+        items,
+        RawReasoningVisibility::Visible,
+        Some(&chat.config),
+    );
+    assert_eq!(
+        visible.len(),
+        3,
+        "visible reasoning stands alone and keeps strict ordering"
+    );
+    let first = visible[0]
+        .as_any()
+        .downcast_ref::<ExecCell>()
+        .expect("first call group flushed before reasoning");
+    assert_eq!(first.iter_calls().count(), 1);
+    let reasoning_cell = visible[1]
+        .as_any()
+        .downcast_ref::<history_cell::ReasoningSummaryCell>()
+        .expect("standalone reasoning block");
+    assert!(!reasoning_cell.is_transcript_only());
+    assert!(!visible[1].display_lines(/*width*/ 80).is_empty());
+    assert!(
+        lines_to_single_string(&visible[1].transcript_lines(/*width*/ 80))
+            .contains("Plan the follow-up read.")
+    );
+    let second = visible[2]
+        .as_any()
+        .downcast_ref::<ExecCell>()
+        .expect("later calls start a fresh group after visible reasoning");
+    assert_eq!(second.iter_calls().count(), 1);
 }
 
 #[tokio::test]

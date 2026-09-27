@@ -4,15 +4,16 @@ expression: "format!(\"before interrupt:\\n{before_interrupt}\\nafter interrupt:
 ---
 before interrupt:
 "                                                                                "
-"• Working (0s • esc to interrupt) · checking command policy                     "
+"• Working  · checking command policy                                            "
+"  (0s • esc to interrupt)                                                       "
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "
 after interrupt:
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "
