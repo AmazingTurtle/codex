@@ -104,6 +104,7 @@ pub(super) fn sample_thread_with_metadata(
     parent_thread_id: Option<String>,
 ) -> Thread {
     Thread {
+        wake_state: None,
         originator: None,
         environments: None,
         id: thread_id.to_string(),

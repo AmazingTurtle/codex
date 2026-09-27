@@ -9,9 +9,13 @@ import type { ThreadHistoryMode } from "./ThreadHistoryMode";
 import type { ThreadSection } from "./ThreadSection";
 import type { ThreadSource } from "./ThreadSource";
 import type { ThreadStatus } from "./ThreadStatus";
+import type { ThreadWakeState } from "./ThreadWakeState";
 import type { Turn } from "./Turn";
 
 export type Thread = {/**
+ * Current runtime wake registrations. Null when unloaded or unavailable.
+ */
+wakeState: ThreadWakeState | null, /**
  * Identifier for this thread. Codex-generated thread IDs are UUIDv7.
  */
 id: string, /**

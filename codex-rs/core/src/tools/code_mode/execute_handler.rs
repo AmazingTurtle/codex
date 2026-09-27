@@ -129,10 +129,16 @@ impl CodeModeExecuteHandler {
             .services
             .code_mode_service
             .mark_cell_ready_for_dispatch(&cell_id, originating_call);
+        let wake_guard = exec.session.wake_tracker.wait_cell(
+            &call_id,
+            cell_id.as_str(),
+            crate::wake_state::CellWait::Execution,
+        );
         let response = started_cell
             .initial_response()
             .await
             .map_err(FunctionCallError::RespondToModel)?;
+        drop(wake_guard);
         if let Some(code_mode_host_duration) = response.code_mode_host_duration() {
             telemetry.record_code_mode_host_duration(code_mode_host_duration);
         }

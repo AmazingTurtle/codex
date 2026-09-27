@@ -4807,6 +4807,26 @@
           "properties": {
             "method": {
               "enum": [
+                "thread/wakeState/changed"
+              ],
+              "title": "Thread/wakeState/changedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadWakeStateChangedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/wakeState/changedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "thread/archived"
               ],
               "title": "Thread/archivedNotificationMethod",
@@ -21424,6 +21444,17 @@
             "description": "Unix timestamp (in seconds) when the thread was last updated.",
             "format": "int64",
             "type": "integer"
+          },
+          "wakeState": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ThreadWakeState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current runtime wake registrations. Null when unloaded or unavailable."
           }
         },
         "required": [
@@ -25602,6 +25633,43 @@
         "required": [
           "estimatedUsageCreditsMicros"
         ],
+        "type": "object"
+      },
+      "ThreadWakeState": {
+        "description": "Live runtime waits; this does not affect whether user input is accepted.",
+        "properties": {
+          "pendingCount": {
+            "description": "Number of distinct operations with a pending wake, including active waits.",
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "waiting": {
+            "description": "True when idle or suspended solely on those operations.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pendingCount",
+          "waiting"
+        ],
+        "type": "object"
+      },
+      "ThreadWakeStateChangedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "threadId": {
+            "type": "string"
+          },
+          "wakeState": {
+            "$ref": "#/definitions/v2/ThreadWakeState"
+          }
+        },
+        "required": [
+          "threadId",
+          "wakeState"
+        ],
+        "title": "ThreadWakeStateChangedNotification",
         "type": "object"
       },
       "TokenUsageBreakdown": {

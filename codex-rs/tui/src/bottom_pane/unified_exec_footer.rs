@@ -16,12 +16,14 @@ use crate::render::renderable::Renderable;
 /// Tracks active unified-exec processes and renders a compact summary.
 pub(crate) struct UnifiedExecFooter {
     processes: Vec<String>,
+    wake_state: codex_app_server_protocol::ThreadWakeState,
 }
 
 impl UnifiedExecFooter {
     pub(crate) fn new() -> Self {
         Self {
             processes: Vec::new(),
+            wake_state: Default::default(),
         }
     }
 
@@ -34,7 +36,18 @@ impl UnifiedExecFooter {
     }
 
     pub(crate) fn is_empty(&self) -> bool {
-        self.processes.is_empty()
+        self.processes.is_empty() && self.wake_state.pending_count == 0
+    }
+
+    pub(crate) fn set_wake_state(
+        &mut self,
+        state: codex_app_server_protocol::ThreadWakeState,
+    ) -> bool {
+        if self.wake_state == state {
+            return false;
+        }
+        self.wake_state = state;
+        true
     }
 
     /// Returns the unindented summary text used by both footer and status-row rendering.
@@ -43,15 +56,27 @@ impl UnifiedExecFooter {
     /// callers can choose layout-specific framing (inline separator vs. row
     /// indentation). Returning `None` means there is nothing to surface.
     pub(crate) fn summary_text(&self) -> Option<String> {
-        if self.processes.is_empty() {
+        if self.is_empty() {
             return None;
         }
-
+        let mut summaries = Vec::new();
+        let count = self.wake_state.pending_count;
+        if count > 0 {
+            let plural = if count == 1 { "" } else { "s" };
+            summaries.push(if self.wake_state.waiting {
+                format!("Waiting for {count} wake signal{plural}")
+            } else {
+                format!("{count} wake signal{plural} pending")
+            });
+        }
         let count = self.processes.len();
         let plural = if count == 1 { "" } else { "s" };
-        Some(format!(
-            "{count} background terminal{plural} running · /ps to view · /stop to close"
-        ))
+        if count > 0 {
+            summaries.push(format!(
+                "{count} background terminal{plural} running · /ps to view · /stop to close"
+            ));
+        }
+        Some(summaries.join(" · "))
     }
 
     fn render_lines(&self, width: u16) -> Vec<Line<'static>> {
