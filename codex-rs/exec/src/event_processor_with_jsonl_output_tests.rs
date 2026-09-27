@@ -9,7 +9,10 @@ fn failed_turn_does_not_overwrite_output_last_message_file() {
     let output_path = tempdir.path().join("last-message.txt");
     std::fs::write(&output_path, "keep existing contents").expect("seed output file");
 
-    let mut processor = EventProcessorWithJsonOutput::new(Some(output_path.clone()));
+    let mut processor = EventProcessorWithJsonOutput::new(
+        Some(output_path.clone()),
+        /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         codex_app_server_protocol::ItemCompletedNotification {
@@ -65,7 +68,9 @@ fn failed_turn_does_not_overwrite_output_last_message_file() {
 
 #[test]
 fn runtime_warning_emits_a_non_fatal_error_item() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::Warning(
         codex_app_server_protocol::WarningNotification {
@@ -92,7 +97,9 @@ fn runtime_warning_emits_a_non_fatal_error_item() {
 
 #[test]
 fn mcp_tool_call_result_preserves_meta_in_jsonl_event() {
-    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
 
     let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
         codex_app_server_protocol::ItemCompletedNotification {
@@ -142,4 +149,80 @@ fn mcp_tool_call_result_preserves_meta_in_jsonl_event() {
         json!({"raw_messages": [{"ref_id": "turn0search0"}]})
     );
     assert!(serialized["item"]["result"].get("meta").is_none());
+}
+
+fn reasoning_completion_notification(
+    summary: Vec<String>,
+    content: Vec<String>,
+) -> ServerNotification {
+    ServerNotification::ItemCompleted(codex_app_server_protocol::ItemCompletedNotification {
+        item: ThreadItem::Reasoning {
+            id: "reasoning-1".to_string(),
+            summary,
+            content,
+        },
+        thread_id: "thread-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        completed_at_ms: 0,
+    })
+}
+
+#[test]
+fn raw_reasoning_enabled_emits_reasoning_text_from_content() {
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ true,
+    );
+
+    let collected = processor.collect_thread_events(reasoning_completion_notification(
+        /*summary*/ vec![],
+        /*content*/ vec!["The user wants fib(10).".to_string()],
+    ));
+
+    let ThreadEvent::ItemCompleted(ItemCompletedEvent { item }) = &collected.events[0] else {
+        panic!("expected item.completed event: {collected:?}");
+    };
+    let ThreadItemDetails::Reasoning(reasoning) = &item.details else {
+        panic!("expected reasoning item");
+    };
+    assert_eq!(reasoning.text, "The user wants fib(10).");
+}
+
+#[test]
+fn raw_reasoning_disabled_drops_content_only_reasoning() {
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
+
+    let collected = processor.collect_thread_events(reasoning_completion_notification(
+        /*summary*/ vec![],
+        /*content*/ vec!["hidden raw reasoning".to_string()],
+    ));
+
+    assert_eq!(
+        collected,
+        CollectedThreadEvents {
+            events: Vec::new(),
+            status: CodexStatus::Running,
+        }
+    );
+}
+
+#[test]
+fn raw_reasoning_disabled_still_emits_summary() {
+    let mut processor = EventProcessorWithJsonOutput::new(
+        /*last_message_path*/ None, /*show_raw_agent_reasoning*/ false,
+    );
+
+    let collected = processor.collect_thread_events(reasoning_completion_notification(
+        /*summary*/ vec!["Visible summary".to_string()],
+        /*content*/ vec!["hidden raw reasoning".to_string()],
+    ));
+
+    let ThreadEvent::ItemCompleted(ItemCompletedEvent { item }) = &collected.events[0] else {
+        panic!("expected item.completed event: {collected:?}");
+    };
+    let ThreadItemDetails::Reasoning(reasoning) = &item.details else {
+        panic!("expected reasoning item");
+    };
+    assert_eq!(reasoning.text, "Visible summary");
 }

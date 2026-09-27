@@ -4,15 +4,16 @@ expression: "format!(\"before completion:\\n{before_completion}\\nafter completi
 ---
 before completion:
 "                                                                                "
-"• Working (0s • esc to interrupt) · Running hook                                "
+"• Working  · Running hook                                                       "
+"  (0s • esc to interrupt)                                                       "
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "
 after completion:
 "                                                                                "
 "                                                                                "
-"› Ask Better Codex to do anything                                               "
+"› Ask Codex to do anything                                                      "
 "                                                                                "
 "  GPT-5.6-Sol default · /tmp/project                                            "

@@ -117,6 +117,17 @@ pub(super) struct StatusState {
     pub(super) reasoning_resume_turn_id: Option<String>,
     /// A restored stream may have missed earlier deltas; use its complete item at finalization.
     pub(super) reasoning_recovered_after_refresh: bool,
+    /// Reasoning items already committed to history, so snapshot replay after live rendering
+    /// cannot insert a second copy of the same reasoning block.
+    pub(super) reasoning_committed_item_ids: std::collections::HashSet<String>,
+    /// Reasoning preview content already committed when an active-cell takeover flushed the
+    /// live streaming preview before its item finalized.
+    pub(super) reasoning_live_flushed_source: Option<String>,
+    /// Bounded source used to render the live raw-reasoning preview without repeatedly rendering
+    /// the full accumulated item.
+    pub(super) reasoning_live_preview_source: String,
+    /// Whether the live preview source was truncated at its rendering budget.
+    pub(super) reasoning_live_preview_truncated: bool,
     pub(super) compaction: Option<super::compaction::ActiveCompaction>,
     pub(super) current_status: StatusIndicatorState,
     pub(super) pending_guardian_review_status: PendingGuardianReviewStatus,
@@ -134,6 +145,10 @@ impl Default for StatusState {
             reasoning_item_id: None,
             reasoning_resume_turn_id: None,
             reasoning_recovered_after_refresh: false,
+            reasoning_committed_item_ids: std::collections::HashSet::new(),
+            reasoning_live_flushed_source: None,
+            reasoning_live_preview_source: String::new(),
+            reasoning_live_preview_truncated: false,
             compaction: None,
             current_status: StatusIndicatorState::working(),
             pending_guardian_review_status: PendingGuardianReviewStatus::default(),

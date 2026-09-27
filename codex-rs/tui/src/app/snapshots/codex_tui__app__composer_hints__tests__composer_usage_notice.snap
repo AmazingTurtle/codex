@@ -15,11 +15,11 @@ Conversation
   ? for shortcuts                                      ⚠ 1 warning · f2 to view
 
 80 columns, 12 rows, running=true, queued=false
-
 ⚠ Heads up, you have less than 5% of your 5h limit left. Run /status for a
   breakdown.
 
-• Working (0s • esc to interrupt)
+• Working
+  (0s • esc to interrupt)
 
                                              ⚠ 5h limit: only 2% left · /status
 
@@ -31,8 +31,8 @@ Conversation
 32 columns, 10 rows, running=true, queued=false
   Run /status for a breakdown.
 
-• Working (0s • esc to interrup…
-
+• Working
+  (0s • esc to interrupt)
                   ⚠ 5h <1% left
 
 › draft stays
@@ -43,8 +43,8 @@ Conversation
 18 columns, 10 rows, running=true, queued=false
   a breakdown.
 
-• Working (0s • e…
-
+• Working
+  (0s • esc to in…
      ⚠ 5h 5% left
 
 › draft stays
@@ -53,13 +53,13 @@ Conversation
   tab to queue mes
 
 80 columns, 18 rows, running=true, queued=true
-Conversation row 18
 Conversation row 19
 
 ⚠ Heads up, you have less than 5% of your 5h limit left. Run /status for a
   breakdown.
 
-• Working (0s • esc to interrupt)
+• Working
+  (0s • esc to interrupt)
 
 • Queued follow-up inputs
   ↳ queued follow-up
@@ -73,11 +73,11 @@ Conversation row 19
   tab to queue message
 
 80 columns, 11 rows, running=true, queued=true
-• Working (0s • esc to interrupt)
+• Working
+  (0s • esc to interrupt)
 
 • Queued follow-up inputs
   ↳ queued follow-up
-    ⇧← edit last queued message
 
 › draft stays
   second line
@@ -86,7 +86,7 @@ Conversation row 19
   tab to queue message
 
 80 columns, 6 rows, running=true, queued=false
-• Working (0s • esc to interrupt)
+• Working
 
 › draft stays
 

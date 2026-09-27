@@ -482,7 +482,7 @@ fn config_summary_entries(
     entries
 }
 
-fn reasoning_text(
+pub(crate) fn reasoning_text(
     summary: &[String],
     content: &[String],
     show_raw_agent_reasoning: bool,

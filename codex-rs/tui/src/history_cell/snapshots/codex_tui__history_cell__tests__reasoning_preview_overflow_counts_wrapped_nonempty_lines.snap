@@ -1,0 +1,10 @@
+---
+source: tui/src/history_cell/tests.rs
+expression: "snapshots.join(\"\\n\\n\")"
+---
+• Reasoning: Short first line.
+• The second line wraps across
+  … 3 more lines in transcript (ctrl+t)
+
+• Reasoning: Short first line.
+• Short second line.

@@ -2727,6 +2727,85 @@ fn reasoning_summary_block() {
 }
 
 #[test]
+fn reasoning_summary_inline_preview_collapses_body_and_keeps_full_transcript() {
+    let cell: Box<dyn HistoryCell> = Box::new(
+        new_reasoning_summary_block(
+            vec![
+                "Line one of the plan.\nLine two of the plan.\nLine three of the plan.".to_string(),
+            ],
+            &test_cwd(),
+        )
+        .with_inline_preview(Some("Ctrl+K".to_string())),
+    );
+
+    let display = render_lines(&cell.display_lines(/*width*/ 80));
+    assert_eq!(
+        display.first().map(String::as_str),
+        Some("• Reasoning: Line one of the plan.")
+    );
+    assert!(
+        display
+            .iter()
+            .any(|line| line.contains("Line one of the plan.")),
+        "{display:?}"
+    );
+    assert!(
+        display
+            .iter()
+            .any(|line| line.contains("Line two of the plan.")),
+        "{display:?}"
+    );
+    assert!(
+        !display.iter().any(|line| line.contains("Line three")),
+        "preview must collapse the tail: {display:?}"
+    );
+    assert!(
+        display
+            .iter()
+            .any(|line| line.contains("1 more line in transcript (Ctrl+K)")),
+        "{display:?}"
+    );
+
+    let transcript = render_transcript(cell.as_ref());
+    assert!(
+        transcript
+            .iter()
+            .any(|line| line.contains("Line three of the plan.")),
+        "transcript keeps the full body: {transcript:?}"
+    );
+}
+
+#[test]
+fn reasoning_summary_inline_preview_omits_notice_for_short_bodies() {
+    let cell = new_reasoning_summary_block(vec!["Short thought.".to_string()], &test_cwd())
+        .with_inline_preview(/*transcript_shortcut_hint*/ None);
+
+    assert!(!cell.is_transcript_only());
+    let display = render_lines(&cell.display_lines(/*width*/ 80));
+    assert!(
+        display.iter().any(|line| line.contains("Short thought.")),
+        "{display:?}"
+    );
+    assert!(
+        !display.iter().any(|line| line.contains("more line")),
+        "{display:?}"
+    );
+}
+
+#[test]
+fn reasoning_preview_overflow_counts_wrapped_nonempty_lines() {
+    let snapshots = [
+        "Short first line.\nThe second line wraps across several terminal rows and must show a transcript expansion notice.",
+        "Short first line.\n\n\nShort second line.",
+    ].map(|source| {
+        let cell = new_reasoning_summary_block(vec![source.to_string()], &test_cwd())
+            .with_inline_preview(Some("ctrl+t".to_string()));
+        render_lines(&cell.display_lines(/*width*/ 32)).join("\n")
+    });
+    insta::assert_snapshot!(snapshots.join("\n\n"));
+}
+
+#[test]
 fn reasoning_summary_height_matches_wrapped_rendering_for_url_like_content() {
     let summary = "example.test/api/v1/projects/alpha-team/releases/2026-02-17/builds/1234567890/artifacts/reports/performance/summary/detail/with/a/very/long/path/that/keeps/going";
     let cell: Box<dyn HistoryCell> = Box::new(ReasoningSummaryCell::new(

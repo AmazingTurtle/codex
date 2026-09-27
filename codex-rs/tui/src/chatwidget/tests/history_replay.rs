@@ -1333,6 +1333,204 @@ async fn replayed_reasoning_item_shows_raw_reasoning_when_enabled() {
     assert!(rendered.contains("Raw reasoning"));
 }
 
+fn reasoning_notifications(
+    id: &str,
+    content: Vec<String>,
+) -> (ServerNotification, ServerNotification) {
+    let item = AppServerThreadItem::Reasoning {
+        id: id.to_string(),
+        summary: Vec::new(),
+        content,
+    };
+    (
+        ServerNotification::ItemStarted(ItemStartedNotification {
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            item: item.clone(),
+            started_at_ms: 0,
+        }),
+        ServerNotification::ItemCompleted(ItemCompletedNotification {
+            item,
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            completed_at_ms: 1,
+        }),
+    )
+}
+
+fn take_committed_cells(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+) -> Vec<Box<dyn HistoryCell>> {
+    std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|event| match event {
+            AppEvent::InsertHistoryCell(cell) => Some(cell),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn live_raw_reasoning_commits_a_collapsed_inline_preview_when_enabled() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.show_raw_agent_reasoning = true;
+    let _ = drain_insert_history(&mut rx);
+
+    let (started, completed) = reasoning_notifications(
+        "preview-1",
+        vec!["First reasoning line.\nSecond reasoning line.\nThird reasoning line.".to_string()],
+    );
+    chat.handle_server_notification(started, /*replay_kind*/ None);
+    chat.on_agent_reasoning_delta("First reasoning line.".to_string());
+    chat.on_agent_reasoning_delta("\nSecond reasoning line.\nThird reasoning line.".to_string());
+    chat.handle_server_notification(completed, /*replay_kind*/ None);
+
+    let committed = take_committed_cells(&mut rx);
+    assert_eq!(committed.len(), 1);
+    let inline = lines_to_single_string(&committed[0].display_lines(/*width*/ 80));
+    assert!(inline.contains("Reasoning"), "{inline}");
+    assert!(inline.contains("First reasoning line."), "{inline}");
+    assert!(
+        inline.contains("1 more line in transcript (⌃t)"),
+        "{inline}"
+    );
+    assert!(
+        !inline.contains("Third reasoning line."),
+        "preview must collapse long reasoning: {inline}"
+    );
+    let transcript = lines_to_single_string(&committed[0].transcript_lines(/*width*/ 80));
+    assert!(transcript.contains("Third reasoning line."), "{transcript}");
+}
+
+#[tokio::test]
+async fn live_reasoning_commits_stay_transcript_only_when_raw_reasoning_disabled() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.show_raw_agent_reasoning = false;
+    let _ = drain_insert_history(&mut rx);
+
+    chat.on_reasoning_item_started("hidden-1".to_string());
+    chat.on_agent_reasoning_delta("Quiet thinking.".to_string());
+    chat.on_agent_reasoning_final();
+
+    let committed = take_committed_cells(&mut rx);
+    assert_eq!(committed.len(), 1);
+    assert!(committed[0].display_lines(/*width*/ 80).is_empty());
+    assert!(
+        lines_to_single_string(&committed[0].transcript_lines(/*width*/ 80))
+            .contains("Quiet thinking.")
+    );
+}
+
+#[tokio::test]
+async fn live_raw_reasoning_stays_standalone_while_exploration_is_active() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.show_raw_agent_reasoning = true;
+    let _ = drain_insert_history(&mut rx);
+
+    chat.on_task_started();
+    let command = begin_exec(&mut chat, "ls-call", "ls");
+    chat.on_reasoning_item_started("standalone-1".to_string());
+    chat.on_agent_reasoning_delta("List first, then read.".to_string());
+    chat.on_agent_reasoning_final();
+
+    // Reasoning commits independently while the command retains its completion routing.
+    let committed = take_committed_cells(&mut rx);
+    assert_eq!(committed.len(), 1);
+    assert!(
+        committed[0]
+            .as_any()
+            .is::<history_cell::ReasoningSummaryCell>(),
+        "reasoning commits standalone"
+    );
+    assert!(!committed[0].display_lines(/*width*/ 80).is_empty());
+    chat.on_exec_command_output_delta("ls-call", "listed-file.rs\n");
+    let active = chat
+        .transcript
+        .active_cell
+        .as_ref()
+        .expect("running command");
+    assert!(
+        lines_to_single_string(&active.transcript_lines(/*width*/ 80)).contains("listed-file.rs")
+    );
+    end_exec(
+        &mut chat,
+        command,
+        "listed-file.rs\n",
+        "",
+        /*exit_code*/ 0,
+    );
+    chat.flush_active_cell();
+    let completed = take_committed_cells(&mut rx);
+    assert_eq!(completed.len(), 1);
+    let exec = completed[0]
+        .as_any()
+        .downcast_ref::<ExecCell>()
+        .expect("completed command");
+    assert!(!exec.is_active());
+    assert_eq!(
+        exec.iter_calls()
+            .map(|call| call.call_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ls-call"]
+    );
+    insta::assert_snapshot!(
+        "raw_reasoning_during_exploration_completes",
+        format!(
+            "{}{}",
+            lines_to_single_string(&committed[0].display_lines(/*width*/ 80)),
+            lines_to_single_string(&completed[0].transcript_lines(/*width*/ 80))
+        )
+    );
+    assert!(chat.transcript.active_cell.is_none());
+}
+
+#[tokio::test]
+async fn replayed_reasoning_after_live_commit_does_not_duplicate_the_cell() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.show_raw_agent_reasoning = true;
+    let _ = drain_insert_history(&mut rx);
+
+    chat.on_reasoning_item_started("seg-1".to_string());
+    chat.on_agent_reasoning_delta("Solved via an iterative loop.".to_string());
+    chat.on_agent_reasoning_final();
+    assert_eq!(take_committed_cells(&mut rx).len(), 1);
+
+    chat.replay_thread_item(
+        AppServerThreadItem::Reasoning {
+            id: "seg-1".to_string(),
+            summary: Vec::new(),
+            content: vec!["Solved via an iterative loop.".to_string()],
+        },
+        "turn-1".to_string(),
+        ReplayKind::ThreadSnapshot,
+    );
+    assert!(take_committed_cells(&mut rx).is_empty());
+    assert!(chat.transcript.active_cell.is_none());
+    begin_exec(&mut chat, "next-call", "ls");
+    assert!(take_committed_cells(&mut rx).is_empty());
+}
+
+#[tokio::test]
+async fn live_reasoning_completion_without_deltas_commits_the_completed_payload() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.show_raw_agent_reasoning = true;
+    let _ = drain_insert_history(&mut rx);
+
+    let (started, completed) = reasoning_notifications(
+        "lost-1",
+        vec!["Recovered from the completed item.".to_string()],
+    );
+    chat.handle_server_notification(started, /*replay_kind*/ None);
+    // No deltas ever reached the buffer before the completion arrived.
+    chat.handle_server_notification(completed, /*replay_kind*/ None);
+
+    let committed = take_committed_cells(&mut rx);
+    assert_eq!(committed.len(), 1);
+    assert!(
+        lines_to_single_string(&committed[0].transcript_lines(/*width*/ 80))
+            .contains("Recovered from the completed item.")
+    );
+}
+
 #[tokio::test]
 async fn replayed_mcp_tool_call_stays_active_until_completion() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
@@ -1677,11 +1875,8 @@ async fn thread_snapshot_replayed_turn_started_marks_task_running() {
         (before - 1..=after).contains(&elapsed),
         "{elapsed} not in {before}..={after}"
     );
-    let timer = regex_lite::Regex::new(r"\(\d+(?:h \d+m \d+s|m \d+s|s) •").unwrap();
-    insta::assert_snapshot!(
-        timer.replace_all(render_bottom_first_row(&chat, /*width*/ 80).trim(), "(<elapsed> •"),
-        @"• Working (<elapsed> • esc to interrupt)"
-    );
+    // Better Codex shows elapsed time below the status header.
+    insta::assert_snapshot!(render_bottom_first_row(&chat, /*width*/ 80).trim(), @"• Working");
 }
 
 #[tokio::test]

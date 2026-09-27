@@ -22,6 +22,7 @@ use serde_json::json;
 pub use crate::event_processor::CodexStatus;
 use crate::event_processor::EventProcessor;
 use crate::event_processor::handle_last_message;
+use crate::event_processor_with_human_output::reasoning_text;
 use crate::exec_events::AgentMessageItem;
 use crate::exec_events::CollabAgentState;
 use crate::exec_events::CollabAgentStatus;
@@ -58,6 +59,7 @@ use crate::exec_events::WebSearchItem;
 
 pub struct EventProcessorWithJsonOutput {
     last_message_path: Option<PathBuf>,
+    show_raw_agent_reasoning: bool,
     next_item_id: AtomicU64,
     raw_to_exec_item_id: HashMap<String, String>,
     running_todo_list: Option<RunningTodoList>,
@@ -80,9 +82,10 @@ pub struct CollectedThreadEvents {
 }
 
 impl EventProcessorWithJsonOutput {
-    pub fn new(last_message_path: Option<PathBuf>) -> Self {
+    pub fn new(last_message_path: Option<PathBuf>, show_raw_agent_reasoning: bool) -> Self {
         Self {
             last_message_path,
+            show_raw_agent_reasoning,
             next_item_id: AtomicU64::new(0),
             raw_to_exec_item_id: HashMap::new(),
             running_todo_list: None,
@@ -142,6 +145,7 @@ impl EventProcessorWithJsonOutput {
 
     fn map_item_with_id(
         item: ThreadItem,
+        show_raw_agent_reasoning: bool,
         make_id: impl FnOnce() -> String,
     ) -> Option<ExecThreadItem> {
         match item {
@@ -149,8 +153,8 @@ impl EventProcessorWithJsonOutput {
                 id: make_id(),
                 details: ThreadItemDetails::AgentMessage(AgentMessageItem { text }),
             }),
-            ThreadItem::Reasoning { summary, .. } => {
-                let text = summary.join("\n");
+            ThreadItem::Reasoning { summary, content, .. } => {
+                let text = reasoning_text(&summary, &content, show_raw_agent_reasoning)?;
                 if text.trim().is_empty() {
                     return None;
                 }
@@ -345,24 +349,36 @@ impl EventProcessorWithJsonOutput {
             ThreadItem::AgentMessage { .. } | ThreadItem::Reasoning { .. } => None,
             other => {
                 let raw_id = other.id().to_string();
-                Self::map_item_with_id(other, || self.started_item_id(&raw_id))
+                let show_raw_agent_reasoning = self.show_raw_agent_reasoning;
+                Self::map_item_with_id(other, show_raw_agent_reasoning, || {
+                    self.started_item_id(&raw_id)
+                })
             }
         }
     }
 
     fn map_completed_item_mut(&mut self, item: ThreadItem) -> Option<ExecThreadItem> {
-        if let ThreadItem::Reasoning { summary, .. } = &item
-            && summary.join("\n").trim().is_empty()
+        if let ThreadItem::Reasoning {
+            summary, content, ..
+        } = &item
         {
-            return None;
+            let has_visible_text = reasoning_text(summary, content, self.show_raw_agent_reasoning)
+                .is_some_and(|text| !text.trim().is_empty());
+            if !has_visible_text {
+                return None;
+            }
         }
         match &item {
             ThreadItem::AgentMessage { .. } | ThreadItem::Reasoning { .. } => {
-                Self::map_item_with_id(item, || self.next_item_id())
+                let show_raw_agent_reasoning = self.show_raw_agent_reasoning;
+                Self::map_item_with_id(item, show_raw_agent_reasoning, || self.next_item_id())
             }
             other => {
                 let raw_id = other.id().to_string();
-                Self::map_item_with_id(item, || self.completed_item_id(&raw_id))
+                let show_raw_agent_reasoning = self.show_raw_agent_reasoning;
+                Self::map_item_with_id(item, show_raw_agent_reasoning, || {
+                    self.completed_item_id(&raw_id)
+                })
             }
         }
     }

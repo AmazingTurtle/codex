@@ -78,6 +78,7 @@ impl ChatWidget {
                     self.reasoning_buffer.clear();
                     self.reasoning_header = None;
                     self.reasoning_summary_parts.clear();
+                    self.clear_active_reasoning_tail();
                     self.set_status_header(String::from("Working"));
                     self.submit_user_message(user_message);
                 } else {

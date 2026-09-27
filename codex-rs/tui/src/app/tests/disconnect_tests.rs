@@ -577,8 +577,9 @@ async fn rejected_initial_thread_start_reconnects_and_submits_prompt_once() -> R
             TuiEvent::Paste("startup draft".into()),
         )
         .await?;
+        // Better Codex shows elapsed time below the status header.
         let reconnect_status =
-            regex_lite::Regex::new(r"^[•◦] (Reconnecting to server… )\([\dhms ]+\)")?;
+            regex_lite::Regex::new(r"^[•◦] (Reconnecting to server…\n +)\([\dhms ]+\)")?;
         assert_snapshot!(
             "rejected_startup_reconnecting",
             reconnect_status.replace(
