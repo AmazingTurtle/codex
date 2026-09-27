@@ -58,6 +58,21 @@ impl ChatWidget {
                     );
                 }
             }
+            ServerNotification::ThreadDeleted(_) => {
+                if !from_replay {
+                    self.set_wake_state(None);
+                }
+            }
+            ServerNotification::ThreadStatusChanged(notification) => {
+                if !from_replay
+                    && notification.status == codex_app_server_protocol::ThreadStatus::NotLoaded
+                {
+                    self.set_wake_state(None);
+                }
+            }
+            ServerNotification::ThreadWakeStateChanged(notification) => {
+                self.set_wake_state(Some(notification.wake_state));
+            }
             ServerNotification::ThreadTokenUsageUpdated(notification) => {
                 self.set_token_info(Some(token_usage_info_from_app_server(
                     notification.token_usage,
@@ -326,6 +341,7 @@ impl ChatWidget {
             }
             ServerNotification::ThreadClosed(_) => {
                 if !from_replay {
+                    self.set_wake_state(None);
                     self.on_shutdown_complete();
                 }
             }
@@ -364,13 +380,11 @@ impl ChatWidget {
             | ServerNotification::GatewayOAuthChanged(_)
             | ServerNotification::AccountRateLimitsUpdated(_)
             | ServerNotification::ThreadStarted(_)
-            | ServerNotification::ThreadStatusChanged(_)
             | ServerNotification::ThreadReadStateChanged(_)
             | ServerNotification::ThreadReverted(_)
             | ServerNotification::ThreadQueueChanged(_)
             | ServerNotification::ThreadPredictionUpdated(_)
             | ServerNotification::ThreadArchived(_)
-            | ServerNotification::ThreadDeleted(_)
             | ServerNotification::ThreadUnarchived(_)
             | ServerNotification::ThreadAttachmentUpdated(_)
             | ServerNotification::RawResponseItemCompleted(_)
@@ -410,7 +424,7 @@ impl ChatWidget {
             .status_widget()
             .is_some_and(|status| status.header() != self.status_state.current_status.header)
         {
-            self.bottom_pane.update_status(
+            self.set_status(
                 self.status_state.current_status.header.clone(),
                 self.status_state.current_status.details.clone(),
                 StatusDetailsCapitalization::Preserve,

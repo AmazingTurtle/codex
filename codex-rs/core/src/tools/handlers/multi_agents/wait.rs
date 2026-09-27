@@ -169,6 +169,7 @@ impl Handler {
             }
         }
 
+        let wake_guard = session.wake_tracker.wait(&call_id);
         let statuses = if !initial_final_statuses.is_empty() {
             initial_final_statuses
         } else {
@@ -203,6 +204,7 @@ impl Handler {
             results
         };
 
+        drop(wake_guard);
         let timed_out = statuses.is_empty();
         let statuses_by_id = statuses.clone().into_iter().collect::<HashMap<_, _>>();
         let result = WaitAgentResult {

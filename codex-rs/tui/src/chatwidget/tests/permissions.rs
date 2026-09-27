@@ -1163,6 +1163,7 @@ async fn required_windows_sandbox_setup_defers_configured_initial_prompt() {
 
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -1613,6 +1614,7 @@ async fn permissions_selection_marks_auto_review_current_after_session_configure
 
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
@@ -1667,6 +1669,7 @@ async fn permissions_selection_marks_auto_review_current_with_custom_workspace_w
 
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,

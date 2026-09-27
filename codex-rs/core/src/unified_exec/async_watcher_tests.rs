@@ -329,6 +329,7 @@ async fn exit_watcher_waits_for_late_network_denial_before_classifying_end() -> 
         Some(network_denial_monitor),
         /*plugin_metrics_sidecar*/ None,
         Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        /*wake_generation*/ 0,
     );
 
     let exited_at = Instant::now();

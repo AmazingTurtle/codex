@@ -218,6 +218,12 @@ impl ToolCallRuntime {
                 }
                 .or_cancel_tool(&invocation_cancellation_token)
                 .await?;
+                // Queued tools are not active work and must not hide runtime waits.
+                let cell = match &source {
+                    ToolCallSource::CodeMode { cell_id, .. } => Some(cell_id.clone()),
+                    ToolCallSource::Direct | ToolCallSource::DirectPlaintextMessage => None,
+                };
+                let _wake_tool_guard = session.wake_tracker.tool(&dispatch_call.call_id, cell);
                 // Admission through the parallel-execution gate marks the end
                 // of dispatch waiting and the start of handler execution.
                 if let Some(execution_started_at) = execution_started_at {

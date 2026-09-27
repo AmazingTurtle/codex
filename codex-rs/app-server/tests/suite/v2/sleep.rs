@@ -9,8 +9,14 @@ use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::SleepItem;
 use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadReadParams;
+use codex_app_server_protocol::ThreadReadResponse;
+use codex_app_server_protocol::ThreadResumeParams;
+use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
+use codex_app_server_protocol::ThreadWakeState;
+use codex_app_server_protocol::ThreadWakeStateChangedNotification;
 use codex_app_server_protocol::TurnCompletedNotification;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
@@ -222,6 +228,21 @@ clock_source = "external"
         })
         .await?;
 
+    // Attaching a listener must publish a snapshot without a subsequent state
+    // transition; automatic attachments have no start/resume response fallback.
+    let initial_wake: ThreadWakeStateChangedNotification = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_notification("thread/wakeState/changed"),
+    )
+    .await??;
+    assert_eq!(
+        initial_wake,
+        ThreadWakeStateChangedNotification {
+            thread_id: thread.id.clone(),
+            wake_state: ThreadWakeState::default(),
+        }
+    );
+
     let TurnStartResponse { turn, .. } = mcp
         .request(|request_id| ClientRequest::TurnStart {
             request_id,
@@ -240,6 +261,41 @@ clock_source = "external"
     // Read once for the initial reminder, then once to establish the sleep deadline.
     respond_to_current_time_read(&mut mcp, &thread.id, CURRENT_TIME_AT).await?;
     let started = wait_for_sleep_started(&mut mcp, CALL_ID).await?;
+    let expected_wake = ThreadWakeState {
+        pending_count: 1,
+        waiting: true,
+    };
+    loop {
+        let update: ThreadWakeStateChangedNotification = timeout(
+            DEFAULT_READ_TIMEOUT,
+            mcp.read_notification("thread/wakeState/changed"),
+        )
+        .await??;
+        if update.wake_state == expected_wake {
+            assert_eq!(update.thread_id, thread.id);
+            break;
+        }
+    }
+    let read: ThreadReadResponse = mcp
+        .request(|request_id| ClientRequest::ThreadRead {
+            request_id,
+            params: ThreadReadParams {
+                thread_id: thread.id.clone(),
+                include_turns: false,
+            },
+        })
+        .await?;
+    assert_eq!(read.thread.wake_state, Some(expected_wake));
+    let resumed: ThreadResumeResponse = mcp
+        .request(|request_id| ClientRequest::ThreadResume {
+            request_id,
+            params: ThreadResumeParams {
+                thread_id: thread.id.clone(),
+                ..Default::default()
+            },
+        })
+        .await?;
+    assert_eq!(resumed.thread.wake_state, Some(expected_wake));
     for current_time_at in [CURRENT_TIME_AT, CURRENT_TIME_AT + 1, CURRENT_TIME_AT + 2]
         .into_iter()
         .take(successful_sleep_reads)
@@ -268,6 +324,16 @@ clock_source = "external"
     }
 
     let completed = wait_for_sleep_completed(&mut mcp, CALL_ID).await?;
+    let read: ThreadReadResponse = mcp
+        .request(|request_id| ClientRequest::ThreadRead {
+            request_id,
+            params: ThreadReadParams {
+                thread_id: thread.id.clone(),
+                include_turns: false,
+            },
+        })
+        .await?;
+    assert_eq!(read.thread.wake_state, Some(ThreadWakeState::default()));
 
     // The next inference boundary reads the same external clock after the tool returns.
     respond_to_current_time_read(&mut mcp, &thread.id, CURRENT_TIME_AT + 2).await?;

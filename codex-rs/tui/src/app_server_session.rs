@@ -2498,7 +2498,7 @@ async fn started_thread_from_start_response(
     thread_params_mode: ThreadParamsMode,
 ) -> Result<AppServerStartedThread> {
     let blocks_direct_input = thread_blocks_direct_input(&response.thread);
-    let session = thread_session_state_from_thread_start_response(
+    let mut session = thread_session_state_from_thread_start_response(
         &response,
         local_settings,
         config,
@@ -2506,6 +2506,7 @@ async fn started_thread_from_start_response(
     )
     .await
     .map_err(color_eyre::eyre::Report::msg)?;
+    session.wake_state = response.thread.wake_state;
     Ok(AppServerStartedThread {
         session,
         turns: response.thread.turns,
@@ -2520,13 +2521,14 @@ async fn started_thread_from_resume_response(
     thread_params_mode: ThreadParamsMode,
 ) -> Result<AppServerStartedThread> {
     let blocks_direct_input = thread_blocks_direct_input(&response.thread);
-    let session = thread_session_state_from_thread_resume_response(
+    let mut session = thread_session_state_from_thread_resume_response(
         &response,
         local_settings,
         thread_params_mode,
     )
     .await
     .map_err(color_eyre::eyre::Report::msg)?;
+    session.wake_state = response.thread.wake_state;
     Ok(AppServerStartedThread {
         session,
         turns: response.thread.turns,
@@ -2542,7 +2544,7 @@ async fn started_thread_from_fork_response(
     thread_params_mode: ThreadParamsMode,
 ) -> Result<AppServerStartedThread> {
     let blocks_direct_input = thread_blocks_direct_input(&response.thread);
-    let session = thread_session_state_from_thread_fork_response(
+    let mut session = thread_session_state_from_thread_fork_response(
         &response,
         local_settings,
         config,
@@ -2550,6 +2552,7 @@ async fn started_thread_from_fork_response(
     )
     .await
     .map_err(color_eyre::eyre::Report::msg)?;
+    session.wake_state = response.thread.wake_state;
     Ok(AppServerStartedThread {
         session,
         turns: response.thread.turns,
@@ -2731,6 +2734,7 @@ async fn thread_session_state_from_thread_response(
     let (log_id, entry_count) = codex_message_history::history_metadata(&history_config).await;
     Ok(ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host,
         thread_id,
         forked_from_id,
@@ -4337,6 +4341,7 @@ mod tests {
         let response = ThreadResumeResponse {
             disabled_plugin_ids: Vec::new(),
             thread: codex_app_server_protocol::Thread {
+                wake_state: None,
                 originator: None,
                 environments: None,
                 id: thread_id.to_string(),

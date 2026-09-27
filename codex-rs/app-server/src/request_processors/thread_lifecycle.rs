@@ -7,6 +7,11 @@ use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 
+pub(super) enum ListenerStart {
+    Immediate,
+    AfterLifecycle(oneshot::Receiver<()>),
+}
+
 #[derive(Clone)]
 pub(super) struct ListenerTaskContext {
     pub(super) thread_manager: Arc<ThreadManager>,
@@ -144,6 +149,7 @@ pub(super) async fn ensure_conversation_listener(
     conversation_id: ThreadId,
     connection_id: ConnectionId,
     raw_events_enabled: bool,
+    listener_start: ListenerStart,
 ) -> Result<EnsureConversationListenerResult, JSONRPCErrorError> {
     let conversation = match listener_task_context
         .thread_manager
@@ -189,6 +195,7 @@ pub(super) async fn ensure_conversation_listener(
         conversation_id,
         conversation,
         thread_state,
+        listener_start,
     )
     .await
     {
@@ -234,6 +241,7 @@ pub(super) async fn ensure_listener_task_running(
     conversation_id: ThreadId,
     conversation: Arc<CodexThread>,
     thread_state: Arc<Mutex<ThreadState>>,
+    listener_start: ListenerStart,
 ) -> Result<(), JSONRPCErrorError> {
     let (cancel_tx, mut cancel_rx) = oneshot::channel();
     let config_snapshot = conversation.config_snapshot().await;
@@ -294,7 +302,16 @@ pub(super) async fn ensure_listener_task_running(
         ..
     } = listener_task_context;
     let outgoing_for_task = Arc::clone(&outgoing);
+    let mut wake_updates = conversation.subscribe_wake_state();
+    // Auto-attached clients may have no start/resume response. Publish the
+    // current snapshot even when the wait began before this listener existed.
+    wake_updates.mark_changed();
     tokio::spawn(async move {
+        // Capture settings and install watches before clients can mutate the thread,
+        // but keep notifications behind its initial response and lifecycle messages.
+        if let ListenerStart::AfterLifecycle(ready) = listener_start {
+            let _ = ready.await;
+        }
         loop {
             tokio::select! {
                 biased;
@@ -318,6 +335,18 @@ pub(super) async fn ensure_listener_task_running(
                         listener_command,
                     )
                     .await;
+                }
+                changed = wake_updates.changed() => {
+                    if changed.is_err() { break; }
+                    let wake_state = crate::wake_state::from_core(*wake_updates.borrow_and_update());
+                    let subscribers = thread_state_manager.subscribed_connection_ids(conversation_id).await;
+                    let thread_outgoing = ThreadScopedOutgoingMessageSender::new(
+                        outgoing_for_task.clone(), subscribers, conversation_id);
+                    thread_outgoing.send_server_notification(
+                        ServerNotification::ThreadWakeStateChanged(
+                            codex_app_server_protocol::ThreadWakeStateChangedNotification {
+                                thread_id: conversation_id.to_string(), wake_state,
+                            })).await;
                 }
                 event = conversation.next_event() => {
                     let event = match event {
@@ -911,6 +940,7 @@ pub(super) async fn handle_pending_thread_resume_request(
         thread_response_active_permission_profile(active_permission_profile);
     let session_id = conversation.startup_metadata().session_id.to_string();
     thread.session_id = session_id;
+    thread.wake_state = Some(crate::wake_state::snapshot(conversation));
 
     let response = ThreadResumeResponse {
         thread,

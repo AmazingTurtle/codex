@@ -2013,6 +2013,7 @@ server_notification_definitions! {
     ThreadStatusChanged => "thread/status/changed" (v2::ThreadStatusChangedNotification),
     #[experimental("thread/readState/changed")]
     ThreadReadStateChanged => "thread/readState/changed" (v2::ThreadReadStateChangedNotification),
+    ThreadWakeStateChanged => "thread/wakeState/changed" (v2::ThreadWakeStateChangedNotification),
     ThreadArchived => "thread/archived" (v2::ThreadArchivedNotification),
     ThreadDeleted => "thread/deleted" (v2::ThreadDeletedNotification),
     ThreadUnarchived => "thread/unarchived" (v2::ThreadUnarchivedNotification),
@@ -3301,6 +3302,7 @@ mod tests {
             response: v2::ThreadStartResponse {
                 disabled_plugin_ids: Vec::new(),
                 thread: v2::Thread {
+                    wake_state: None,
                     originator: None,
                     environments: None,
                     id: "67e55044-10b1-426f-9247-bb680e5fe0c8".to_string(),
@@ -3361,6 +3363,7 @@ mod tests {
                 "id": 7,
                 "response": {
                     "thread": {
+                        "wakeState": null,
                         "id": "67e55044-10b1-426f-9247-bb680e5fe0c8",
                         "environments": null,
                         "extra": null,

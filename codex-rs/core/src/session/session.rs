@@ -99,6 +99,7 @@ pub(crate) struct Session {
     pub(crate) turn_start_lock: Mutex<()>,
     /// Invalidates completion wakeups from commands started before an interrupt.
     pub(crate) wake_generation: std::sync::atomic::AtomicU64,
+    pub(crate) wake_tracker: crate::wake_state::WakeTracker,
     pub(crate) async_hook_results: async_channel::Receiver<HookCompletedEvent>,
     pub(crate) input_queue: InputQueue,
     pub(crate) services: SessionServices,
@@ -1939,6 +1940,7 @@ impl Session {
                 active_turn: Mutex::new(None),
                 turn_start_lock: Mutex::new(()),
                 wake_generation: std::sync::atomic::AtomicU64::new(0),
+                wake_tracker: Default::default(),
                 async_hook_results,
                 input_queue: InputQueue::with_controller(
                     thread_id,

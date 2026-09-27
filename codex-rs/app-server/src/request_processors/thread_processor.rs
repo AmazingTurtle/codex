@@ -1164,6 +1164,7 @@ impl ThreadRequestProcessor {
             conversation_id,
             connection_id,
             raw_events_enabled,
+            super::thread_lifecycle::ListenerStart::Immediate,
         )
         .await
     }
@@ -1179,6 +1180,7 @@ impl ThreadRequestProcessor {
             conversation_id,
             conversation,
             thread_state,
+            super::thread_lifecycle::ListenerStart::Immediate,
         )
         .await
     }
@@ -1651,6 +1653,7 @@ impl ThreadRequestProcessor {
                 otel.name = "app_server.thread_start.config_snapshot",
             ))
             .await;
+        let wake_state = crate::wake_state::snapshot(&thread);
         let mut thread = build_thread_from_snapshot(
             thread_id,
             session_configured.session_id.to_string(),
@@ -1659,21 +1662,18 @@ impl ThreadRequestProcessor {
             session_configured.rollout_path.clone(),
         );
         thread.project_id = project_id.clone();
+        thread.wake_state = Some(wake_state);
         thread.daybreak_enabled = daybreak_enabled;
 
-        // Auto-attach a thread listener when starting a thread.
+        let (listener_ready_tx, listener_ready_rx) = tokio::sync::oneshot::channel();
         log_listener_attach_result(
             super::thread_lifecycle::ensure_conversation_listener(
                 listener_task_context.clone(),
                 thread_id,
                 request_id.connection_id,
                 experimental_raw_events,
+                super::thread_lifecycle::ListenerStart::AfterLifecycle(listener_ready_rx),
             )
-            .instrument(tracing::info_span!(
-                "app_server.thread_start.attach_listener",
-                otel.name = "app_server.thread_start.attach_listener",
-                thread_start.experimental_raw_events = experimental_raw_events,
-            ))
             .await,
             thread_id,
             request_id.connection_id,
@@ -1741,6 +1741,7 @@ impl ThreadRequestProcessor {
                 otel.name = "app_server.thread_start.notify_started",
             ))
             .await;
+        let _ = listener_ready_tx.send(());
         session_telemetry.record_startup_phase(
             "thread_start_total",
             thread_start_started_at.elapsed(),
@@ -2148,6 +2149,7 @@ impl ThreadRequestProcessor {
             &self.config.cwd,
         );
         if let Ok(loaded_thread) = self.thread_manager.get_thread(thread_uuid).await {
+            thread.wake_state = Some(crate::wake_state::snapshot(&loaded_thread));
             thread.session_id = loaded_thread.startup_metadata().session_id.to_string();
             let config_snapshot = loaded_thread.config_snapshot().await;
             apply_live_thread_settings(&mut thread, &config_snapshot);
@@ -2206,6 +2208,7 @@ impl ThreadRequestProcessor {
             thread_from_stored_thread(stored_thread, fallback_provider.as_str(), &self.config.cwd);
 
         if let Ok(loaded_thread) = self.thread_manager.get_thread(thread_id).await {
+            thread.wake_state = Some(crate::wake_state::snapshot(&loaded_thread));
             let config_snapshot = loaded_thread.config_snapshot().await;
             apply_live_thread_settings(&mut thread, &config_snapshot);
         }
@@ -3146,6 +3149,9 @@ impl ThreadRequestProcessor {
         };
 
         thread.daybreak_enabled = thread.daybreak_enabled.or(pending_daybreak_enabled);
+        thread.wake_state = loaded_thread
+            .as_ref()
+            .map(|thread| crate::wake_state::snapshot(thread));
 
         let has_live_in_progress_turn = if let Some(loaded_thread) = loaded_thread.as_ref() {
             matches!(loaded_thread.agent_status().await, AgentStatus::Running)
@@ -5831,12 +5837,14 @@ impl ThreadRequestProcessor {
 
         let instruction_sources = forked_thread.legacy_instruction_sources().await;
 
-        // Auto-attach a conversation listener when forking a thread.
+        let (listener_ready_tx, listener_ready_rx) = tokio::sync::oneshot::channel();
         log_listener_attach_result(
-            self.ensure_conversation_listener(
+            super::thread_lifecycle::ensure_conversation_listener(
+                self.listener_task_context(),
                 thread_id,
                 request_id.connection_id,
                 /*raw_events_enabled*/ false,
+                super::thread_lifecycle::ListenerStart::AfterLifecycle(listener_ready_rx),
             )
             .await,
             thread_id,
@@ -5915,6 +5923,7 @@ impl ThreadRequestProcessor {
             .upsert_thread_silently(&thread.id)
             .await;
 
+        thread.wake_state = Some(crate::wake_state::snapshot(&forked_thread));
         thread.status = resolve_thread_status(
             self.thread_watch_manager
                 .loaded_status_for_thread(&thread.id)
@@ -5967,6 +5976,7 @@ impl ThreadRequestProcessor {
                 .send_server_notification(ServerNotification::ThreadStarted(notif))
                 .await;
         }
+        let _ = listener_ready_tx.send(());
         if inherited_goal {
             self.thread_goal_processor
                 .emit_thread_goal_snapshot(thread_id)
@@ -6654,6 +6664,7 @@ pub(crate) fn thread_from_stored_thread(
     let history = thread.history;
     let thread_id = thread.thread_id.to_string();
     let thread = Thread {
+        wake_state: None,
         id: thread_id.clone(),
         environments: None,
         extra: None,
@@ -6858,6 +6869,7 @@ fn build_thread_from_snapshot(
 ) -> Thread {
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     Thread {
+        wake_state: None,
         id: thread_id.to_string(),
         environments: Some(
             config_snapshot
@@ -6936,13 +6948,15 @@ fn build_thread_from_loaded_snapshot(
     config_snapshot: &ThreadConfigSnapshot,
     loaded_thread: &CodexThread,
 ) -> Thread {
-    build_thread_from_snapshot(
+    let mut thread = build_thread_from_snapshot(
         thread_id,
         loaded_thread.startup_metadata().session_id.to_string(),
         loaded_thread.multi_agent_version(),
         config_snapshot,
         loaded_thread.rollout_path(),
-    )
+    );
+    thread.wake_state = Some(crate::wake_state::snapshot(loaded_thread));
+    thread
 }
 
 #[cfg(test)]

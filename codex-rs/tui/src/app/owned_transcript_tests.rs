@@ -36,6 +36,7 @@ pub(in crate::app) fn user_cell(message: &str) -> Arc<dyn HistoryCell> {
 pub(in crate::app) fn attach_thread(app: &mut App, thread_id: ThreadId) {
     app.chat_widget.handle_thread_session(ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,

@@ -4421,6 +4421,17 @@
           "description": "Unix timestamp (in seconds) when the thread was last updated.",
           "format": "int64",
           "type": "integer"
+        },
+        "wakeState": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadWakeState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Current runtime wake registrations. Null when unloaded or unavailable."
         }
       },
       "required": [

@@ -2692,6 +2692,7 @@ async fn try_run_sampling_request(
         conversation.id = %sess.thread_id,
         turn.id = %turn_context.sub_id,
     );
+    let wake_sampling_guard = sess.wake_tracker.sampling();
     let uses_sequential_cutoff_reasoning_summaries = turn_context
         .config
         .features
@@ -3395,6 +3396,7 @@ async fn try_run_sampling_request(
     };
     drop(sampling_span);
     drop(sampling_timing_guard);
+    drop(wake_sampling_guard);
     if let Some(finish_post_request) = finish_post_request {
         let (status, error) = match (response_completed, &outcome) {
             (true, _) => (ModelRequestStatus::Completed, None),

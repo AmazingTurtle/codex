@@ -39,7 +39,9 @@ mod thread_sample;
 mod thread_usage;
 mod turn;
 mod user_verification;
+mod wake_state;
 mod windows_sandbox;
+pub use wake_state::*;
 
 pub use account::*;
 pub use application::*;

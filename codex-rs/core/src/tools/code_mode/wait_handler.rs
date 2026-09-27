@@ -126,6 +126,13 @@ impl CodeModeWaitHandler {
                 let started_at = std::time::Instant::now();
                 telemetry.cell_id = Some(args.cell_id.clone());
                 let cell_id = codex_code_mode::CellId::new(args.cell_id);
+                let wake_guard = (!args.terminate).then(|| {
+                    exec.session.wake_tracker.wait_cell(
+                        &call_id,
+                        cell_id.as_str(),
+                        crate::wake_state::CellWait::ExplicitWait,
+                    )
+                });
                 let wait_response = if args.terminate {
                     exec.session
                         .services
@@ -149,6 +156,7 @@ impl CodeModeWaitHandler {
                     telemetry.finish(/*success*/ false);
                     FunctionCallError::RespondToModel(error)
                 })?;
+                drop(wake_guard);
                 if let codex_code_mode::WaitOutcome::LiveCell(response) = &wait_response {
                     let runtime_cell_id = match response {
                         RuntimeResponse::Yielded { cell_id, .. }

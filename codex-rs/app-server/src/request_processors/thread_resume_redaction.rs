@@ -208,6 +208,7 @@ mod tests {
 
     fn test_thread(items: Vec<ThreadItem>) -> Thread {
         Thread {
+            wake_state: None,
             originator: None,
             environments: None,
             id: "thread-1".to_string(),

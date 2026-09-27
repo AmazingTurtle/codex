@@ -78,6 +78,7 @@ import type { ThreadStartedNotification } from "./v2/ThreadStartedNotification";
 import type { ThreadStatusChangedNotification } from "./v2/ThreadStatusChangedNotification";
 import type { ThreadTokenUsageUpdatedNotification } from "./v2/ThreadTokenUsageUpdatedNotification";
 import type { ThreadUnarchivedNotification } from "./v2/ThreadUnarchivedNotification";
+import type { ThreadWakeStateChangedNotification } from "./v2/ThreadWakeStateChangedNotification";
 import type { TurnCompletedNotification } from "./v2/TurnCompletedNotification";
 import type { TurnDiffUpdatedNotification } from "./v2/TurnDiffUpdatedNotification";
 import type { TurnModerationMetadataNotification } from "./v2/TurnModerationMetadataNotification";

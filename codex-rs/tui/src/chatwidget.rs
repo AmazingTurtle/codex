@@ -403,6 +403,7 @@ mod status_surface_commands;
 mod status_surfaces;
 use self::status_surface_commands::StatusSurfaceOverrides;
 mod streaming;
+mod wake_state;
 use self::status_surfaces::CachedProjectRootName;
 mod thread_usage;
 pub(crate) use self::thread_usage::ThreadUsageOutcome;

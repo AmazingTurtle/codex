@@ -19622,6 +19622,17 @@
           "description": "Unix timestamp (in seconds) when the thread was last updated.",
           "format": "int64",
           "type": "integer"
+        },
+        "wakeState": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadWakeState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Current runtime wake registrations. Null when unloaded or unavailable."
         }
       },
       "required": [
@@ -24147,6 +24158,43 @@
       "required": [
         "estimatedUsageCreditsMicros"
       ],
+      "type": "object"
+    },
+    "ThreadWakeState": {
+      "description": "Live runtime waits; this does not affect whether user input is accepted.",
+      "properties": {
+        "pendingCount": {
+          "description": "Number of distinct operations with a pending wake, including active waits.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "waiting": {
+          "description": "True when idle or suspended solely on those operations.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "pendingCount",
+        "waiting"
+      ],
+      "type": "object"
+    },
+    "ThreadWakeStateChangedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        },
+        "wakeState": {
+          "$ref": "#/definitions/ThreadWakeState"
+        }
+      },
+      "required": [
+        "threadId",
+        "wakeState"
+      ],
+      "title": "ThreadWakeStateChangedNotification",
       "type": "object"
     },
     "TokenUsageBreakdown": {

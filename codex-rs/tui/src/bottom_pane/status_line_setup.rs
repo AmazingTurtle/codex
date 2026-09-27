@@ -177,7 +177,9 @@ impl StatusLineItem {
             StatusLineItem::BranchChanges => {
                 "Committed branch changes against the default branch (omitted when unavailable)"
             }
-            StatusLineItem::Status => "Compact session run-state text (Ready, Working, Thinking)",
+            StatusLineItem::Status => {
+                "Compact session run-state text (Ready, Working, Thinking, Waiting)"
+            }
             StatusLineItem::Permissions => "Active permission profile or sandbox mode",
             StatusLineItem::ApprovalMode => "Active command approval mode",
             StatusLineItem::ContextRemaining => {
