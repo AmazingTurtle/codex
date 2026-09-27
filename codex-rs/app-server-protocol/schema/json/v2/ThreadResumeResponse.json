@@ -1565,6 +1565,17 @@
           "description": "Unix timestamp (in seconds) when the thread was last updated.",
           "format": "int64",
           "type": "integer"
+        },
+        "wakeState": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadWakeState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Current runtime wake registrations. Null when unloaded or unavailable."
         }
       },
       "required": [
@@ -2610,6 +2621,26 @@
           "type": "object"
         }
       ]
+    },
+    "ThreadWakeState": {
+      "description": "Live runtime waits; this does not affect whether user input is accepted.",
+      "properties": {
+        "pendingCount": {
+          "description": "Number of distinct operations with a pending wake, including active waits.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "waiting": {
+          "description": "True when idle or suspended solely on those operations.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "pendingCount",
+        "waiting"
+      ],
+      "type": "object"
     },
     "Turn": {
       "properties": {

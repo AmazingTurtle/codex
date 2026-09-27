@@ -256,6 +256,7 @@ async fn projects_persist_and_assign_threads() -> Result<()> {
     };
     assert_eq!(thread_started.method, "thread/started");
     assert_eq!(started.thread.project_id, Some(created.project.id.clone()));
+    let _: serde_json::Value = server.read_notification("thread/wakeState/changed").await?;
 
     server.clear_message_buffer();
     let ephemeral_id = server
@@ -1069,6 +1070,7 @@ async fn assigned_forks_inherit_projects_for_persistent_and_ephemeral_children()
     let forked: ThreadForkResponse = serde_json::from_value(response.result)?;
     let _: serde_json::Value = server.read_notification("thread/started").await?;
     assert_eq!(forked.thread.project_id, Some(project.project.id.clone()));
+    let _: serde_json::Value = server.read_notification("thread/wakeState/changed").await?;
 
     server.clear_message_buffer();
     let ephemeral_id = server

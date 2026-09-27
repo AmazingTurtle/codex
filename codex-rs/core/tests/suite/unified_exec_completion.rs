@@ -28,6 +28,17 @@ use serde_json::json;
 use test_case::test_case;
 use tokio::time::Duration;
 
+async fn expect_wake_state(test: &TestCodex, expected: codex_core::WakeState) -> Result<()> {
+    let mut updates = test.codex.subscribe_wake_state();
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        updates.wait_for(|state| *state == expected),
+    )
+    .await??;
+    assert_eq!(test.codex.wake_state(), expected);
+    Ok(())
+}
+
 async fn submit_exec_turn(test: &TestCodex, mode: ModeKind) -> Result<()> {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, test.config.cwd.as_path());
@@ -56,9 +67,9 @@ async fn submit_exec_turn(test: &TestCodex, mode: ModeKind) -> Result<()> {
     Ok(())
 }
 
-#[test_case(ModeKind::Default, "sleep 1; printf IDLE_DONE", 0; "default_mode")]
-#[test_case(ModeKind::Plan, "sleep 1; printf IDLE_DONE", 0; "plan_mode")]
-#[test_case(ModeKind::Default, "sleep 1; printf IDLE_DONE; exit 7", 7; "failed_command")]
+#[test_case(ModeKind::Default, "printf IDLE_DONE", 0; "default_mode")]
+#[test_case(ModeKind::Plan, "printf IDLE_DONE", 0; "plan_mode")]
+#[test_case(ModeKind::Default, "printf IDLE_DONE; exit 7", 7; "failed_command")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn completed_background_exec_wakes_idle_turn(
     mode: ModeKind,
@@ -73,6 +84,7 @@ async fn completed_background_exec_wakes_idle_turn(
     let mut builder = test_codex();
     let test = builder.build_with_auto_env(&server).await?;
     let call_id = "background-idle";
+    let command = format!("while [ ! -f wake-release ]; do sleep 0.05; done; {command}");
     let args = json!({"cmd": command, "yield_time_ms": 250});
     let mock = mount_sse_sequence(
         &server,
@@ -97,12 +109,31 @@ async fn completed_background_exec_wakes_idle_turn(
     .await;
 
     submit_exec_turn(&test, mode).await?;
-    for _ in 0..2 {
-        wait_for_event(&test.codex, |event| {
-            matches!(event, EventMsg::TurnComplete(_))
-        })
-        .await;
-    }
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    expect_wake_state(
+        &test,
+        codex_core::WakeState {
+            pending_count: 1,
+            waiting: true,
+        },
+    )
+    .await?;
+    test.fs()
+        .write_file(
+            &test.workspace_path_uri("wake-release")?,
+            Vec::new(),
+            Default::default(),
+            /*sandbox*/ None,
+        )
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    expect_wake_state(&test, codex_core::WakeState::default()).await?;
 
     let requests = mock.requests();
     assert_eq!(requests.len(), 3);
@@ -149,6 +180,14 @@ async fn interrupt_while_idle_suppresses_background_exec_wake() -> Result<()> {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
+    expect_wake_state(
+        &test,
+        codex_core::WakeState {
+            pending_count: 1,
+            waiting: true,
+        },
+    )
+    .await?;
     test.codex.submit(Op::Interrupt).await?;
     // This response confirms the preceding interrupt was handled before the process exits.
     test.codex
@@ -158,7 +197,15 @@ async fn interrupt_while_idle_suppresses_background_exec_wake() -> Result<()> {
         matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
     })
     .await;
-    std::fs::write(test.workspace_path("wake-release"), "")?;
+    expect_wake_state(&test, codex_core::WakeState::default()).await?;
+    test.fs()
+        .write_file(
+            &test.workspace_path_uri("wake-release")?,
+            Vec::new(),
+            Default::default(),
+            /*sandbox*/ None,
+        )
+        .await?;
     wait_for_event(
         &test.codex,
         |event| matches!(event, EventMsg::ExecCommandEnd(end) if end.call_id == "background-idle"),
@@ -238,7 +285,14 @@ async fn interrupt_active_turn_suppresses_earlier_background_exec_wake() -> Resu
         matches!(event, EventMsg::TurnAborted(_))
     })
     .await;
-    std::fs::write(test.workspace_path("wake-release"), "")?;
+    test.fs()
+        .write_file(
+            &test.workspace_path_uri("wake-release")?,
+            Vec::new(),
+            Default::default(),
+            /*sandbox*/ None,
+        )
+        .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::ExecCommandEnd(end) if end.call_id == "background-active")
     })

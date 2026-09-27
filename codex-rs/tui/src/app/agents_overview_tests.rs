@@ -244,6 +244,7 @@ fn overview_thread(
     status: ThreadStatus,
 ) -> Thread {
     Thread {
+        wake_state: None,
         originator: None,
         environments: None,
         id: thread_id.to_string(),

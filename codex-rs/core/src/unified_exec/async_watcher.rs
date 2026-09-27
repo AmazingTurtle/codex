@@ -170,9 +170,9 @@ pub(crate) fn spawn_exit_watcher(
     network_denial_monitor: Option<tokio::task::JoinHandle<()>>,
     plugin_metrics_sidecar: Option<SharedPluginMetricsSidecar>,
     wake_on_exit: Arc<AtomicBool>,
+    wake_generation: u64,
 ) {
     let session_ref = Arc::clone(&context.session);
-    let wake_generation = session_ref.wake_generation.load(Ordering::Acquire);
     let cancellation_token = context.cancellation_token.clone();
     let turn_ref = Arc::clone(&context.step_context.turn);
     let model_info = Arc::clone(&context.step_context.settings.model_info);
@@ -183,7 +183,13 @@ pub(crate) fn spawn_exit_watcher(
     let interaction_lock = process.interaction_lock();
 
     tokio::spawn(async move {
-        exit_token.cancelled().await;
+        tokio::select! {
+            _ = exit_token.cancelled() => {}
+            _ = cancellation_token.cancelled() => {
+                session_ref.wake_tracker.complete_command(&call_id);
+                exit_token.cancelled().await;
+            }
+        }
         output_drained.notified().await;
         // Deferred network denial deliberately remains observable for a short
         // window after process exit. Do not classify the terminal event until
@@ -209,6 +215,7 @@ pub(crate) fn spawn_exit_watcher(
         } else {
             None
         };
+        let completion_call_id = call_id.clone();
         if let Some(message) = failure {
             drop(plugin_metrics_sidecar);
             emit_failed_exec_end_for_unified_exec(
@@ -261,6 +268,9 @@ pub(crate) fn spawn_exit_watcher(
                 .inject_or_start(vec![completion], wake_generation, &cancellation_token)
                 .await;
         }
+        session_ref
+            .wake_tracker
+            .complete_command(&completion_call_id);
     });
 }
 

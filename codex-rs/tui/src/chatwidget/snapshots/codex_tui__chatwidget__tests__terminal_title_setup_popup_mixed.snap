@@ -13,7 +13,7 @@ expression: terminal_title_popup_snapshot(&mut chat)
   [ ] app-name       Codex app name
   [ ] current-dir    Current working directory
   [ ] activity       Spinner while working, action-required message while blocked
-  [ ] run-state      Compact session run-state text (Ready, Working, Thinking)
+  [ ] run-state      Compact session run-state text (Ready, Working, Thinking, Waiting)
   [ ] thread-name    Current thread name (omitted when unnamed)
 ↓
   project | Mixed preview thread | Tasks 0/0

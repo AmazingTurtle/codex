@@ -228,6 +228,7 @@ mod unstable_features_warning;
 mod user_notification;
 mod user_shell_cmd;
 mod view_image;
+mod wake_state;
 mod web_search;
 #[path = "web_search_system_proxy_tests.rs"]
 mod web_search_system_proxy;
