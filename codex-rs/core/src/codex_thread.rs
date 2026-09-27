@@ -662,6 +662,16 @@ impl CodexThread {
         self.session.list_background_terminals().await
     }
 
+    /// Reads transient wake registrations without replaying conversation history.
+    pub fn wake_state(&self) -> crate::WakeState {
+        self.session.wake_tracker.snapshot()
+    }
+
+    /// Subscribes before reading the initial value to avoid missing a transition.
+    pub fn subscribe_wake_state(&self) -> watch::Receiver<crate::WakeState> {
+        self.session.wake_tracker.subscribe()
+    }
+
     pub async fn terminate_background_terminal(&self, process_id: i32) -> bool {
         self.session.terminate_background_terminal(process_id).await
     }

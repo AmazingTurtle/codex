@@ -92,7 +92,9 @@ impl Handler {
             .await;
 
         let deadline = Instant::now() + Duration::from_millis(timeout_ms as u64);
+        let wake_guard = session.wake_tracker.wait(&call_id);
         let outcome = wait_for_activity(&mut activity_rx, pending_activity, deadline).await;
+        drop(wake_guard);
         let result = WaitAgentResult::from_outcome(outcome, requested_timeout_ms, timeout_ms);
 
         session

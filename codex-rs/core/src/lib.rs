@@ -31,6 +31,8 @@ pub use codex_protocol::turn_input::TurnStartOptions;
 pub use responses_metadata::CodexResponsesMetadata;
 pub use turn_metadata::detached_memory_responses_metadata;
 mod codex_thread;
+mod wake_state;
+pub use wake_state::WakeState;
 mod compact_model_fallback;
 mod compact_remote_history;
 mod compact_remote_v2;
