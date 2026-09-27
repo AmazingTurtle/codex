@@ -196,6 +196,8 @@ struct ProcessEntry {
     cwd: PathUri,
     initial_exec_command_active: Arc<std::sync::atomic::AtomicBool>,
     wake_on_exit: Arc<std::sync::atomic::AtomicBool>,
+    wake_generation: u64,
+    wake_cancellation: tokio_util::sync::CancellationToken,
     hook_command: String,
     tty: bool,
     environment_id: String,

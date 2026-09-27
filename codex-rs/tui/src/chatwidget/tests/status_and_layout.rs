@@ -4377,6 +4377,7 @@ async fn session_configured_clears_goal_status_footer() {
     let rollout_file = NamedTempFile::new().unwrap();
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,

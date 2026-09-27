@@ -93,7 +93,9 @@ impl Handler {
 
         let wait_started = Instant::now();
         let deadline = wait_started + Duration::from_millis(timeout_ms as u64);
+        let wake_guard = session.wake_tracker.wait(&call_id);
         let outcome = wait_for_activity(&mut activity_rx, pending_activity, deadline).await;
+        drop(wake_guard);
         // A completed wait may wake for a message, user input, or its timeout.
         // Dropped waits do not have an observed outcome and are not included.
         turn.session_telemetry.record_duration(

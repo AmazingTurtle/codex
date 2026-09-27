@@ -348,6 +348,7 @@ impl Session {
         let task_for_run = Arc::clone(&task);
         let task_input = input;
         let task_cancellation_token = cancellation_token.child_token();
+        let wake_turn_guard = self.wake_tracker.turn();
         // Task-owned turn spans keep a core-owned span open for the
         // full task lifecycle after the submission dispatch span ends.
         let reasoning_effort = turn_context.effective_reasoning_effort_for_tracing();
@@ -402,6 +403,7 @@ impl Session {
                 sess.on_task_finished(Arc::clone(&ctx_for_finish), task_result)
                     .await;
             }
+            drop(wake_turn_guard);
             done_clone.notify_waiters();
         }
         .instrument(task_span);
@@ -552,8 +554,11 @@ impl Session {
             TurnAbortReason::Interrupted | TurnAbortReason::BudgetLimited
         ) {
             let _turn_start_guard = self.turn_start_lock.lock().await;
-            self.wake_generation
-                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            let generation = self
+                .wake_generation
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+                + 1;
+            self.wake_tracker.invalidate_commands(generation);
         }
         let mut aborted_turn = false;
         let mut active_turn_to_clear = None;
@@ -584,6 +589,10 @@ impl Session {
         }
     }
 
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "serialize wake invalidation and active-turn removal with turn admission"
+    )]
     pub(crate) async fn abort_turn_if_active(
         self: &Arc<Self>,
         turn_id: &str,
@@ -603,8 +612,11 @@ impl Session {
                     TurnAbortReason::Interrupted | TurnAbortReason::BudgetLimited
                 ) {
                     self.mark_interrupted();
-                    self.wake_generation
-                        .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                    let generation = self
+                        .wake_generation
+                        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+                        + 1;
+                    self.wake_tracker.invalidate_commands(generation);
                 }
                 active.take()
             } else {

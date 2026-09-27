@@ -100,6 +100,7 @@ impl ToolExecutor<ToolInvocation> for SleepHandler {
             }
 
             let started = Instant::now();
+            let wake_guard = session.wake_tracker.wait(&call_id);
             let item = TurnItem::Extension(ExtensionItem::Sleep(SleepItem {
                 id: call_id,
                 duration_ms: args.duration_ms,
@@ -132,6 +133,7 @@ impl ToolExecutor<ToolInvocation> for SleepHandler {
                     }
                 }
             };
+            drop(wake_guard);
             session.emit_turn_item_completed(turn.as_ref(), item).await;
             let interrupted = sleep_result.map_err(|err| {
                 if turn.config.features.enabled(Feature::NonfatalClockReadErrors) {

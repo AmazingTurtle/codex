@@ -3889,6 +3889,7 @@ async fn inactive_thread_approval_bubbles_into_active_view() -> Result<()> {
         ThreadEventChannel::new_with_session(
             /*capacity*/ 1,
             ThreadSessionState {
+                wake_state: None,
                 approval_policy: AskForApproval::OnRequest,
                 permission_profile: PermissionProfile::workspace_write(),
                 rollout_path: Some(test_path_buf("/tmp/agent-rollout.jsonl")),
@@ -4057,6 +4058,7 @@ async fn side_defers_subagent_approval_overlay_until_side_exits() -> Result<()> 
         ThreadEventChannel::new_with_session(
             /*capacity*/ 4,
             ThreadSessionState {
+                wake_state: None,
                 approval_policy: AskForApproval::OnRequest,
                 permission_profile: PermissionProfile::workspace_write(),
                 rollout_path: Some(test_path_buf("/tmp/agent-rollout.jsonl")),
@@ -4582,6 +4584,7 @@ async fn inactive_thread_approval_badge_clears_after_turn_completion_notificatio
         ThreadEventChannel::new_with_session(
             /*capacity*/ 4,
             ThreadSessionState {
+                wake_state: None,
                 approval_policy: AskForApproval::OnRequest,
                 permission_profile: PermissionProfile::workspace_write(),
                 rollout_path: Some(test_path_buf("/tmp/agent-rollout.jsonl")),
@@ -4638,6 +4641,7 @@ async fn inactive_thread_started_notification_initializes_replay_session() -> Re
     let shared_root = test_path_buf("/tmp/shared").abs();
     let primary_session = ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: WindowsSandboxHost::Local,
         approval_policy: AskForApproval::OnRequest,
         permission_profile: PermissionProfile::workspace_write(),
@@ -4662,6 +4666,7 @@ async fn inactive_thread_started_notification_initializes_replay_session() -> Re
         agent_thread_id,
         ServerNotification::ThreadStarted(ThreadStartedNotification {
             thread: Thread {
+                wake_state: None,
                 originator: None,
                 environments: Some(vec![codex_app_server_protocol::ThreadEnvironment {
                     environment_id: "remote".to_string(),
@@ -4750,6 +4755,7 @@ async fn inactive_thread_started_notification_preserves_primary_model_when_path_
         ThreadId::from_string("00000000-0000-0000-0000-000000000302").expect("valid thread");
     let primary_cwd = test_path_buf("/tmp/main").abs();
     let primary_session = ThreadSessionState {
+        wake_state: None,
         approval_policy: AskForApproval::OnRequest,
         permission_profile: PermissionProfile::workspace_write(),
         runtime_workspace_roots: vec![primary_cwd.clone()],
@@ -4772,6 +4778,7 @@ async fn inactive_thread_started_notification_preserves_primary_model_when_path_
         agent_thread_id,
         ServerNotification::ThreadStarted(ThreadStartedNotification {
             thread: Thread {
+                wake_state: None,
                 originator: None,
                 environments: None,
                 id: agent_thread_id.to_string(),
@@ -4835,6 +4842,7 @@ async fn thread_read_session_state_does_not_reuse_primary_permission_profile() {
         ThreadId::from_string("00000000-0000-0000-0000-000000000402").expect("valid thread");
     let primary_cwd = test_path_buf("/tmp/main").abs();
     let primary_session = ThreadSessionState {
+        wake_state: None,
         approval_policy: AskForApproval::OnRequest,
         permission_profile: PermissionProfile::workspace_write(),
         runtime_workspace_roots: vec![primary_cwd.clone()],
@@ -4843,6 +4851,7 @@ async fn thread_read_session_state_does_not_reuse_primary_permission_profile() {
     app.primary_session_configured = Some(primary_session);
 
     let thread = Thread {
+        wake_state: None,
         originator: None,
         environments: None,
         id: read_thread_id.to_string(),
@@ -5320,6 +5329,7 @@ async fn side_thread_snapshot_hides_forked_parent_transcript() {
     let mut store = ThreadEventStore::new(/*capacity*/ 4);
     let session = ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         forked_from_id: Some(parent_thread_id),
         fork_parent_title: None,
@@ -5358,6 +5368,7 @@ async fn side_thread_snapshot_does_not_refresh_from_fork_history() {
     let snapshot = ThreadEventSnapshot {
         delegated_turns: Vec::new(),
         session: Some(ThreadSessionState {
+            wake_state: None,
             rollout_path: None,
             ..test_thread_session(side_thread_id, test_path_buf("/tmp/side"))
         }),
@@ -5389,6 +5400,7 @@ async fn side_thread_snapshot_skips_session_header_preamble() {
         delegated_turns: Vec::new(),
         session: Some(ThreadSessionState {
             daybreak_enabled: false,
+            wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             forked_from_id: Some(parent_thread_id),
             fork_parent_title: None,
@@ -5971,6 +5983,7 @@ async fn render_clear_ui_header_after_long_transcript_for_snapshot() -> String {
     let make_header = |is_first| -> Arc<dyn HistoryCell> {
         let session = ThreadSessionState {
             daybreak_enabled: false,
+            wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: ThreadId::new(),
             forked_from_id: None,
@@ -6583,6 +6596,7 @@ async fn replace_goal_confirmation_snapshot() {
 fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
     ThreadSessionState {
         daybreak_enabled: false,
+        wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
         forked_from_id: None,
@@ -7684,6 +7698,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
     let make_header = |is_first| {
         let session = ThreadSessionState {
             daybreak_enabled: false,
+            wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: ThreadId::new(),
             forked_from_id: None,
@@ -7757,6 +7772,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
             daybreak_enabled: false,
+            wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: base_id,
             forked_from_id: None,
@@ -8999,6 +9015,7 @@ async fn refreshed_snapshot_session_persists_resumed_turns() {
         }],
     )];
     let resumed_session = ThreadSessionState {
+        wake_state: None,
         cwd: test_path_buf("/tmp/refreshed").abs(),
         runtime_workspace_roots: Vec::new(),
         instruction_source_paths: Vec::new(),
@@ -9090,6 +9107,7 @@ async fn new_session_requests_shutdown_for_previous_conversation() {
         let thread_id = ThreadId::new();
         let event = crate::session_state::ThreadSessionState {
             daybreak_enabled: false,
+            wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,
             forked_from_id: None,
@@ -9837,6 +9855,7 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
             daybreak_enabled: false,
+            wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,
             forked_from_id: None,

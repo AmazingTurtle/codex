@@ -6401,6 +6401,31 @@ class ThreadUsageBreakdownGroup(BaseModel):
     total_tokens: Annotated[int | None, Field(alias="totalTokens")] = None
 
 
+class ThreadWakeState(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    pending_count: Annotated[
+        int,
+        Field(
+            alias="pendingCount",
+            description="Number of distinct operations with a pending wake, including active waits.",
+            ge=0,
+        ),
+    ]
+    waiting: Annotated[
+        bool, Field(description="True when idle or suspended solely on those operations.")
+    ]
+
+
+class ThreadWakeStateChangedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    thread_id: Annotated[str, Field(alias="threadId")]
+    wake_state: Annotated[ThreadWakeState, Field(alias="wakeState")]
+
+
 class TokenUsageBreakdown(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -9345,6 +9370,24 @@ class ThreadStatusChangedServerNotification(BaseModel):
         Literal["thread/status/changed"], Field(title="Thread/status/changedNotificationMethod")
     ]
     params: ThreadStatusChangedNotification
+
+
+class ThreadWakeStateChangedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["thread/wakeState/changed"],
+        Field(title="Thread/wakeState/changedNotificationMethod"),
+    ]
+    params: ThreadWakeStateChangedNotification
 
 
 class ThreadArchivedServerNotification(BaseModel):
@@ -12517,6 +12560,13 @@ class Thread(BaseModel):
             description="Unix timestamp (in seconds) when the thread was last updated.",
         ),
     ]
+    wake_state: Annotated[
+        ThreadWakeState | None,
+        Field(
+            alias="wakeState",
+            description="Current runtime wake registrations. Null when unloaded or unavailable.",
+        ),
+    ] = None
 
 
 class ThreadForkResponse(BaseModel):
@@ -13315,6 +13365,7 @@ class ServerNotification(
         ErrorServerNotification
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
+        | ThreadWakeStateChangedServerNotification
         | ThreadArchivedServerNotification
         | ThreadDeletedServerNotification
         | ThreadUnarchivedServerNotification
@@ -13405,6 +13456,7 @@ class ServerNotification(
         ErrorServerNotification
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
+        | ThreadWakeStateChangedServerNotification
         | ThreadArchivedServerNotification
         | ThreadDeletedServerNotification
         | ThreadUnarchivedServerNotification
