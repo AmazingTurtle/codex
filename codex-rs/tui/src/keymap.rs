@@ -114,6 +114,7 @@ pub(crate) struct AppKeymap {
     pub(crate) toggle_vim_mode: Vec<KeyBinding>,
     /// Toggle Fast mode.
     pub(crate) toggle_fast_mode: Vec<KeyBinding>,
+    pub(crate) toggle_long_context: Vec<KeyBinding>,
     /// Toggle raw scrollback mode for copy-friendly transcript selection.
     pub(crate) toggle_raw_output: Vec<KeyBinding>,
     /// Switch between a side conversation and its parent without closing either.
@@ -733,6 +734,11 @@ impl RuntimeKeymap {
                 keymap.global.toggle_raw_output.as_ref(),
                 &defaults.app.toggle_raw_output,
                 "tui.keymap.global.toggle_raw_output",
+            )?,
+            toggle_long_context: resolve_bindings(
+                keymap.global.toggle_long_context.as_ref(),
+                &defaults.app.toggle_long_context,
+                "tui.keymap.global.toggle_long_context",
             )?,
             toggle_side_conversation: if side_toggle_default_is_shadowed {
                 Vec::new()
@@ -1452,6 +1458,10 @@ impl RuntimeKeymap {
                 app.toggle_fast_mode.as_slice(),
             ),
             (
+                keymap.global.toggle_long_context.as_ref(),
+                app.toggle_long_context.as_slice(),
+            ),
+            (
                 keymap.global.toggle_raw_output.as_ref(),
                 app.toggle_raw_output.as_slice(),
             ),
@@ -1656,6 +1666,7 @@ impl RuntimeKeymap {
                 clear_terminal: default_bindings![ctrl(KeyCode::Char('l'))],
                 toggle_vim_mode: default_bindings![],
                 toggle_fast_mode: default_bindings![],
+                toggle_long_context: default_bindings![],
                 toggle_raw_output: default_bindings![alt(KeyCode::Char('r'))],
                 toggle_side_conversation: default_bindings![ctrl(KeyCode::Char('/'))],
             },
@@ -2021,6 +2032,10 @@ impl RuntimeKeymap {
             ("clear_terminal", self.app.clear_terminal.as_slice()),
             ("toggle_vim_mode", self.app.toggle_vim_mode.as_slice()),
             ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
+            (
+                "toggle_long_context",
+                self.app.toggle_long_context.as_slice(),
+            ),
             ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
             ("toggle_side_conversation", side_toggle_bindings.as_slice()),
             ("chat.toggle_voice", self.chat.toggle_voice.as_slice()),
@@ -2127,6 +2142,10 @@ impl RuntimeKeymap {
                 ("clear_terminal", self.app.clear_terminal.as_slice()),
                 ("toggle_vim_mode", self.app.toggle_vim_mode.as_slice()),
                 ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
+                (
+                    "toggle_long_context",
+                    self.app.toggle_long_context.as_slice(),
+                ),
                 ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
                 ("toggle_side_conversation", side_toggle_bindings.as_slice()),
             ],
@@ -3603,6 +3622,31 @@ mod tests {
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT,
             )]
         );
+    }
+
+    #[test]
+    fn long_context_binding_is_optional_and_checks_conflicts() {
+        let mut keymap = TuiKeymap::default();
+        assert_eq!(
+            RuntimeKeymap::from_config(&keymap)
+                .unwrap()
+                .app
+                .toggle_long_context,
+            Vec::new()
+        );
+        keymap.global.toggle_long_context = Some(one("ctrl-shift-c"));
+        assert_eq!(
+            RuntimeKeymap::from_config(&keymap)
+                .unwrap()
+                .app
+                .toggle_long_context,
+            vec![KeyBinding::new(
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT
+            )]
+        );
+        keymap.global.toggle_long_context = Some(one("ctrl-l"));
+        expect_conflict(&keymap, "clear_terminal", "toggle_long_context");
     }
 
     #[test]

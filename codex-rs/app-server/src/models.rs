@@ -15,6 +15,7 @@ pub fn supported_models(models: Vec<ModelPreset>, include_hidden: bool) -> Vec<M
 
 pub(crate) fn model_from_preset(preset: ModelPreset) -> Model {
     Model {
+        supports_long_context: preset.supports_long_context,
         id: preset.id.to_string(),
         model: preset.model.to_string(),
         upgrade: preset.upgrade.as_ref().map(|upgrade| upgrade.id.clone()),

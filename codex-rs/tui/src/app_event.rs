@@ -1367,6 +1367,10 @@ pub(crate) enum AppEvent {
     PersistServiceTierSelection {
         service_tier: Option<String>,
     },
+    /// Save the default and update the active thread's context-window selection.
+    SetLongContext {
+        enabled: bool,
+    },
 
     /// Persist the current thread's Daybreak preference and the new-thread default.
     PersistDaybreakSelection {

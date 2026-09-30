@@ -3259,6 +3259,7 @@ mod tests {
         let response = ClientResponse::ThreadStart {
             request_id: RequestId::Integer(7),
             response: v2::ThreadStartResponse {
+                long_context: false,
                 disabled_plugin_ids: Vec::new(),
                 thread: v2::Thread {
                     wake_state: None,
@@ -3321,6 +3322,7 @@ mod tests {
                 "method": "thread/start",
                 "id": 7,
                 "response": {
+                    "longContext": false,
                     "thread": {
                         "wakeState": null,
                         "id": "67e55044-10b1-426f-9247-bb680e5fe0c8",
@@ -4569,6 +4571,7 @@ mod tests {
             ServerNotification::ThreadSettingsUpdated(v2::ThreadSettingsUpdatedNotification {
                 thread_id: "thr_123".to_string(),
                 thread_settings: v2::ThreadSettings {
+                    long_context: false,
                     disabled_plugin_ids: Vec::new(),
                     cwd: absolute_path("/tmp/repo"),
                     approval_policy: v2::AskForApproval::Never,

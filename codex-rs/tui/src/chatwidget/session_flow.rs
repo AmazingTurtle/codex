@@ -124,6 +124,7 @@ impl ChatWidget {
             .permissions
             .set_workspace_roots(runtime_workspace_roots);
         self.effective_service_tier = session.service_tier.clone();
+        self.config.long_context = session.long_context;
         if let Err(err) = self
             .config
             .permissions

@@ -823,6 +823,13 @@ impl ChatWidget {
                 },
             ),
             StatusLineItem::RawOutput => self.raw_output_mode().then(|| "raw output".to_string()),
+            StatusLineItem::LongContext => Some(if !self.model_supports_long_context() {
+                "Long unavailable".to_string()
+            } else if self.config.long_context {
+                "Long on".to_string()
+            } else {
+                "Long off".to_string()
+            }),
             StatusLineItem::ThreadName => {
                 self.thread_name.as_deref().and_then(normalize_thread_name)
             }
@@ -876,6 +883,7 @@ impl ChatWidget {
             StatusSurfacePreviewItem::SessionId => StatusLineItem::SessionId,
             StatusSurfacePreviewItem::FastMode => StatusLineItem::FastMode,
             StatusSurfacePreviewItem::Daybreak => StatusLineItem::Daybreak,
+            StatusSurfacePreviewItem::LongContext => StatusLineItem::LongContext,
             StatusSurfacePreviewItem::RawOutput => StatusLineItem::RawOutput,
             StatusSurfacePreviewItem::WorkspaceHeadline => StatusLineItem::WorkspaceHeadline,
             StatusSurfacePreviewItem::Model => StatusLineItem::ModelName,
@@ -992,7 +1000,15 @@ impl ChatWidget {
             .filter(|_| self.has_chatgpt_account)
             .map(|tier| format!(" {tier}"))
             .unwrap_or_default();
-        format!("{} {label}{service_tier_label}", self.model_display_name())
+        let long_context_label = if self.long_context_active() {
+            " long"
+        } else {
+            ""
+        };
+        format!(
+            "{} {label}{service_tier_label}{long_context_label}",
+            self.model_display_name()
+        )
     }
 
     /// Computes the compact runtime status label used by word-based status items.

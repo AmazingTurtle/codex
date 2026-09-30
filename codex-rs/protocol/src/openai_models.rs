@@ -252,6 +252,9 @@ pub struct ModelPreset {
     /// longer supported.
     #[serde(default)]
     pub supports_personality: bool,
+    /// Whether the catalog advertises a larger window than the normal window.
+    #[serde(default)]
+    pub supports_long_context: bool,
     /// Deprecated: use `service_tiers` instead.
     #[serde(default)]
     pub additional_speed_tiers: Vec<String>,
@@ -513,6 +516,12 @@ pub struct ModelInfo {
 }
 
 impl ModelInfo {
+    /// Whether opting in can expand this model's normal catalog context window.
+    pub fn supports_long_context(&self) -> bool {
+        matches!((self.resolved_context_window(), self.max_context_window),
+            (Some(normal), Some(maximum)) if normal > 0 && maximum > normal)
+    }
+
     pub fn resolved_context_window(&self) -> Option<i64> {
         self.context_window.or(self.max_context_window)
     }
@@ -939,6 +948,7 @@ where
 // convert ModelInfo to ModelPreset
 impl From<ModelInfo> for ModelPreset {
     fn from(info: ModelInfo) -> Self {
+        let supports_long_context = info.supports_long_context();
         ModelPreset {
             id: info.slug.clone(),
             model: info.slug.clone(),
@@ -950,6 +960,7 @@ impl From<ModelInfo> for ModelPreset {
                 .unwrap_or(ReasoningEffort::None),
             supported_reasoning_efforts: info.supported_reasoning_levels.clone(),
             supports_personality: false,
+            supports_long_context,
             additional_speed_tiers: info.additional_speed_tiers,
             service_tiers: info.service_tiers,
             default_service_tier: info.default_service_tier,

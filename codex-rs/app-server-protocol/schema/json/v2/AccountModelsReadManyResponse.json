@@ -193,6 +193,11 @@
           },
           "type": "array"
         },
+        "supportsLongContext": {
+          "default": false,
+          "description": "Whether the catalog advertises an opt-in larger context window.",
+          "type": "boolean"
+        },
         "supportsPersonality": {
           "default": false,
           "description": "@deprecated Always false; models no longer support personality selection.",

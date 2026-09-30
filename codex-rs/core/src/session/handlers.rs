@@ -586,6 +586,7 @@ pub(super) async fn submission_loop(
                     thread_settings,
                     reply,
                 } => {
+                    let refresh_context_window = thread_settings.long_context.is_some();
                     let _settings_guard = thread_settings::acquire_persistence_lock(&sess).await;
                     let thread_settings = WithTurnExtensionData {
                         request: thread_settings,
@@ -598,6 +599,10 @@ pub(super) async fn submission_loop(
                                 let _ = reply.send(Ok(()));
                             }
                             thread_settings::emit_applied(&sess, sub.id.clone(), snapshot).await;
+                            if refresh_context_window {
+                                thread_settings::refresh_context_window(&sess, sub.id.clone())
+                                    .await;
+                            }
                         }
                         Err(error) => {
                             let message = format!("invalid thread settings override: {error}");

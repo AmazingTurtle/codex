@@ -5983,6 +5983,7 @@ async fn render_clear_ui_header_after_long_transcript_for_snapshot() -> String {
     let make_header = |is_first| -> Arc<dyn HistoryCell> {
         let session = ThreadSessionState {
             daybreak_enabled: false,
+            long_context: false,
             wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: ThreadId::new(),
@@ -6596,6 +6597,7 @@ async fn replace_goal_confirmation_snapshot() {
 fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
     ThreadSessionState {
         daybreak_enabled: false,
+        long_context: false,
         wake_state: None,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id,
@@ -7698,6 +7700,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
     let make_header = |is_first| {
         let session = ThreadSessionState {
             daybreak_enabled: false,
+            long_context: false,
             wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: ThreadId::new(),
@@ -7772,6 +7775,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
             daybreak_enabled: false,
+            long_context: false,
             wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id: base_id,
@@ -9107,6 +9111,7 @@ async fn new_session_requests_shutdown_for_previous_conversation() {
         let thread_id = ThreadId::new();
         let event = crate::session_state::ThreadSessionState {
             daybreak_enabled: false,
+            long_context: false,
             wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,
@@ -9789,6 +9794,7 @@ async fn inactive_thread_settings_notification_updates_cached_collaboration_mode
     let notification = ThreadSettingsUpdatedNotification {
         thread_id: inactive_thread_id.to_string(),
         thread_settings: ThreadSettings {
+            long_context: false,
             disabled_plugin_ids: Vec::new(),
             cwd: test_absolute_path("/tmp/thread-settings"),
             approval_policy: AskForApproval::OnRequest,
@@ -9855,6 +9861,7 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
             daybreak_enabled: false,
+            long_context: false,
             wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,

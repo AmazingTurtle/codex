@@ -47,6 +47,9 @@ pub(super) fn overlay_new_session_defaults(
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
     }
+    if !has_launch_setting(config, cli_kv_overrides, "long_context") {
+        config.long_context = defaults.long_context.unwrap_or(false);
+    }
 }
 
 impl App {

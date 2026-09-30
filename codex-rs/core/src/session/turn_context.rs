@@ -961,6 +961,7 @@ impl Session {
         per_turn_config.model_reasoning_summary =
             session_configuration.step_settings.reasoning_summary;
         per_turn_config.service_tier = session_configuration.step_settings.service_tier.clone();
+        per_turn_config.long_context = session_configuration.step_settings.long_context;
         per_turn_config.personality = session_configuration.step_settings.personality;
         per_turn_config.approvals_reviewer = session_configuration.step_settings.approvals_reviewer;
         session_configuration
