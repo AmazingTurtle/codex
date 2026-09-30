@@ -117,6 +117,9 @@ impl From<ModelAccessPrograms> for CoreModelAccessPrograms {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct Model {
+    /// Whether the catalog advertises an opt-in larger context window.
+    #[serde(default)]
+    pub supports_long_context: bool,
     pub id: String,
     pub model: String,
     pub upgrade: Option<String>,

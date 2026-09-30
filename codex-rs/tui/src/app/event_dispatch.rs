@@ -2709,6 +2709,9 @@ impl App {
                     }
                 }
             }
+            AppEvent::SetLongContext { enabled } => {
+                self.update_long_context(app_server, enabled).await;
+            }
             AppEvent::UpdateAskForApprovalPolicy(policy) => {
                 if self.reject_pending_permission_change() {
                     return Ok(AppRunControl::Continue);

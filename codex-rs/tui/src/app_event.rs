@@ -1294,6 +1294,10 @@ pub(crate) enum AppEvent {
     PersistServiceTierSelection {
         service_tier: Option<String>,
     },
+    /// Save the default and update the active thread's context-window selection.
+    SetLongContext {
+        enabled: bool,
+    },
 
     /// Fetch the current catalog even when cached models produce no picker.
     FetchModels {

@@ -124,6 +124,7 @@ struct ThreadEnvironmentOverride {
 }
 
 struct ThreadSettingsBuildParams {
+    long_context: Option<bool>,
     method: &'static str,
     disabled_plugin_ids: Option<Vec<String>>,
     environment_override: ThreadEnvironmentOverride,
@@ -632,6 +633,7 @@ impl TurnRequestProcessor {
                 thread.as_ref(),
                 ThreadSettingsBuildParams {
                     method: "turn/start",
+                    long_context: None,
                     disabled_plugin_ids: params.disabled_plugin_ids,
                     environment_override,
                     approval_policy: params.approval_policy,
@@ -779,6 +781,7 @@ impl TurnRequestProcessor {
         params: ThreadSettingsBuildParams,
     ) -> Result<codex_protocol::protocol::ThreadSettingsOverrides, JSONRPCErrorError> {
         let ThreadSettingsBuildParams {
+            long_context,
             method,
             disabled_plugin_ids,
             environment_override:
@@ -824,6 +827,7 @@ impl TurnRequestProcessor {
             || permissions.is_some()
             || model.is_some()
             || service_tier.is_some()
+            || long_context.is_some()
             || effort.is_some()
             || summary.is_some()
             || collaboration_mode.is_some()
@@ -874,6 +878,7 @@ impl TurnRequestProcessor {
         if has_any_overrides {
             thread
                 .preview_thread_settings_overrides(CodexThreadSettingsOverrides {
+                    long_context,
                     disabled_plugin_ids: disabled_plugin_ids.clone(),
                     environments: environments.clone(),
                     runtime_workspace_roots: runtime_workspace_roots.clone(),
@@ -898,6 +903,7 @@ impl TurnRequestProcessor {
         }
 
         Ok(codex_protocol::protocol::ThreadSettingsOverrides {
+            long_context,
             disabled_plugin_ids,
             environments,
             runtime_workspace_roots,
@@ -939,6 +945,7 @@ impl TurnRequestProcessor {
                 thread.as_ref(),
                 ThreadSettingsBuildParams {
                     method: "thread/settings/update",
+                    long_context: params.long_context,
                     disabled_plugin_ids: params.disabled_plugin_ids,
                     environment_override,
                     approval_policy: params.approval_policy,

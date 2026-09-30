@@ -50,6 +50,68 @@ use tokio::time::timeout;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::test]
+async fn long_context_updates_preserve_selection_and_forks() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let baseline = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_assistant_message("baseline", "baseline"),
+            responses::ev_completed("baseline"),
+        ]),
+    )
+    .await;
+    let codex_home = TempDir::new()?;
+    create_config_toml(codex_home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized()
+        .await?;
+    let started = start_thread(&mut mcp).await?;
+    assert!(!started.long_context);
+    mcp.start_turn_and_wait_for_completion(TurnStartParams {
+        thread_id: started.thread.id.clone(),
+        input: vec![V2UserInput::Text {
+            text: "materialize the thread".to_string(),
+            text_elements: Vec::new(),
+        }],
+        ..Default::default()
+    })
+    .await?;
+    for (index, (value, expected)) in [
+        (json!(true), true),
+        (Value::Null, true),
+        (json!(false), false),
+        (json!(true), true),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        send_thread_settings_update(
+            &mut mcp,
+            serde_json::from_value(json!({
+                "threadId": started.thread.id,
+                "longContext": value,
+                "model": format!("mock-model-{index}"),
+            }))?,
+        )
+        .await?;
+        let updated = read_thread_settings_updated(&mut mcp).await?;
+        assert_eq!(updated.thread_settings.long_context, expected);
+    }
+    let request_id = mcp
+        .send_thread_fork_request(ThreadForkParams {
+            thread_id: started.thread.id,
+            ..Default::default()
+        })
+        .await?;
+    let forked: ThreadForkResponse =
+        timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
+    assert!(forked.long_context);
+    baseline.single_request();
+    Ok(())
+}
+
+#[tokio::test]
 async fn disabled_plugin_ids_replace_preserve_and_clear_without_inference() -> Result<()> {
     let server = responses::start_mock_server().await;
     let codex_home = TempDir::new()?;

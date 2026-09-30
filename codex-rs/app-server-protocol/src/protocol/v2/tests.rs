@@ -272,6 +272,7 @@ fn thread_resume_params_accept_turns_page_bootstrap() {
 #[test]
 fn thread_resume_response_round_trips_initial_turns_page() {
     let response = ThreadResumeResponse {
+        long_context: false,
         disabled_plugin_ids: Vec::new(),
         thread: Thread {
             wake_state: None,
@@ -2082,6 +2083,7 @@ fn config_granular_approval_policy_is_marked_experimental() {
         model: None,
         review_model: None,
         model_context_window: None,
+        long_context: None,
         model_auto_compact_token_limit: None,
         model_auto_compact_token_limit_scope: None,
         model_provider: None,
@@ -2123,6 +2125,7 @@ fn config_approvals_reviewer_is_marked_experimental() {
         model: None,
         review_model: None,
         model_context_window: None,
+        long_context: None,
         model_auto_compact_token_limit: None,
         model_auto_compact_token_limit_scope: None,
         model_provider: None,

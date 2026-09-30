@@ -166,6 +166,7 @@ impl ConfigRequestProcessor {
                         | "model_reasoning_effort"
                         | "plan_mode_reasoning_effort"
                         | "service_tier"
+                        | "long_context"
                         | "personality"
                 )
             });

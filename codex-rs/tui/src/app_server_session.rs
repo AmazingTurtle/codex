@@ -1905,6 +1905,7 @@ fn model_preset_from_api_model(model: ApiModel) -> ModelPreset {
             })
             .collect(),
         supports_personality: model.supports_personality,
+        supports_long_context: model.supports_long_context,
         additional_speed_tiers: model.additional_speed_tiers,
         service_tiers: model
             .service_tiers
@@ -1958,6 +1959,7 @@ fn config_request_overrides_from_config(
             matches!(
                 key.as_str(),
                 "allow_login_shell"
+                    | "long_context"
                     | "default_permissions"
                     | "features"
                     | "network"
@@ -2423,6 +2425,7 @@ async fn thread_session_state_from_thread_start_response(
         response.model.clone(),
         response.model_provider.clone(),
         response.service_tier.clone(),
+        response.long_context,
         response.approval_policy,
         response.approvals_reviewer.to_core(),
         permission_profile,
@@ -2467,6 +2470,7 @@ async fn thread_session_state_from_thread_resume_response(
         response.model.clone(),
         response.model_provider.clone(),
         response.service_tier.clone(),
+        response.long_context,
         response.approval_policy,
         response.approvals_reviewer.to_core(),
         permission_profile,
@@ -2504,6 +2508,7 @@ async fn thread_session_state_from_thread_fork_response(
         response.model.clone(),
         response.model_provider.clone(),
         response.service_tier.clone(),
+        response.long_context,
         response.approval_policy,
         response.approvals_reviewer.to_core(),
         permission_profile,
@@ -2556,6 +2561,7 @@ async fn thread_session_state_from_thread_response(
     model: String,
     model_provider_id: String,
     service_tier: Option<String>,
+    long_context: bool,
     approval_policy: AskForApproval,
     approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer,
     permission_profile: PermissionProfile,
@@ -2589,6 +2595,7 @@ async fn thread_session_state_from_thread_response(
         model,
         model_provider_id,
         service_tier,
+        long_context,
         approval_policy,
         approvals_reviewer,
         permission_profile,
@@ -2754,6 +2761,7 @@ mod tests {
 
     fn api_model_with_upgrade_retirement_at(retirement_at: Option<i64>) -> ApiModel {
         ApiModel {
+            supports_long_context: false,
             id: "model-id".to_string(),
             model: "current-model".to_string(),
             upgrade: Some("replacement-model".to_string()),
@@ -2942,6 +2950,38 @@ mod tests {
 
         assert_eq!(params.ephemeral, Some(true));
         assert_eq!(params.history_mode, None);
+    }
+
+    #[tokio::test]
+    async fn long_context_launch_overrides_are_forwarded_without_replacing_remote_defaults() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        for selection in [None, Some(true), Some(false)] {
+            let config = ConfigBuilder::default()
+                .codex_home(temp_dir.path().to_path_buf())
+                .cli_overrides(
+                    selection
+                        .map(|enabled| {
+                            vec![("long_context".to_string(), toml::Value::Boolean(enabled))]
+                        })
+                        .unwrap_or_default(),
+                )
+                .build()
+                .await
+                .expect("config should build");
+            let params = thread_start_params_from_config(
+                &config,
+                ThreadParamsMode::Remote,
+                /*remote_cwd_override*/ None,
+                /*session_start_source*/ None,
+            );
+            assert_eq!(
+                params.config.unwrap().get("long_context"),
+                selection
+                    .as_ref()
+                    .map(|enabled| serde_json::Value::Bool(*enabled))
+                    .as_ref()
+            );
+        }
     }
 
     #[tokio::test]
@@ -4070,6 +4110,7 @@ mod tests {
         let forked_from_id = ThreadId::new();
         let read_only_profile = PermissionProfile::read_only();
         let response = ThreadResumeResponse {
+            long_context: false,
             disabled_plugin_ids: Vec::new(),
             thread: codex_app_server_protocol::Thread {
                 wake_state: None,
@@ -4314,6 +4355,7 @@ mod tests {
             "gpt-5.4".to_string(),
             "openai".to_string(),
             /*service_tier*/ None,
+            /*long_context*/ false,
             AskForApproval::Never,
             codex_protocol::config_types::ApprovalsReviewer::User,
             PermissionProfile::read_only(),
@@ -4351,6 +4393,7 @@ mod tests {
             "gpt-5.4".to_string(),
             "openai".to_string(),
             /*service_tier*/ None,
+            /*long_context*/ false,
             AskForApproval::Never,
             codex_protocol::config_types::ApprovalsReviewer::User,
             PermissionProfile::read_only(),

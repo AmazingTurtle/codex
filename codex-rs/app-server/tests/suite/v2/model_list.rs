@@ -194,6 +194,7 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
         // cache report `supports_personality = false`.
         // todo(sayan): fix, maybe make roundtrip use ModelInfo only
         supports_personality: false,
+        supports_long_context: preset.supports_long_context,
         multi_agent_version: preset.multi_agent_version.map(Into::into),
         additional_speed_tiers: preset.additional_speed_tiers.clone(),
         service_tiers: preset
@@ -224,7 +225,11 @@ fn expected_visible_models() -> Vec<Model> {
     presets
         .iter()
         .filter(|preset| preset.show_in_picker)
-        .map(model_from_preset)
+        .map(|preset| Model {
+            // The simplified cache fixture omits the maximum context window.
+            supports_long_context: false,
+            ..model_from_preset(preset)
+        })
         .collect()
 }
 
@@ -335,7 +340,7 @@ async fn list_models_uses_remote_catalog_as_source_of_truth(
             "supports_image_detail_original": false,
             "multi_agent_version": "v2",
             "context_window": 272_000,
-            "max_context_window": 272_000,
+            "max_context_window": if priority == 0 { 872_000 } else { 272_000 },
             "experimental_supported_tools": [],
         }))
     })

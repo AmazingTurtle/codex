@@ -275,3 +275,101 @@ fn model_context_window_uses_model_value_without_override() {
 
     assert_eq!(updated, model);
 }
+
+#[test]
+fn long_context_scales_compaction_and_preserves_headroom() {
+    let mut model = model_info_from_slug("unknown-model");
+    model.context_window = Some(272_000);
+    model.max_context_window = Some(872_000);
+    let config = ModelsManagerConfig {
+        long_context: true,
+        model_auto_compact_token_limit: Some(200_000),
+        ..Default::default()
+    };
+
+    let updated = with_config_overrides(model.clone(), &config);
+    let mut expected = model.clone();
+    expected.context_window = Some(872_000);
+    expected.auto_compact_token_limit = Some(641_176);
+    assert_eq!(updated, expected);
+
+    let normal = with_config_overrides(
+        model,
+        &ModelsManagerConfig {
+            long_context: false,
+            ..config
+        },
+    );
+    assert_eq!(
+        (normal.context_window, normal.auto_compact_token_limit),
+        (Some(272_000), Some(200_000))
+    );
+}
+
+#[test]
+fn long_context_derives_default_compaction_at_expanded_window() {
+    let mut model = model_info_from_slug("unknown-model");
+    model.context_window = Some(272_000);
+    model.max_context_window = Some(872_000);
+    let updated = with_config_overrides(
+        model,
+        &ModelsManagerConfig {
+            long_context: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        (
+            updated.resolved_context_window(),
+            updated.usable_context_window(),
+            updated.auto_compact_token_limit()
+        ),
+        (Some(872_000), Some(828_400), Some(784_800))
+    );
+}
+
+#[test]
+fn long_context_without_expansion_preserves_normal_overrides() {
+    for maximum in [None, Some(272_000)] {
+        let mut model = model_info_from_slug("unknown-model");
+        model.context_window = Some(272_000);
+        model.max_context_window = maximum;
+        let normal = ModelsManagerConfig {
+            model_context_window: Some(200_000),
+            model_auto_compact_token_limit: Some(100_000),
+            ..Default::default()
+        };
+        assert_eq!(
+            with_config_overrides(
+                model.clone(),
+                &ModelsManagerConfig {
+                    long_context: true,
+                    ..normal.clone()
+                }
+            ),
+            with_config_overrides(model, &normal)
+        );
+    }
+}
+
+#[test]
+fn long_context_scales_from_explicit_normal_window_and_catalog_compaction_limit() {
+    let mut model = model_info_from_slug("unknown-model");
+    model.context_window = Some(250_000);
+    model.max_context_window = Some(1_000_000);
+    model.auto_compact_token_limit = Some(80_000);
+    let mut expected = model.clone();
+    expected.context_window = Some(1_000_000);
+    expected.auto_compact_token_limit = Some(800_000);
+    assert_eq!(
+        with_config_overrides(
+            model,
+            &ModelsManagerConfig {
+                long_context: true,
+                model_context_window: Some(100_000),
+                ..Default::default()
+            }
+        ),
+        expected
+    );
+}

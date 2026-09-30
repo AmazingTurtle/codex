@@ -17,6 +17,7 @@ pub const BASE_INSTRUCTIONS: &str = include_str!("../prompt.md");
 const PERSONALITY_SECTION_HEADER: &str = "# Personality";
 
 pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig) -> ModelInfo {
+    let supports_long_context = model.supports_long_context();
     if let Some(context_window) = config.model_context_window {
         model.context_window = Some(
             model
@@ -28,6 +29,20 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
     }
     if let Some(auto_compact_token_limit) = config.model_auto_compact_token_limit {
         model.auto_compact_token_limit = Some(auto_compact_token_limit);
+    }
+    if config.long_context
+        && supports_long_context
+        && let (Some(normal_window), Some(expanded_window)) =
+            (model.resolved_context_window(), model.max_context_window)
+        && normal_window > 0
+        && expanded_window > normal_window
+    {
+        model.context_window = Some(expanded_window);
+        model.auto_compact_token_limit = model.auto_compact_token_limit.map(|limit| {
+            let scaled =
+                i128::from(limit) * i128::from(expanded_window) / i128::from(normal_window);
+            scaled.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
+        });
     }
     if let Some(token_limit) = config.tool_output_token_limit {
         model.truncation_policy = match model.truncation_policy.mode {

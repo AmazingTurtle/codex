@@ -566,6 +566,12 @@
             "null"
           ]
         },
+        "long_context": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "model": {
           "type": [
             "string",

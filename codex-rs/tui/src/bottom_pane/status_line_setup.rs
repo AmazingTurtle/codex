@@ -140,6 +140,8 @@ pub(crate) enum StatusLineItem {
 
     /// Whether Fast mode is currently active.
     FastMode,
+    /// Long-context selection and model availability.
+    LongContext,
 
     /// Whether raw scrollback mode is currently active.
     RawOutput,
@@ -206,6 +208,9 @@ impl StatusLineItem {
             }
             StatusLineItem::SessionId => "Current thread identifier (omitted until thread starts)",
             StatusLineItem::FastMode => "Whether Fast mode is currently active",
+            StatusLineItem::LongContext => {
+                "Whether long context is active or unavailable for this model"
+            }
             StatusLineItem::RawOutput => "Whether raw scrollback mode is active",
             StatusLineItem::ThreadName => "Current thread name (omitted when unnamed)",
             StatusLineItem::ThreadTitle => {
@@ -247,6 +252,7 @@ impl StatusLineItem {
             StatusLineItem::EstimatedThreadCost => StatusSurfacePreviewItem::EstimatedThreadCost,
             StatusLineItem::SessionId => StatusSurfacePreviewItem::SessionId,
             StatusLineItem::FastMode => StatusSurfacePreviewItem::FastMode,
+            StatusLineItem::LongContext => StatusSurfacePreviewItem::LongContext,
             StatusLineItem::RawOutput => StatusSurfacePreviewItem::RawOutput,
             StatusLineItem::ThreadName => StatusSurfacePreviewItem::ThreadName,
             StatusLineItem::ThreadTitle => StatusSurfacePreviewItem::ThreadTitle,

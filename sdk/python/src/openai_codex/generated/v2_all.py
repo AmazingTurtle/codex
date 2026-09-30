@@ -8869,6 +8869,13 @@ class Model(BaseModel):
     supported_reasoning_efforts: Annotated[
         list[ReasoningEffortOption], Field(alias="supportedReasoningEfforts")
     ]
+    supports_long_context: Annotated[
+        bool | None,
+        Field(
+            alias="supportsLongContext",
+            description="Whether the catalog advertises an opt-in larger context window.",
+        ),
+    ] = False
     supports_personality: Annotated[
         bool | None,
         Field(
@@ -10359,6 +10366,13 @@ class ThreadSettings(BaseModel):
         ),
     ] = []
     effort: ReasoningEffort | None = None
+    long_context: Annotated[
+        bool | None,
+        Field(
+            alias="longContext",
+            description="Requested selection; models without a larger window keep their normal limits.",
+        ),
+    ] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     personality: Annotated[
@@ -10853,6 +10867,7 @@ class Config(BaseModel):
     forced_chatgpt_workspace_id: ForcedChatgptWorkspaceIds | None = None
     forced_login_method: ForcedLoginMethod | None = None
     instructions: str | None = None
+    long_context: bool | None = None
     model: str | None = None
     model_auto_compact_token_limit: int | None = None
     model_auto_compact_token_limit_scope: AutoCompactTokenLimitScope | None = None
@@ -12386,6 +12401,7 @@ class ThreadForkResponse(BaseModel):
             description="Environment-native paths to instruction source files currently loaded for this thread.",
         ),
     ] = []
+    long_context: Annotated[bool | None, Field(alias="longContext")] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     reasoning_effort: Annotated[ReasoningEffort | None, Field(alias="reasoningEffort")] = None
@@ -12475,6 +12491,7 @@ class ThreadResumeResponse(BaseModel):
             description='Opaque cursor for hydrating paginated items backwards.\n\nPass this as `cursor` to `thread/items/list` with `sortDirection: "desc"`. The first page includes the item identified by the cursor.',
         ),
     ] = None
+    long_context: Annotated[bool | None, Field(alias="longContext")] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     reasoning_effort: Annotated[ReasoningEffort | None, Field(alias="reasoningEffort")] = None
@@ -12556,6 +12573,7 @@ class ThreadStartResponse(BaseModel):
             description="Environment-native paths to instruction source files currently loaded for this thread.",
         ),
     ] = []
+    long_context: Annotated[bool | None, Field(alias="longContext")] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     reasoning_effort: Annotated[ReasoningEffort | None, Field(alias="reasoningEffort")] = None

@@ -10,6 +10,7 @@ use serde_json::json;
 
 fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
     ModelPreset {
+        supports_long_context: false,
         id: id.to_string(),
         model: format!("{id}-model"),
         display_name: format!("{id} display"),

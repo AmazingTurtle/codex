@@ -5776,6 +5776,12 @@
             "null"
           ]
         },
+        "long_context": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "model": {
           "type": [
             "string",
@@ -12020,6 +12026,11 @@
             "$ref": "#/definitions/ReasoningEffortOption"
           },
           "type": "array"
+        },
+        "supportsLongContext": {
+          "default": false,
+          "description": "Whether the catalog advertises an opt-in larger context window.",
+          "type": "boolean"
         },
         "supportsPersonality": {
           "default": false,
@@ -19678,6 +19689,10 @@
           },
           "type": "array"
         },
+        "longContext": {
+          "default": false,
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },
@@ -22021,6 +22036,10 @@
             "null"
           ]
         },
+        "longContext": {
+          "default": false,
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },
@@ -22463,6 +22482,11 @@
             }
           ]
         },
+        "longContext": {
+          "default": false,
+          "description": "Requested selection; models without a larger window keep their normal limits.",
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },
@@ -22743,6 +22767,10 @@
             "$ref": "#/definitions/LegacyAppPathString"
           },
           "type": "array"
+        },
+        "longContext": {
+          "default": false,
+          "type": "boolean"
         },
         "model": {
           "type": "string"

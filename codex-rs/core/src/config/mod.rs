@@ -626,6 +626,9 @@ pub struct Config {
     /// Size of the context window for the model, in tokens.
     pub model_context_window: Option<i64>,
 
+    /// Select the larger catalog window while retaining normal configured limits.
+    pub long_context: bool,
+
     /// Token usage threshold triggering auto-compaction of conversation history.
     pub model_auto_compact_token_limit: Option<i64>,
 
@@ -1679,6 +1682,7 @@ impl Config {
 
     pub fn to_models_manager_config(&self) -> ModelsManagerConfig {
         ModelsManagerConfig {
+            long_context: self.long_context,
             model_context_window: self.model_context_window,
             model_auto_compact_token_limit: self.model_auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
@@ -4360,6 +4364,7 @@ impl Config {
             service_tier,
             review_model,
             model_context_window: cfg.model_context_window,
+            long_context: cfg.long_context.unwrap_or(false),
             model_auto_compact_token_limit: cfg.model_auto_compact_token_limit,
             model_auto_compact_token_limit_scope: cfg
                 .model_auto_compact_token_limit_scope

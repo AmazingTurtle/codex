@@ -5,6 +5,7 @@
 //! dispatch step and records the staged entry once the command has been handled, so
 //! slash-command recall follows the same submitted-input rule as ordinary text.
 
+use super::long_context::LongContextCommand;
 use super::*;
 use crate::app::WindowsSandboxHost;
 use crate::app_event::ManagedWorktreeMode;
@@ -345,6 +346,9 @@ impl ChatWidget {
             }
             SlashCommand::Plan => {
                 self.apply_plan_slash_command();
+            }
+            SlashCommand::LongContext => {
+                self.request_long_context_change(LongContextCommand::Toggle)
             }
             SlashCommand::Goal => {
                 if !self.config.features.enabled(Feature::Goals) {
@@ -896,6 +900,12 @@ impl ChatWidget {
                 }
                 _ => self.add_error_message(RAW_USAGE.to_string()),
             },
+            SlashCommand::LongContext => match trimmed.to_ascii_lowercase().as_str() {
+                "" => self.request_long_context_change(LongContextCommand::Toggle),
+                "on" => self.request_long_context_change(LongContextCommand::On),
+                "off" => self.request_long_context_change(LongContextCommand::Off),
+                _ => self.add_error_message("Usage: /long-context [on|off]".to_string()),
+            },
             SlashCommand::Rename if !trimmed.is_empty() => {
                 if !self.ensure_thread_rename_allowed() {
                     return;
@@ -1290,6 +1300,7 @@ impl ChatWidget {
             | SlashCommand::Copy
             | SlashCommand::Raw
             | SlashCommand::Vim
+            | SlashCommand::LongContext
             | SlashCommand::Diff
             | SlashCommand::App
             | SlashCommand::Rename

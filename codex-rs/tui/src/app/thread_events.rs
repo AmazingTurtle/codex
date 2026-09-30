@@ -678,6 +678,7 @@ mod tests {
 
     fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
         ThreadSessionState {
+            long_context: false,
             wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,

@@ -3069,6 +3069,10 @@
       },
       "type": "array"
     },
+    "longContext": {
+      "default": false,
+      "type": "boolean"
+    },
     "model": {
       "type": "string"
     },

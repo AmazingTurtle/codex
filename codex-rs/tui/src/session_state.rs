@@ -37,6 +37,7 @@ pub(crate) struct ThreadSessionState {
     pub(crate) model: String,
     pub(crate) model_provider_id: String,
     pub(crate) service_tier: Option<String>,
+    pub(crate) long_context: bool,
     pub(crate) approval_policy: AskForApproval,
     pub(crate) approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer,
     /// Permission snapshot used by TUI display surfaces. Legacy app-server

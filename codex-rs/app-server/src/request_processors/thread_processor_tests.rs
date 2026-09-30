@@ -682,6 +682,7 @@ mod thread_processor_behavior_tests {
             initial_turns_page: None,
         };
         let config_snapshot = ThreadConfigSnapshot {
+            long_context: false,
             disabled_plugin_ids: Vec::new(),
             model: "gpt-5".to_string(),
             model_provider_id: "openai".to_string(),

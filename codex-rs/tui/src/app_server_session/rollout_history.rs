@@ -84,6 +84,7 @@ impl AppServerSession {
             thread.model.clone().unwrap_or_default(),
             thread.model_provider.clone(),
             config.service_tier.clone(),
+            config.long_context,
             AskForApproval::from(config.permissions.approval_policy.value()),
             config.approvals_reviewer,
             config.permissions.permission_profile().clone(),

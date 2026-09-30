@@ -244,6 +244,7 @@ async fn new_config(
         model,
         service_tier: None,
         review_model: None,
+        long_context: false,
         model_context_window: None,
         model_auto_compact_token_limit: None,
         model_auto_compact_token_limit_scope: AutoCompactTokenLimitScope::Total,

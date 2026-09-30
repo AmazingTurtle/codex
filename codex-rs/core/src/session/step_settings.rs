@@ -22,6 +22,7 @@ use std::sync::Arc;
 /// a turn. A turn may contain several steps, each using its own captured settings.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct StepSettings {
+    pub(crate) long_context: bool,
     pub(crate) collaboration_mode: CollaborationMode,
     /// `None` follows the pinned model's default.
     pub(crate) reasoning_summary: Option<ReasoningSummary>,
@@ -135,6 +136,7 @@ impl ResolvedStepSettings {
         let model_info = if selected.collaboration_mode.model()
             == self.selected.collaboration_mode.model()
             && selected.personality == self.selected.personality
+            && selected.long_context == self.selected.long_context
         {
             Arc::clone(&self.model_info)
         } else {
@@ -203,6 +205,7 @@ impl ModelInfoOverrides {
         personality: Option<Personality>,
     ) -> ModelsManagerConfig {
         ModelsManagerConfig {
+            long_context: false,
             model_context_window: self.context_window,
             model_auto_compact_token_limit: self.auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
@@ -220,6 +223,7 @@ impl ModelInfoOverrides {
 /// that full value for another. Merge the requested edits with each target.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct StepSettingsUpdate {
+    pub(crate) long_context: Option<bool>,
     pub(crate) model: Option<String>,
     pub(crate) effort: Option<Option<ReasoningEffort>>,
     /// A complete collaboration mode takes precedence over model and effort edits.
@@ -247,7 +251,8 @@ impl StepSettings {
         models_manager: &dyn ModelsManager,
         overrides: &ModelInfoOverrides,
     ) -> ModelInfo {
-        let config = overrides.models_manager_config(self.personality);
+        let mut config = overrides.models_manager_config(self.personality);
+        config.long_context = self.long_context;
         models_manager
             .get_model_info(self.collaboration_mode.model(), &config)
             .await
@@ -261,6 +266,9 @@ impl StepSettings {
         constraints: &StepSettingsConstraints<'_>,
     ) -> ConstraintResult<Self> {
         let mut next = self.clone();
+        if let Some(long_context) = update.long_context {
+            next.long_context = long_context;
+        }
         next.collaboration_mode = update.collaboration_mode.clone().unwrap_or_else(|| {
             self.collaboration_mode.with_updates(
                 update.model.clone(),

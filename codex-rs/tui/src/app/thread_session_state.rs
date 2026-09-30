@@ -96,6 +96,7 @@ impl App {
                 model: self.chat_widget.current_model().to_string(),
                 model_provider_id: self.config.model_provider_id.clone(),
                 service_tier: self.chat_widget.current_service_tier().map(str::to_string),
+                long_context: self.chat_widget.config_ref().long_context,
                 approval_policy: AskForApproval::from(
                     self.config.permissions.approval_policy.value(),
                 ),
@@ -174,6 +175,7 @@ mod tests {
 
     fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
         ThreadSessionState {
+            long_context: false,
             wake_state: None,
             windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
             thread_id,

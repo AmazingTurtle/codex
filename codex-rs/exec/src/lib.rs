@@ -1082,6 +1082,7 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             response.model,
             response.model_provider,
             response.service_tier,
+            response.long_context,
             response.approval_policy.to_core(),
             response.approvals_reviewer.to_core(),
             config.permissions.effective_permission_profile(),
@@ -1488,6 +1489,7 @@ fn session_configured_from_thread_start_response(
         response.model.clone(),
         response.model_provider.clone(),
         response.service_tier.clone(),
+        response.long_context,
         response.approval_policy.to_core(),
         response.approvals_reviewer.to_core(),
         config.permissions.effective_permission_profile(),
@@ -1512,6 +1514,7 @@ fn session_configured_from_thread_resume_response(
         response.model.clone(),
         response.model_provider.clone(),
         response.service_tier.clone(),
+        response.long_context,
         response.approval_policy.to_core(),
         response.approvals_reviewer.to_core(),
         config.permissions.effective_permission_profile(),
@@ -1545,6 +1548,7 @@ fn session_configured_from_thread_response(
     model: String,
     model_provider_id: String,
     service_tier: Option<String>,
+    long_context: bool,
     approval_policy: AskForApproval,
     approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer,
     permission_profile: PermissionProfile,
@@ -1566,6 +1570,7 @@ fn session_configured_from_thread_response(
         .map_err(|err| format!("parent thread id is invalid: {err}"))?;
 
     Ok(SessionConfiguredEvent {
+        long_context,
         session_id,
         thread_id,
         forked_from_id,

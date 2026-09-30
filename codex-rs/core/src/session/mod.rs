@@ -707,6 +707,28 @@ impl Session {
             );
         }
 
+        let settings_owner = match &conversation_history {
+            InitialHistory::Resumed(resumed) => Some(resumed.conversation_id),
+            InitialHistory::Forked(_) => forked_from_thread_id,
+            InitialHistory::New | InitialHistory::Cleared => None,
+        };
+        if let Some(owner) = settings_owner
+            && let Some(long_context) = conversation_history
+                .get_rollout_items()
+                .iter()
+                .rev()
+                .find_map(|item| match item {
+                    RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event))
+                        if event.thread_id == Some(owner) =>
+                    {
+                        event.thread_settings.long_context
+                    }
+                    _ => None,
+                })
+        {
+            Arc::make_mut(&mut config).long_context = long_context;
+        }
+
         // Resolve base instructions for the session. Priority order:
         // 1. config.base_instructions override
         // 2. conversation history => session_meta.base_instructions
@@ -751,11 +773,6 @@ impl Session {
             dynamic_tools
         };
         let disabled_plugin_ids = disabled_plugin_ids.unwrap_or_else(|| {
-            let settings_owner = match &conversation_history {
-                InitialHistory::Resumed(resumed) => Some(resumed.conversation_id),
-                InitialHistory::Forked(_) => forked_from_thread_id,
-                InitialHistory::New | InitialHistory::Cleared => None,
-            };
             settings_owner
                 .and_then(|thread_id| {
                     codex_history::latest_disabled_plugin_ids(
@@ -825,6 +842,7 @@ impl Session {
                 Some(Arc::clone(&auth_manager)),
             ),
             step_settings: Arc::new(StepSettings {
+                long_context: config.long_context,
                 collaboration_mode,
                 reasoning_summary: config.model_reasoning_summary,
                 service_tier,

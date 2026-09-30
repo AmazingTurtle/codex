@@ -3608,6 +3608,7 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("test-visible-model")).await;
     chat.thread_id = Some(ThreadId::new());
     let preset = |slug: &str, show_in_picker: bool| ModelPreset {
+        supports_long_context: false,
         id: slug.to_string(),
         model: slug.to_string(),
         display_name: slug.to_string(),
@@ -4173,6 +4174,7 @@ async fn single_reasoning_option_skips_selection() {
         description: "Greater reasoning depth for complex or ambiguous problems".to_string(),
     }];
     let preset = ModelPreset {
+        supports_long_context: false,
         id: "model-with-single-reasoning".to_string(),
         model: "model-with-single-reasoning".to_string(),
         display_name: "model-with-single-reasoning".to_string(),

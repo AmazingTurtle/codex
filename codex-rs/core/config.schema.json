@@ -4550,6 +4550,7 @@
               "queue": null,
               "submit": null,
               "toggle_fast_mode": null,
+              "toggle_long_context": null,
               "toggle_raw_output": null,
               "toggle_shortcuts": null,
               "toggle_side_conversation": null,
@@ -5381,6 +5382,14 @@
           ],
           "description": "Toggle Fast mode."
         },
+        "toggle_long_context": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Toggle long context between turns. Unbound by default."
+        },
         "toggle_raw_output": {
           "allOf": [
             {
@@ -5532,6 +5541,7 @@
             "queue": null,
             "submit": null,
             "toggle_fast_mode": null,
+            "toggle_long_context": null,
             "toggle_raw_output": null,
             "toggle_shortcuts": null,
             "toggle_side_conversation": null,
@@ -7415,6 +7425,10 @@
         }
       ],
       "description": "Directory where Codex writes log files. Setting this value explicitly also enables the TUI text log in this directory. Defaults to `$BETTER_CODEX_HOME/log`."
+    },
+    "long_context": {
+      "description": "Use the model's larger advertised context window and proportionally scaled compaction.",
+      "type": "boolean"
     },
     "marketplaces": {
       "additionalProperties": {

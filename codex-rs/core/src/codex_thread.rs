@@ -85,6 +85,7 @@ static LIVE_THREADS: Gauge = Gauge::new("core.threads.live");
 
 #[derive(Clone, Debug)]
 pub struct ThreadConfigSnapshot {
+    pub long_context: bool,
     pub model: String,
     pub model_provider_id: String,
     pub service_tier: Option<String>,
@@ -143,6 +144,7 @@ impl ThreadConfigSnapshot {
 /// Thread settings overrides that app-server validates before starting a turn.
 #[derive(Clone, Default)]
 pub struct CodexThreadSettingsOverrides {
+    pub long_context: Option<bool>,
     pub environments: Option<TurnEnvironmentSelections>,
     pub runtime_workspace_roots: Option<Vec<AbsolutePathBuf>>,
     pub profile_workspace_roots: Option<Vec<ProfileWorkspaceRoot>>,
@@ -651,6 +653,7 @@ impl CodexThread {
 
     fn thread_settings_update(overrides: CodexThreadSettingsOverrides) -> SessionSettingsUpdate {
         let CodexThreadSettingsOverrides {
+            long_context,
             environments,
             runtime_workspace_roots,
             profile_workspace_roots,
@@ -670,6 +673,7 @@ impl CodexThread {
         } = overrides;
         SessionSettingsUpdate {
             step_settings: StepSettingsUpdate {
+                long_context,
                 model,
                 effort,
                 collaboration_mode,

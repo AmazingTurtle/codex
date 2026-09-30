@@ -51,6 +51,7 @@ async fn interrupt_if_no_pending_input_handles_cancelled_submission() {
             session_loop_termination: completed_session_loop_termination(),
         },
         ThreadStartupMetadata::from(&SessionConfiguredEvent {
+            long_context: false,
             session_id: session.session_id(),
             thread_id: session.thread_id(),
             forked_from_id: None,

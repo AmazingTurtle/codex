@@ -215,6 +215,7 @@ async fn config_summary_entries_include_runtime_workspace_roots() {
         .expect("set permission profile");
 
     let session_configured_event = SessionConfiguredEvent {
+        long_context: false,
         session_id: SessionId::new(),
         thread_id: ThreadId::new(),
         forked_from_id: None,

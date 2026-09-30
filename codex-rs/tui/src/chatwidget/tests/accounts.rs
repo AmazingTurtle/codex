@@ -30,6 +30,7 @@ fn account(
 
 fn model(model: &str, display_name: &str) -> ApiModel {
     ApiModel {
+        supports_long_context: false,
         id: model.to_string(),
         model: model.to_string(),
         upgrade: None,
