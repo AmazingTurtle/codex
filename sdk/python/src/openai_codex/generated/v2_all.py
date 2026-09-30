@@ -46,6 +46,68 @@ class GcpAccount(BaseModel):
     type: Annotated[Literal["gcp"], Field(title="GcpAccountType")]
 
 
+class AccountListParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    cursor: str | None = None
+    limit: Annotated[int | None, Field(ge=0)] = None
+
+
+class AccountRateLimitsReadManyParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_ids: Annotated[
+        list[str] | None,
+        Field(
+            alias="accountIds",
+            description="Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+        ),
+    ] = None
+    exclude_reset_credit_details: Annotated[
+        bool | None,
+        Field(
+            alias="excludeResetCreditDetails",
+            description="Skip reset-credit details for lightweight background polling.",
+        ),
+    ] = None
+    supports_luna_reserve: Annotated[
+        bool | None,
+        Field(
+            alias="supportsLunaReserve",
+            description="Whether the requesting client supports automatic Luna Reserve fallback.",
+        ),
+    ] = None
+
+
+class AccountReadManyParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_ids: Annotated[
+        list[str] | None,
+        Field(
+            alias="accountIds",
+            description="Account IDs to read. When omitted, all eligible persisted ChatGPT accounts are read.",
+        ),
+    ] = None
+
+
+class AccountRemoveParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_id: Annotated[str, Field(alias="accountId")]
+
+
+class AccountRemoveResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    active_account_id: Annotated[str | None, Field(alias="activeAccountId")] = None
+
+
 class AccountRoutingOverride(Enum):
     no_constraint = "NO_CONSTRAINT"
     us = "us"
@@ -8948,6 +9010,13 @@ class Model(BaseModel):
     supported_reasoning_efforts: Annotated[
         list[ReasoningEffortOption], Field(alias="supportedReasoningEfforts")
     ]
+    supports_long_context: Annotated[
+        bool | None,
+        Field(
+            alias="supportsLongContext",
+            description="Whether the catalog advertises an opt-in larger context window.",
+        ),
+    ] = False
     supports_personality: Annotated[
         bool | None,
         Field(
@@ -10488,6 +10557,13 @@ class ThreadSettings(BaseModel):
         ),
     ] = []
     effort: ReasoningEffort | None = None
+    long_context: Annotated[
+        bool | None,
+        Field(
+            alias="longContext",
+            description="Requested selection; models without a larger window keep their normal limits.",
+        ),
+    ] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     personality: Annotated[
@@ -11008,6 +11084,7 @@ class Config(BaseModel):
     forced_chatgpt_workspace_id: ForcedChatgptWorkspaceIds | None = None
     forced_login_method: ForcedLoginMethod | None = None
     instructions: str | None = None
+    long_context: bool | None = None
     model: str | None = None
     model_auto_compact_token_limit: int | None = None
     model_auto_compact_token_limit_scope: AutoCompactTokenLimitScope | None = None
@@ -12566,6 +12643,7 @@ class ThreadForkResponse(BaseModel):
             validate_default=True,
         ),
     ] = []
+    long_context: Annotated[bool | None, Field(alias="longContext")] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     reasoning_effort: Annotated[ReasoningEffort | None, Field(alias="reasoningEffort")] = None
@@ -12656,6 +12734,7 @@ class ThreadResumeResponse(BaseModel):
             description='Opaque cursor for hydrating paginated items backwards.\n\nPass this as `cursor` to `thread/items/list` with `sortDirection: "desc"`. The first page includes the item identified by the cursor.',
         ),
     ] = None
+    long_context: Annotated[bool | None, Field(alias="longContext")] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     reasoning_effort: Annotated[ReasoningEffort | None, Field(alias="reasoningEffort")] = None
@@ -12738,6 +12817,7 @@ class ThreadStartResponse(BaseModel):
             validate_default=True,
         ),
     ] = []
+    long_context: Annotated[bool | None, Field(alias="longContext")] = False
     model: str
     model_provider: Annotated[str, Field(alias="modelProvider")]
     reasoning_effort: Annotated[ReasoningEffort | None, Field(alias="reasoningEffort")] = None
@@ -13336,6 +13416,7 @@ class ServerNotification(
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
         | ThreadReadStateChangedServerNotification
+        | ThreadWakeStateChangedServerNotification
         | ThreadArchivedServerNotification
         | ThreadDeletedServerNotification
         | ThreadUnarchivedServerNotification
@@ -13424,6 +13505,7 @@ class ServerNotification(
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
         | ThreadReadStateChangedServerNotification
+        | ThreadWakeStateChangedServerNotification
         | ThreadArchivedServerNotification
         | ThreadDeletedServerNotification
         | ThreadUnarchivedServerNotification

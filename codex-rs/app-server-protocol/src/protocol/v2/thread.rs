@@ -186,6 +186,8 @@ pub struct MockExperimentalMethodResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadStartResponse {
+    #[serde(default)]
+    pub long_context: bool,
     pub thread: Thread,
     pub model: String,
     pub model_provider: String,
@@ -234,6 +236,9 @@ impl ThreadStartResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadSettingsUpdateParams {
+    /// Select the larger catalog context window for subsequent turns.
+    #[ts(optional = nullable)]
+    pub long_context: Option<bool>,
     pub thread_id: String,
     /// Replace this thread's disabled plugin IDs.
     /// Omitted/null preserves the list; [] clears it.
@@ -302,6 +307,9 @@ pub struct ThreadSettingsUpdateResponse {}
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadSettings {
+    /// Requested selection; models without a larger window keep their normal limits.
+    #[serde(default)]
+    pub long_context: bool,
     /// Saved list of disabled plugin IDs. Does not yet filter plugin capabilities.
     #[serde(default)]
     pub disabled_plugin_ids: Vec<String>,
@@ -434,6 +442,8 @@ pub struct ThreadResumeParams {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadResumeResponse {
+    #[serde(default)]
+    pub long_context: bool,
     pub thread: Thread,
     pub model: String,
     pub model_provider: String,
@@ -651,6 +661,8 @@ pub struct ThreadForkParams {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadForkResponse {
+    #[serde(default)]
+    pub long_context: bool,
     pub thread: Thread,
     pub model: String,
     pub model_provider: String,

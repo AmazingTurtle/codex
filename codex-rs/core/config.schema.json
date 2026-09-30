@@ -5055,6 +5055,7 @@
               "queue": null,
               "submit": null,
               "toggle_fast_mode": null,
+              "toggle_long_context": null,
               "toggle_raw_output": null,
               "toggle_shortcuts": null,
               "toggle_side_conversation": null,
@@ -5933,6 +5934,14 @@
           ],
           "description": "Toggle Fast mode."
         },
+        "toggle_long_context": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Toggle long context between turns. Unbound by default."
+        },
         "toggle_raw_output": {
           "allOf": [
             {
@@ -6088,6 +6097,7 @@
             "queue": null,
             "submit": null,
             "toggle_fast_mode": null,
+            "toggle_long_context": null,
             "toggle_raw_output": null,
             "toggle_shortcuts": null,
             "toggle_side_conversation": null,
@@ -8085,6 +8095,10 @@
         }
       ],
       "description": "Directory for log files. Setting this value explicitly also routes the SQLite logs database here and enables the TUI text log in this directory. When unset, log files use `$BETTER_CODEX_HOME/log` and SQLite logs use `sqlite_home`. Existing SQLite logs in `sqlite_home` are not migrated automatically. A managed `sqlite_home` requirement keeps SQLite logs in that required directory."
+    },
+    "long_context": {
+      "description": "Use the model's larger advertised context window and proportionally scaled compaction.",
+      "type": "boolean"
     },
     "marketplaces": {
       "additionalProperties": {

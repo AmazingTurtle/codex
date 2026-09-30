@@ -999,6 +999,7 @@ mod tests {
                 "Chat.interrupt_turn",
                 "Editor.insert_newline",
                 "Composer.queue",
+                "Global.toggle_long_context",
                 "Global.open_external_editor",
                 "Global.copy",
                 "Global.toggle_vim_mode",
@@ -1152,6 +1153,7 @@ mod tests {
             vec![
                 ("Open Agents", Some("unbound"), false),
                 ("Toggle Vim Mode", Some("unbound"), false),
+                ("Toggle Long Context", Some("unbound"), false),
                 ("Previous Permission Mode", Some("unbound"), false),
                 ("Next Permission Mode", Some("unbound"), false),
                 ("Kill Whole Line", Some("unbound"), false),

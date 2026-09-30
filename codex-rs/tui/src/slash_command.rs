@@ -43,6 +43,7 @@ pub enum SlashCommand {
     Config,
     Recap,
     Plan,
+    LongContext,
     Voice,
     Goal,
     Agents,
@@ -141,6 +142,7 @@ impl SlashCommand {
                 "include current selection, open files, and other context from your IDE"
             }
             SlashCommand::Plan => "switch to Plan mode",
+            SlashCommand::LongContext => "toggle the larger model context window",
             SlashCommand::Voice => "start or stop voice; use /voice settings to choose a voice",
             SlashCommand::Goal => "set or view the goal for a long-running task",
             SlashCommand::Agents => "open the agent command center",
@@ -193,6 +195,7 @@ impl SlashCommand {
                 | SlashCommand::Export
                 | SlashCommand::Raw
                 | SlashCommand::Cd
+                | SlashCommand::LongContext
                 | SlashCommand::Pwd
                 | SlashCommand::Status
                 | SlashCommand::Usage
@@ -270,6 +273,7 @@ impl SlashCommand {
             | SlashCommand::Import
             | SlashCommand::Review
             | SlashCommand::Plan
+            | SlashCommand::LongContext
             | SlashCommand::Cd
             | SlashCommand::Clear
             | SlashCommand::Logout

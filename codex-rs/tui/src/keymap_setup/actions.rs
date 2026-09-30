@@ -123,6 +123,7 @@ define_keymap_actions! {
         toggle_vim_mode => "Turn Vim composer mode on or off.",
         toggle_fast_mode [FastMode] => "Turn Fast mode on or off.",
         toggle_raw_output => "Toggle raw scrollback mode.",
+        toggle_long_context => "Turn long context on or off between turns.",
         toggle_side_conversation => "Switch between a side conversation and its parent.",
         leader => "Set the prefix used by shared leader shortcuts.",
     }

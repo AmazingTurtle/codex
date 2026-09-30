@@ -236,6 +236,7 @@ mod history_ui;
 mod input;
 mod link_hover;
 mod loaded_threads;
+mod long_context;
 mod managed_worktree_creation;
 mod misalignment_policy;
 mod model_defaults;

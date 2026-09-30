@@ -578,6 +578,8 @@ pub enum TurnSettingsUpdateOutcome {
     }),
 )]
 pub struct ThreadSettingsOverrides {
+    /// Select the expanded catalog window for subsequent turns.
+    pub long_context: Option<bool>,
     /// Updated fallback `cwd` and environments supplied together as a complete pair.
     pub environments: Option<TurnEnvironmentRequests>,
 
@@ -2364,6 +2366,10 @@ pub struct ThreadSettingsAppliedEvent {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
 pub struct ThreadSettingsSnapshot {
+    /// Absent in older rollouts; inherit the configured default on resume.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub long_context: Option<bool>,
     pub model: String,
     pub model_provider_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -4106,6 +4112,8 @@ pub struct SessionNetworkProxyRuntime {
 
 #[derive(Debug, Clone, Serialize, JsonSchema, TS)]
 pub struct SessionConfiguredEvent {
+    #[serde(default)]
+    pub long_context: bool,
     pub session_id: SessionId,
     pub thread_id: ThreadId,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -4184,6 +4192,8 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
             model: String,
             model_provider_id: String,
             service_tier: Option<String>,
+            #[serde(default)]
+            long_context: bool,
             approval_policy: AskForApproval,
             #[serde(default)]
             approvals_reviewer: ApprovalsReviewer,
@@ -4222,6 +4232,7 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
             model: wire.model,
             model_provider_id: wire.model_provider_id,
             service_tier: wire.service_tier,
+            long_context: wire.long_context,
             approval_policy: wire.approval_policy,
             approvals_reviewer: wire.approvals_reviewer,
             permission_profile,
@@ -6427,6 +6438,7 @@ mod tests {
         let event = Event {
             id: "1234".to_string(),
             msg: EventMsg::SessionConfigured(SessionConfiguredEvent {
+                long_context: false,
                 session_id,
                 thread_id,
                 forked_from_id: None,
@@ -6451,6 +6463,7 @@ mod tests {
             "id": "1234",
             "msg": {
                 "type": "session_configured",
+                "long_context": false,
                 "session_id": "67e55044-10b1-426f-9247-bb680e5fe0c7",
                 "thread_id": "67e55044-10b1-426f-9247-bb680e5fe0c8",
                 "model": "codex-mini-latest",

@@ -342,6 +342,11 @@
             }
           ]
         },
+        "longContext": {
+          "default": false,
+          "description": "Requested selection; models without a larger window keep their normal limits.",
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },

@@ -90,6 +90,7 @@ static LIVE_THREADS: Gauge = Gauge::new("core.threads.live");
 pub struct ThreadConfigSnapshot {
     /// Host data inherited by future turns; not included in persisted settings.
     pub turn_extension_init: codex_extension_api::ExtensionDataInit,
+    pub long_context: bool,
     pub model: String,
     pub model_provider_id: String,
     pub service_tier: Option<String>,
@@ -151,6 +152,7 @@ pub struct CodexThreadSettingsOverrides {
     /// Replaces the data captured by future turns. Omission preserves it.
     pub turn_extension_init: Option<codex_extension_api::ExtensionDataInit>,
     pub environments: Option<TurnEnvironmentRequests>,
+    pub long_context: Option<bool>,
     pub runtime_workspace_roots: Option<Vec<AbsolutePathBuf>>,
     pub profile_workspace_roots: Option<Vec<ProfileWorkspaceRoot>>,
     pub approval_policy: Option<AskForApproval>,
@@ -731,6 +733,7 @@ impl CodexThread {
         let CodexThreadSettingsOverrides {
             turn_extension_init,
             environments: environment_requests,
+            long_context,
             runtime_workspace_roots,
             profile_workspace_roots,
             approval_policy,
@@ -750,6 +753,7 @@ impl CodexThread {
         SessionSettingsUpdate {
             turn_extension_init,
             step_settings: StepSettingsUpdate {
+                long_context,
                 model,
                 effort,
                 collaboration_mode,

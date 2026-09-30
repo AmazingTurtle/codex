@@ -263,6 +263,7 @@ fn apply_thread_settings_to_session(session: &mut ThreadSessionState, settings: 
     }
     session.model_provider_id = settings.model_provider.clone();
     session.service_tier = settings.service_tier.clone();
+    session.long_context = settings.long_context;
     session.approval_policy = settings.approval_policy;
     session.approvals_reviewer = settings.approvals_reviewer.to_core();
     session.permission_profile = PermissionProfile::from_legacy_sandbox_policy_for_cwd(
@@ -282,6 +283,7 @@ fn apply_thread_settings_to_session(session: &mut ThreadSessionState, settings: 
 
 fn thread_settings_update_has_changes(params: &ThreadSettingsUpdateParams) -> bool {
     params.cwd.is_some()
+        || params.long_context.is_some()
         || params.approval_policy.is_some()
         || params.approvals_reviewer.is_some()
         || params.sandbox_policy.is_some()

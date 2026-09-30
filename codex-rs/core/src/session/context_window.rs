@@ -69,9 +69,14 @@ async fn context_window_token_status_with_config(
                 let window = sess.auto_compact_window_snapshot().await;
                 let baseline = window.prefill_input_tokens.unwrap_or(active_context_tokens);
 
-                let scope_limit = config
-                    .model_auto_compact_token_limit
-                    .or_else(|| model_info.auto_compact_token_limit());
+                let configured_limit =
+                    if config.long_context && config.model_auto_compact_token_limit.is_some() {
+                        model_info.auto_compact_token_limit
+                    } else {
+                        config.model_auto_compact_token_limit
+                    };
+                let scope_limit =
+                    configured_limit.or_else(|| model_info.auto_compact_token_limit());
                 (
                     active_context_tokens.saturating_sub(baseline),
                     scope_limit,

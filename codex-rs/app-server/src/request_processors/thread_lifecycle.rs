@@ -943,6 +943,7 @@ pub(super) async fn handle_pending_thread_resume_request(
     thread.wake_state = Some(crate::wake_state::snapshot(conversation));
 
     let response = ThreadResumeResponse {
+        long_context: config_snapshot.long_context,
         thread,
         disabled_plugin_ids,
         model,

@@ -7,6 +7,32 @@ use crossterm::event::KeyCode;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
+async fn long_context_toggle_saves_default_and_updates_active_and_new_threads() -> Result<()> {
+    let (mut app, _events, _ops) = make_test_app_with_channels().await;
+    let config_path = app.config.codex_home.join("config.toml");
+    std::fs::write(&config_path, "model = 'gpt-5.5'\n")?;
+    let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    let started = server.start_thread(&app.config).await?;
+    let thread_id = started.session.thread_id;
+    app.enqueue_primary_thread_session(started.session, started.turns)
+        .await?;
+    for enabled in [true, false] {
+        app.update_long_context(&mut server, enabled).await;
+        let settings = next_thread_settings_updated(&mut server, thread_id).await;
+        assert_eq!(settings.thread_settings.long_context, enabled);
+        let saved: toml::Value = toml::from_str(&std::fs::read_to_string(&config_path)?)?;
+        assert_eq!(
+            saved.get("long_context").and_then(toml::Value::as_bool),
+            Some(enabled)
+        );
+        let fresh = server.start_thread(&app.config).await?;
+        assert_eq!(fresh.session.long_context, enabled);
+    }
+    server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn session_model_selection_preserves_defaults_and_updates_active_thread() -> Result<()> {
     for mode in [ModeKind::Default, ModeKind::Plan] {
         let (mut app, mut events, _ops) = make_test_app_with_channels().await;

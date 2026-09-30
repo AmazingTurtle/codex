@@ -5908,6 +5908,12 @@
             "null"
           ]
         },
+        "long_context": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "model": {
           "type": [
             "string",
@@ -12334,6 +12340,11 @@
           },
           "type": "array"
         },
+        "supportsLongContext": {
+          "default": false,
+          "description": "Whether the catalog advertises an opt-in larger context window.",
+          "type": "boolean"
+        },
         "supportsPersonality": {
           "default": false,
           "description": "@deprecated Always false; models no longer support personality selection.",
@@ -17057,6 +17068,26 @@
           "properties": {
             "method": {
               "enum": [
+                "thread/wakeState/changed"
+              ],
+              "title": "Thread/wakeState/changedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadWakeStateChangedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/wakeState/changedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "thread/archived"
               ],
               "title": "Thread/archivedNotificationMethod",
@@ -20221,6 +20252,10 @@
           },
           "type": "array"
         },
+        "longContext": {
+          "default": false,
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },
@@ -22790,6 +22825,10 @@
             "null"
           ]
         },
+        "longContext": {
+          "default": false,
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },
@@ -23232,6 +23271,11 @@
             }
           ]
         },
+        "longContext": {
+          "default": false,
+          "description": "Requested selection; models without a larger window keep their normal limits.",
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },
@@ -23512,6 +23556,10 @@
             "$ref": "#/definitions/LegacyAppPathString"
           },
           "type": "array"
+        },
+        "longContext": {
+          "default": false,
+          "type": "boolean"
         },
         "model": {
           "type": "string"

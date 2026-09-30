@@ -159,6 +159,9 @@ pub struct TuiGlobalKeymap {
     pub toggle_vim_mode: Option<KeybindingsSpec>,
     /// Toggle Fast mode.
     pub toggle_fast_mode: Option<KeybindingsSpec>,
+
+    /// Toggle long context between turns. Unbound by default.
+    pub toggle_long_context: Option<KeybindingsSpec>,
     /// Toggle raw scrollback mode for copy-friendly transcript selection.
     pub toggle_raw_output: Option<KeybindingsSpec>,
     /// Switch between a side conversation and its parent without closing either.

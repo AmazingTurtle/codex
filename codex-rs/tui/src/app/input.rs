@@ -729,6 +729,13 @@ impl App {
             return true;
         }
 
+        if self.keymap.app.toggle_long_context.is_pressed(key_event)
+            && self.chat_widget.can_toggle_long_context_from_keybinding()
+        {
+            self.chat_widget.toggle_long_context_from_ui();
+            return true;
+        }
+
         if self.keymap.app.open_external_editor.is_pressed(key_event) {
             if self.overlay.is_none()
                 && self.chat_widget.can_launch_external_editor()

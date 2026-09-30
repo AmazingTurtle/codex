@@ -6216,6 +6216,11 @@
             }
           ]
         },
+        "longContext": {
+          "default": false,
+          "description": "Requested selection; models without a larger window keep their normal limits.",
+          "type": "boolean"
+        },
         "model": {
           "type": "string"
         },
@@ -6476,6 +6481,41 @@
           "type": "object"
         }
       ]
+    },
+    "ThreadWakeState": {
+      "description": "Live runtime waits; this does not affect whether user input is accepted.",
+      "properties": {
+        "pendingCount": {
+          "description": "Number of distinct operations with a pending wake, including active waits.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "waiting": {
+          "description": "True when idle or suspended solely on those operations.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "pendingCount",
+        "waiting"
+      ],
+      "type": "object"
+    },
+    "ThreadWakeStateChangedNotification": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        },
+        "wakeState": {
+          "$ref": "#/definitions/ThreadWakeState"
+        }
+      },
+      "required": [
+        "threadId",
+        "wakeState"
+      ],
+      "type": "object"
     },
     "TokenUsageBreakdown": {
       "properties": {
@@ -7239,6 +7279,26 @@
         "params"
       ],
       "title": "Thread/readState/changedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "thread/wakeState/changed"
+          ],
+          "title": "Thread/wakeState/changedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadWakeStateChangedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Thread/wakeState/changedNotification",
       "type": "object"
     },
     {
