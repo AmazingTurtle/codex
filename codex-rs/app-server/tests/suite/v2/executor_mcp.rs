@@ -785,6 +785,13 @@ async fn cached_executor_mcp_cannot_read_host_token_after_capability_downgrade()
         }
     })
     .await?;
+    assert!(request.inputs_of_type("agent_message").is_empty());
+    assert!(
+        request
+            .message_input_texts("user")
+            .iter()
+            .any(|text| text.contains(CHILD_PROMPT))
+    );
     assert!(downgraded.load(Ordering::SeqCst));
     assert!(fresh_connection.load(Ordering::SeqCst));
     let (barrier_output, barrier_success) = request

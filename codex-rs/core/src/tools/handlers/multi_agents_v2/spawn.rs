@@ -5,6 +5,7 @@ use crate::agent::child_config::SpawnConfigOptions;
 use crate::agent::child_config::SpawnConfigVersion;
 use crate::agent::child_config::prepare_agent_spawn_config;
 use crate::agent::next_thread_spawn_depth;
+use crate::agent::profile::models_manager_for_config;
 use crate::agent::role::DEFAULT_ROLE_NAME;
 use crate::agent::types::MessageDeliveryMode;
 use crate::agent::types::SpawnAgentForkMode;
@@ -136,7 +137,7 @@ async fn handle_spawn_agent(
         step_context.as_ref(),
         SpawnConfigOptions {
             version: SpawnConfigVersion::V2,
-            full_history_fork: matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory)),
+            fork_mode: fork_mode.as_ref(),
             role_name,
             model: args.model.as_deref(),
             reasoning_effort: args.reasoning_effort.clone(),
@@ -162,9 +163,8 @@ async fn handle_spawn_agent(
         if is_full_history_fork && turn.multi_agent_version == MultiAgentVersion::V2 {
             let child_model_info = match config.model.as_deref() {
                 Some(model) if model != turn.model_info().slug => Some(
-                    session
-                        .services
-                        .models_manager
+                    models_manager_for_config(&session, &config)
+                        .await
                         .get_model_info(model, &config.to_models_manager_config())
                         .await,
                 ),
@@ -189,7 +189,11 @@ async fn handle_spawn_agent(
             caller: session.thread_id,
             config,
             input: AgentInput::Message {
-                message: agent_message_from_tool(message, &source),
+                message: agent_message_from_tool(
+                    message,
+                    &source,
+                    AgentMessageTransport::for_config(&turn.config),
+                ),
                 mode: MessageDeliveryMode::TriggerTurn,
             },
             source: spawn_source,

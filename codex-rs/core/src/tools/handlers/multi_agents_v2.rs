@@ -10,6 +10,7 @@ use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
 use crate::tools::handlers::multi_agents_common::*;
 use crate::tools::handlers::parse_arguments;
+use crate::tools::multi_agent_tool::AgentMessageTransport;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
 use codex_protocol::items::CollabAgentTool;
@@ -54,13 +55,20 @@ pub(crate) async fn emit_sub_agent_activity(
 fn agent_message_from_tool(
     message: String,
     source: &crate::tools::context::ToolCallSource,
+    transport: AgentMessageTransport,
 ) -> AgentMessage {
-    if matches!(
-        source,
-        crate::tools::context::ToolCallSource::DirectPlaintextMessage
-    ) {
+    if transport == AgentMessageTransport::Plaintext
+        || matches!(
+            source,
+            crate::tools::context::ToolCallSource::DirectPlaintextMessage
+        )
+    {
         AgentMessage::Plaintext(message)
     } else {
         AgentMessage::Encrypted(message)
     }
 }
+
+#[cfg(test)]
+#[path = "multi_agents_v2_message_tests.rs"]
+mod message_tests;

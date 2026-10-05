@@ -218,11 +218,12 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
         .await?;
     let child_request = timeout(READ_TIMEOUT, async {
         loop {
-            if let Some(request) = child_request
-                .requests()
-                .into_iter()
-                .find(|request| !request.inputs_of_type("agent_message").is_empty())
-            {
+            if let Some(request) = child_request.requests().into_iter().find(|request| {
+                request
+                    .message_input_texts("user")
+                    .iter()
+                    .any(|text| text.contains(CHILD_PROMPT))
+            }) {
                 break request;
             }
             tokio::task::yield_now().await;
@@ -426,11 +427,12 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
         .await?;
     let child_request = timeout(READ_TIMEOUT, async {
         loop {
-            if let Some(request) = child_request
-                .requests()
-                .into_iter()
-                .find(|request| !request.inputs_of_type("agent_message").is_empty())
-            {
+            if let Some(request) = child_request.requests().into_iter().find(|request| {
+                request
+                    .message_input_texts("user")
+                    .iter()
+                    .any(|text| text.contains(CHILD_PROMPT))
+            }) {
                 break request;
             }
             tokio::task::yield_now().await;
@@ -663,7 +665,12 @@ async fn cold_resume_preserves_effective_developer_instructions_for_worker(
         let initial_child_request = initial_child_request
             .requests()
             .into_iter()
-            .find(|request| !request.inputs_of_type("agent_message").is_empty())
+            .find(|request| {
+                request
+                    .message_input_texts("user")
+                    .iter()
+                    .any(|text| text.contains(INITIAL_TASK))
+            })
             .expect("initial worker model request");
         assert_developer_instructions(&initial_child_request, "initial");
         assert_eq!(

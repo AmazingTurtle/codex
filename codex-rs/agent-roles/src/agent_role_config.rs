@@ -1,3 +1,4 @@
+use codex_config::ProfileV2Name;
 use codex_config::config_toml::ConfigToml;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
 use serde::Deserialize;
@@ -11,6 +12,8 @@ pub struct AgentRoleConfig {
     /// Human-facing role documentation used in spawn tool guidance.
     /// Required for loaded user-defined roles after deprecated/new metadata precedence resolves.
     pub description: Option<String>,
+    /// Validated user profile selected before applying the role-specific layer.
+    pub profile: Option<ProfileV2Name>,
     /// Path to a role-specific config layer.
     pub config_file: Option<PathBuf>,
     /// Candidate nicknames for agents spawned with this role.

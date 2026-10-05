@@ -160,6 +160,7 @@ async fn multi_agent_catalog_messages_change_only_selected_tool_fields(
                 config.agent_roles.insert(
                     "researcher".to_string(),
                     AgentRoleConfig {
+                        profile: None,
                         description: Some("Research the assigned question.".to_string()),
                         config_file: None,
                         nickname_candidates: None,

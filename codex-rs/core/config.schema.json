@@ -27,6 +27,10 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "profile": {
+          "description": "Profile-v2 name selecting `$CODEX_HOME/<name>.config.toml` for this agent. Profile settings are applied before the restrictions in `config_file`.",
+          "type": "string"
         }
       },
       "type": "object"

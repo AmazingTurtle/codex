@@ -4,6 +4,7 @@ use super::spawn_telemetry::SpawnMeasurements;
 use super::spawn_telemetry::record_spawn_success;
 use super::*;
 use crate::agent::child_config::build_agent_resume_config;
+use crate::agent::profile::apply_role_profile_for_resume;
 use crate::agent::role::apply_role_to_config;
 use crate::agent::types::AgentMetadata;
 use crate::agent::types::LiveAgent;
@@ -380,7 +381,7 @@ impl LocalAgentControl {
             history_revision: history.revision,
             conversation_id: thread_id,
             history: Arc::new(history.items),
-            rollout_path: stored_thread.rollout_path,
+            rollout_path: stored_thread.rollout_path.clone(),
         });
         if initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2) {
             return Err(CodexErr::ThreadNotFound(thread_id));
@@ -438,6 +439,9 @@ impl LocalAgentControl {
                 ),
             };
 
+            apply_role_profile_for_resume(&mut config, Some(&role_name), &stored_thread)
+                .await
+                .map_err(CodexErr::InvalidRequest)?;
             apply_role_to_config(&mut config, Some(&role_name))
                 .await
                 .map_err(CodexErr::InvalidRequest)?;
@@ -1420,7 +1424,7 @@ impl LocalAgentControl {
 
     async fn resume_single_agent_from_rollout(
         &self,
-        config: Config,
+        mut config: Config,
         thread_id: ThreadId,
         session_source: SessionSource,
     ) -> CodexResult<(ThreadId, MultiAgentVersion)> {
@@ -1440,6 +1444,18 @@ impl LocalAgentControl {
             .map_err(|err| CodexErr::InvalidRequest(format!("invalid stored agent path: {err}")))?;
         let resumed_agent_nickname = stored_thread.agent_nickname.clone();
         let resumed_agent_role = stored_thread.agent_role.clone();
+        if apply_role_profile_for_resume(&mut config, resumed_agent_role.as_deref(), &stored_thread)
+            .await
+            .map_err(CodexErr::InvalidRequest)?
+        {
+            apply_role_to_config(&mut config, resumed_agent_role.as_deref())
+                .await
+                .map_err(CodexErr::InvalidRequest)?;
+            if let Some(model) = &stored_thread.model {
+                config.model = Some(model.clone());
+            }
+            config.service_tier = self.root_service_tier();
+        }
         let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
             .await?
             .ok_or(CodexErr::ThreadNotFound(thread_id))?;

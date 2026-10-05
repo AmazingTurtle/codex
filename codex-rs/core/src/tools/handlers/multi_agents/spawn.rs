@@ -95,12 +95,13 @@ async fn handle_spawn_agent(
             }),
         )
         .await;
+    let fork_mode = args.fork_context.then_some(SpawnAgentForkMode::FullHistory);
     let prepared = prepare_agent_spawn_config(
         &session,
         step_context.as_ref(),
         SpawnConfigOptions {
             version: SpawnConfigVersion::V1,
-            full_history_fork: args.fork_context,
+            fork_mode: fork_mode.as_ref(),
             role_name,
             model: args.model.as_deref(),
             reasoning_effort: args.reasoning_effort.clone(),
@@ -109,7 +110,6 @@ async fn handle_spawn_agent(
     .await
     .map_err(FunctionCallError::RespondToModel)?;
     let config = prepared.config;
-    let fork_mode = args.fork_context.then_some(SpawnAgentForkMode::FullHistory);
     let result = session
         .services
         .agent_control

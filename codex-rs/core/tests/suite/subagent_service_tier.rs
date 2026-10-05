@@ -77,6 +77,7 @@ fn configure_priority_role(config: &mut Config) {
     config.agent_roles.insert(
         PRIORITY_ROLE.to_string(),
         AgentRoleConfig {
+            profile: None,
             description: Some("Role with a configured priority tier".to_string()),
             config_file: Some(role_path.to_path_buf()),
             nickname_candidates: None,

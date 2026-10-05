@@ -805,6 +805,10 @@ pub struct AgentRoleToml {
     /// Required unless supplied by the referenced agent role file.
     pub description: Option<String>,
 
+    /// Profile-v2 name selecting `$CODEX_HOME/<name>.config.toml` for this agent.
+    /// Profile settings are applied before the restrictions in `config_file`.
+    pub profile: Option<String>,
+
     /// Path to a role-specific config layer.
     /// Relative paths are resolved relative to the `config.toml` that defines them.
     pub config_file: Option<AbsolutePathBuf>,
