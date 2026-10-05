@@ -788,10 +788,11 @@ async fn v2_child_idle_eviction_preserves_mail_and_followup_context() -> Result<
         })],
     );
     for message in ["Unread note for later", "Continue the child task"] {
+        // Better Codex sends agent messages to non-OpenAI providers as standard messages.
         assert_eq!(
-            child_requests[1]
-                .inputs_of_type("agent_message")
-                .iter()
+            ["agent_message", "message"]
+                .into_iter()
+                .flat_map(|kind| child_requests[1].inputs_of_type(kind))
                 .filter(|item| item.to_string().contains(message))
                 .count(),
             1,

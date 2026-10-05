@@ -10,6 +10,7 @@ mod apps;
 mod chatgpt_account_selection;
 mod client;
 mod client_common;
+mod client_compat;
 mod model_request;
 mod realtime_context;
 mod realtime_conversation;
