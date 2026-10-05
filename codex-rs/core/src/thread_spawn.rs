@@ -10,6 +10,7 @@ use crate::agent::child_config::SpawnConfigOptions;
 use crate::agent::child_config::SpawnConfigVersion;
 use crate::agent::child_config::prepare_agent_spawn_config;
 use crate::agent::next_thread_spawn_depth;
+use crate::agent::profile::models_manager_for_config;
 use crate::agent::types::AgentMessage;
 use crate::agent::types::LiveAgent;
 use crate::agent::types::MessageDeliveryMode;
@@ -87,7 +88,7 @@ pub(crate) async fn spawn(
         step_context,
         SpawnConfigOptions {
             version: SpawnConfigVersion::V2,
-            full_history_fork: matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory)),
+            fork_mode: fork_mode.as_ref(),
             role_name,
             model: model.as_deref(),
             reasoning_effort,
@@ -114,9 +115,8 @@ pub(crate) async fn spawn(
     {
         let child_model_info = match config.model.as_deref() {
             Some(model) if model != turn.model_info().slug => Some(
-                session
-                    .services
-                    .models_manager
+                models_manager_for_config(session, &config)
+                    .await
                     .get_model_info(model, &config.to_models_manager_config())
                     .await,
             ),

@@ -127,7 +127,11 @@ async fn handle_spawn_agent(
         &call_id,
         ThreadSpawnRequest {
             task_name: args.task_name,
-            message: agent_message_from_tool(message, &source),
+            message: agent_message_from_tool(
+                message,
+                &source,
+                AgentMessageTransport::for_config(&turn.config),
+            ),
             fork_mode: fork_mode.clone(),
             agent_type: args.agent_type.clone(),
             model: args.model,

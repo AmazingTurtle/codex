@@ -3,8 +3,11 @@
 //! Spawn and reload share live runtime policy; role and model precedence, full-history
 //! inheritance, and validation messages remain the same for each multi-agent version.
 
+use crate::agent::profile::apply_role_profile;
+use crate::agent::profile::models_manager_for_config;
 use crate::agent::role::DEFAULT_ROLE_NAME;
 use crate::agent::role::apply_role_to_config;
+use crate::agent::types::SpawnAgentForkMode;
 use crate::config::Config;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
@@ -37,7 +40,7 @@ pub(crate) enum SpawnConfigVersion {
 
 pub(crate) struct SpawnConfigOptions<'a> {
     pub(crate) version: SpawnConfigVersion,
-    pub(crate) full_history_fork: bool,
+    pub(crate) fork_mode: Option<&'a SpawnAgentForkMode>,
     pub(crate) role_name: Option<&'a str>,
     pub(crate) model: Option<&'a str>,
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
@@ -55,25 +58,49 @@ pub(crate) async fn prepare_agent_spawn_config(
     options: SpawnConfigOptions<'_>,
 ) -> Result<PreparedSpawnConfig, String> {
     let turn = step_context.turn.as_ref();
+    if crate::agent::profile::is_leaf_worker(&turn.config, &turn.session_source) {
+        return Err("This profile-backed worker cannot spawn descendants.".to_string());
+    }
     let mut config =
         build_agent_spawn_config(&session.get_base_instructions().await, step_context)?;
-    if options.version == SpawnConfigVersion::V1 && options.full_history_fork {
+    let full_history_fork = matches!(options.fork_mode, Some(SpawnAgentForkMode::FullHistory));
+    if options.version == SpawnConfigVersion::V1 && full_history_fork {
         reject_full_fork_agent_type_override(options.role_name)?;
     }
+    let applies_role = !full_history_fork
+        || (options.version == SpawnConfigVersion::V2 && options.role_name.is_some());
+    let profiled = applies_role && apply_role_profile(&mut config, options.role_name).await?;
+    if profiled
+        && options.fork_mode.is_some()
+        && (config.model_provider_id != turn.config.model_provider_id
+            || config.model_provider != turn.config.model_provider)
+    {
+        let role_name = options.role_name.unwrap_or(DEFAULT_ROLE_NAME);
+        return Err(format!(
+            "agent profile `{role_name}` changes provider; use fork_turns=\"none\" because inherited history may contain encrypted provider-specific content."
+        ));
+    }
+    let model = options
+        .model
+        .map(str::to_owned)
+        .or_else(|| profiled.then(|| config.model.clone()).flatten());
+    let reasoning_effort = options.reasoning_effort.or_else(|| {
+        profiled
+            .then(|| config.model_reasoning_effort.clone())
+            .flatten()
+    });
     apply_requested_spawn_agent_model_overrides(
         session,
         step_context,
         &mut config,
-        options.model,
-        options.reasoning_effort,
+        model.as_deref(),
+        reasoning_effort,
     )
     .await?;
-    if !options.full_history_fork
-        || (options.version == SpawnConfigVersion::V2 && options.role_name.is_some())
-    {
+    if applies_role {
         apply_spawn_agent_role(session, &mut config, options.role_name).await?;
         if options.version == SpawnConfigVersion::V2
-            && options.full_history_fork
+            && full_history_fork
             && config.developer_instructions.is_none()
         {
             config
@@ -88,12 +115,12 @@ pub(crate) async fn prepare_agent_spawn_config(
     let role_name = options
         .role_name
         .or_else(|| {
-            (options.version == SpawnConfigVersion::V2
-                && !options.full_history_fork
+            ((options.version == SpawnConfigVersion::V2 || profiled)
+                && !full_history_fork
                 && config
                     .agent_roles
                     .get(DEFAULT_ROLE_NAME)
-                    .is_some_and(|role| role.config_file.is_some()))
+                    .is_some_and(|role| role.config_file.is_some() || role.profile.is_some()))
             .then_some(DEFAULT_ROLE_NAME)
         })
         .map(str::to_owned);
@@ -217,29 +244,40 @@ async fn apply_requested_spawn_agent_model_overrides(
     }
 
     if let Some(requested_model) = requested_model {
-        let available_models = session
-            .services
-            .models_manager
+        let models_manager = models_manager_for_config(session, config).await;
+        let available_models = models_manager
             .list_models(RefreshStrategy::Offline, config.http_client_factory())
             .await;
-        let selected_model_name = find_spawn_agent_model_name(
+        let selected_model_name = match find_spawn_agent_model_name(
             &available_models,
             requested_model,
             turn.multi_agent_version,
-        )?;
-        let selected_model_info = session
-            .services
-            .models_manager
+        ) {
+            Ok(model) => model,
+            // Third-party providers may rely on fallback metadata instead of a catalog.
+            // Keep their configured model usable without accepting arbitrary overrides.
+            Err(_)
+                if config.model_catalog.is_none()
+                    && !config.model_provider.is_openai()
+                    && config.model.as_deref() == Some(requested_model) =>
+            {
+                requested_model.to_owned()
+            }
+            Err(error) => return Err(error),
+        };
+        let selected_model_info = models_manager
             .get_model_info(&selected_model_name, &config.to_models_manager_config())
             .await;
 
         config.model = Some(selected_model_name.clone());
         if let Some(reasoning_effort) = requested_reasoning_effort {
-            validate_spawn_agent_reasoning_effort(
-                &selected_model_name,
-                &selected_model_info.supported_reasoning_levels,
-                &reasoning_effort,
-            )?;
+            if !selected_model_info.used_fallback_model_metadata {
+                validate_spawn_agent_reasoning_effort(
+                    &selected_model_name,
+                    &selected_model_info.supported_reasoning_levels,
+                    &reasoning_effort,
+                )?;
+            }
             config.model_reasoning_effort = Some(reasoning_effort);
         } else {
             config.model_reasoning_effort = selected_model_info.default_reasoning_level;
@@ -276,9 +314,8 @@ pub(crate) async fn apply_spawn_agent_service_tier(
     let model = config.model.clone().ok_or_else(|| {
         "spawn_agent could not resolve the child model for service tier validation".to_string()
     })?;
-    let model_info = session
-        .services
-        .models_manager
+    let model_info = models_manager_for_config(session, config)
+        .await
         .get_model_info(model.as_str(), &config.to_models_manager_config())
         .await;
 
@@ -307,9 +344,8 @@ async fn apply_spawn_agent_role(
     let model = config.model.clone().ok_or_else(|| {
         "spawn_agent could not resolve the child model for reasoning effort validation".to_string()
     })?;
-    let model_info = session
-        .services
-        .models_manager
+    let model_info = models_manager_for_config(session, config)
+        .await
         .get_model_info(&model, &config.to_models_manager_config())
         .await;
     if model_info.used_fallback_model_metadata {

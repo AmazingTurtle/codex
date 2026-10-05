@@ -1,5 +1,5 @@
 //! Applies captured Multi-Agent V2 catalog overrides and namespaces to tool specifications.
-//! Parameter schemas retain harness-owned encryption annotations; execution is unchanged.
+//! Profile-backed destinations use plaintext task arguments across provider boundaries.
 
 use crate::session::session::Session;
 use crate::tools::context::ToolInvocation;
@@ -18,11 +18,33 @@ use std::sync::Arc;
 pub(crate) const MULTI_AGENT_V2_NAMESPACE_DESCRIPTION: &str =
     "Tools for spawning and managing sub-agents.";
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum AgentMessageTransport {
+    CodexEncrypted,
+    Plaintext,
+}
+
+impl AgentMessageTransport {
+    pub(crate) fn for_config(config: &crate::config::Config) -> Self {
+        if !config.model_provider.is_openai()
+            || config
+                .agent_roles
+                .values()
+                .any(|role| role.profile.is_some())
+        {
+            Self::Plaintext
+        } else {
+            Self::CodexEncrypted
+        }
+    }
+}
+
 pub(super) fn multi_agent_v2_handler(
     handler: impl CoreToolRuntime + 'static,
     namespace: Option<&str>,
     description_override: Option<&str>,
     parameters_override: Option<&str>,
+    message_transport: AgentMessageTransport,
 ) -> Arc<dyn CoreToolRuntime> {
     let parameters_override = parameters_override.map(|parameters| -> Result<JsonSchema, &str> {
         let mut parameters = codex_tools::parse_catalog_tool_parameters(parameters)?;
@@ -47,7 +69,11 @@ pub(super) fn multi_agent_v2_handler(
         tracing::warn!(tool = %handler.tool_name(), reason, "Invalid catalog tool parameters; using bundled parameters");
     }
     let parameters_override = parameters_override.and_then(Result::ok);
-    if namespace.is_none() && description_override.is_none() && parameters_override.is_none() {
+    if namespace.is_none()
+        && description_override.is_none()
+        && parameters_override.is_none()
+        && message_transport == AgentMessageTransport::CodexEncrypted
+    {
         return Arc::new(handler);
     }
     Arc::new(MultiAgentV2ToolOverrides {
@@ -55,6 +81,7 @@ pub(super) fn multi_agent_v2_handler(
         namespace: namespace.map(str::to_owned),
         description_override: description_override.map(str::to_owned),
         parameters_override,
+        message_transport,
     })
 }
 
@@ -63,6 +90,7 @@ struct MultiAgentV2ToolOverrides {
     namespace: Option<String>,
     description_override: Option<String>,
     parameters_override: Option<JsonSchema>,
+    message_transport: AgentMessageTransport,
 }
 
 impl ToolExecutor<ToolInvocation> for MultiAgentV2ToolOverrides {
@@ -82,6 +110,15 @@ impl ToolExecutor<ToolInvocation> for MultiAgentV2ToolOverrides {
             }
             if let Some(parameters) = &self.parameters_override {
                 tool.parameters.clone_from(parameters);
+            }
+            if self.message_transport == AgentMessageTransport::Plaintext
+                && let Some(message) = tool
+                    .parameters
+                    .properties
+                    .as_mut()
+                    .and_then(|properties| properties.get_mut("message"))
+            {
+                message.encrypted = None;
             }
         }
         match (&self.namespace, spec) {

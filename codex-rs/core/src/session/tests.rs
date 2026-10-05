@@ -5838,6 +5838,7 @@ enabled = false
     child_config.agent_roles.insert(
         "custom".to_string(),
         crate::config::AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path.to_path_buf()),
             nickname_candidates: None,

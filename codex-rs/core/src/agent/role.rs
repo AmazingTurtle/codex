@@ -351,6 +351,7 @@ mod built_in {
                 (
                     DEFAULT_ROLE_NAME.to_string(),
                     AgentRoleConfig {
+                        profile: None,
                         description: Some("Default agent.".to_string()),
                         config_file: None,
                         nickname_candidates: None,
@@ -359,6 +360,7 @@ mod built_in {
                 (
                     "explorer".to_string(),
                     AgentRoleConfig {
+                        profile: None,
                         description: Some(r#"Use `explorer` for specific codebase questions.
 Explorers are fast and authoritative.
 They must be used to ask specific, well-scoped questions on the codebase.
@@ -373,6 +375,7 @@ Rules:
                 (
                     "worker".to_string(),
                     AgentRoleConfig {
+                        profile: None,
                         description: Some(r#"Use for execution and production work.
 Typical tasks:
 - Implement part of a feature

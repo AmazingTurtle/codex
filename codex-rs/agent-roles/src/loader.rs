@@ -165,6 +165,7 @@ async fn read_declared_role(
 
 fn merge_missing_role_fields(role: &mut AgentRoleConfig, fallback: &AgentRoleConfig) {
     role.description = role.description.clone().or(fallback.description.clone());
+    role.profile = role.profile.clone().or(fallback.profile.clone());
     role.config_file = role.config_file.clone().or(fallback.config_file.clone());
     role.nickname_candidates = role
         .nickname_candidates
@@ -211,6 +212,17 @@ async fn agent_role_config_from_toml(
 
     Ok(AgentRoleConfig {
         description,
+        profile: role
+            .profile
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("agents.{role_name}.profile: {err}"),
+                )
+            })?,
         config_file: config_file.map(AbsolutePathBuf::into_path_buf),
         nickname_candidates,
     })
@@ -325,6 +337,7 @@ async fn discover_agent_roles_in_dir(
             role_name,
             AgentRoleConfig {
                 description: parsed_file.description,
+                profile: None,
                 config_file: Some(agent_file.to_path_buf()),
                 nickname_candidates: parsed_file.nickname_candidates,
             },

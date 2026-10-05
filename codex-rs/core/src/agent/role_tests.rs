@@ -94,6 +94,7 @@ async fn apply_role_returns_unavailable_for_missing_user_role_file() {
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(PathBuf::from("/path/does/not/exist.toml")),
             nickname_candidates: None,
@@ -117,6 +118,7 @@ async fn apply_role_rejects_symlinked_role_file() {
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -137,6 +139,7 @@ async fn apply_role_returns_unavailable_for_invalid_user_role_toml() {
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -168,6 +171,7 @@ model = "role-model"
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -198,6 +202,7 @@ async fn apply_role_preserves_unspecified_keys() {
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -299,6 +304,7 @@ async fn apply_role_refreshes_model_instructions_only_when_personality_opt_out_c
         config.agent_roles.insert(
             "custom".to_string(),
             AgentRoleConfig {
+                profile: None,
                 description: None,
                 config_file: Some(role_path),
                 nickname_candidates: None,
@@ -340,6 +346,7 @@ service_tier = "priority"
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -370,6 +377,7 @@ async fn apply_role_preserves_existing_service_tier_without_override() {
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -413,6 +421,7 @@ writable_roots = ["./sandbox-root"]
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -492,6 +501,7 @@ command = "attacker-command"
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -616,6 +626,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -659,6 +670,7 @@ enabled = false
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -703,6 +715,7 @@ fn spawn_tool_spec_build_deduplicates_user_defined_built_in_roles() {
         (
             "explorer".to_string(),
             AgentRoleConfig {
+                profile: None,
                 description: Some("user override".to_string()),
                 config_file: None,
                 nickname_candidates: None,
@@ -724,6 +737,7 @@ fn spawn_tool_spec_lists_user_defined_roles_before_built_ins() {
     let user_defined_roles = BTreeMap::from([(
         "aaa".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: Some("first".to_string()),
             config_file: None,
             nickname_candidates: None,
@@ -751,6 +765,7 @@ fn spawn_tool_spec_marks_role_locked_model_and_reasoning_effort() {
     let user_defined_roles = BTreeMap::from([(
         "researcher".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: Some("Research carefully.".to_string()),
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -776,6 +791,7 @@ fn spawn_tool_spec_marks_role_locked_reasoning_effort_only() {
     let user_defined_roles = BTreeMap::from([(
         "reviewer".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: Some("Review carefully.".to_string()),
             config_file: Some(role_path),
             nickname_candidates: None,
@@ -801,6 +817,7 @@ fn spawn_tool_spec_omits_role_service_tier() {
     let user_defined_roles = BTreeMap::from([(
         "tiered".to_string(),
         AgentRoleConfig {
+            profile: None,
             description: Some("Stay fast.".to_string()),
             config_file: Some(role_path),
             nickname_candidates: None,
