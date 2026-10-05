@@ -1015,6 +1015,7 @@ impl ModelClient {
         }
         input.splice(0..0, prefix);
         if !is_openai {
+            crate::client_compat::standard_agent_messages(&mut input)?;
             for item in &mut input {
                 item.clear_internal_chat_message_metadata_passthrough();
                 if let ResponseItem::FunctionCall {
