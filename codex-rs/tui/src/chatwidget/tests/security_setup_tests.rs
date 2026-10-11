@@ -24,6 +24,7 @@ async fn security_setup_preserves_draft_action_and_dismissal_across_widgets() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(Some("test-model-a")).await;
     chat.show_security_setup(setup_identity(), setup_notice());
     let rendered = normalize_snapshot_paths(render_bottom_popup(&chat, /*width*/ 70));
+    assert!(rendered.contains("Don't show again"));
     insta::assert_snapshot!("security_setup_banner", rendered);
     let (mut replacement, mut events, _ops) = make_chatwidget_manual(Some("test-model-a")).await;
     chat.app_event_tx

@@ -1075,6 +1075,9 @@ pub struct ExternalConfigMigrationPrompts {
 pub struct Notice {
     /// Tracks whether the user has acknowledged the AWS GovCloud guidance.
     pub hide_gov_cloud_guidance: Option<bool>,
+    /// Account/user identity hashes whose optional security setup reminders were dismissed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub security_setup_dismissed: BTreeMap<String, bool>,
     /// Tracks whether the user has acknowledged the full access warning prompt.
     pub hide_full_access_warning: Option<bool>,
     /// Tracks whether the user has acknowledged the Windows world-writable directories warning.

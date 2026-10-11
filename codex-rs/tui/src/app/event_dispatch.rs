@@ -1605,6 +1605,12 @@ impl App {
                     self.chat_widget.show_security_setup(identity, notice);
                 }
             }
+            AppEvent::DismissSecuritySetupPermanently { request_id, identity } => {
+                let key = identity.dismissal_key();
+                if self.chat_widget.dismiss_security_setup_permanently(request_id, identity).await {
+                    self.local_settings.notices.security_setup_dismissed.insert(key, true);
+                }
+            }
             AppEvent::OpenUrlInBrowser { url } => {
                 self.open_url_in_browser(url);
             }

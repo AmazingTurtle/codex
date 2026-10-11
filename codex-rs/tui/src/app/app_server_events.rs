@@ -429,6 +429,7 @@ impl App {
                     self.refresh_account_email(app_server_client);
                     crate::security_setup::prefetch(
                         &self.config,
+                        &self.local_settings.notices,
                         app_server_client,
                         self.app_event_tx.clone(),
                         self.chat_widget.security_setup_request_id,

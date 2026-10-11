@@ -64,7 +64,13 @@ async fn security_setup_fetch_with_default_features_uses_authenticated_codex_end
     );
     app.replace_chat_widget(ChatWidget::new_with_app_event(init));
     assert_eq!(app.chat_widget.security_setup_request_id, request_id);
-    crate::security_setup::prefetch(&app.config, &server, app.app_event_tx.clone(), request_id);
+    crate::security_setup::prefetch(
+        &app.config,
+        &app.local_settings.notices,
+        &server,
+        app.app_event_tx.clone(),
+        request_id,
+    );
     let notice = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if let AppEvent::SecuritySetupLoaded {
@@ -249,6 +255,7 @@ async fn security_setup_skips_fetch_when_server_auth_does_not_match_saved_login(
         let (tx, mut events) = mpsc::unbounded_channel();
         crate::security_setup::prefetch(
             &app.config,
+            &app.local_settings.notices,
             &server,
             AppEventSender::new(tx),
             app.chat_widget.security_setup_request_id,

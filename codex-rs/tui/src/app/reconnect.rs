@@ -575,6 +575,7 @@ impl App {
         if self.chat_widget.has_chatgpt_account() {
             crate::security_setup::prefetch(
                 &self.config,
+                &self.local_settings.notices,
                 app_server,
                 self.app_event_tx.clone(),
                 self.chat_widget.security_setup_request_id,

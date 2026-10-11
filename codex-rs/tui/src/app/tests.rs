@@ -72,6 +72,8 @@ mod projectless_auto_review_tests;
 mod projectless_tests;
 #[path = "tests/quick_dials_tests.rs"]
 mod quick_dials_tests;
+#[path = "tests/security_setup_dismissal_tests.rs"]
+mod security_setup_dismissal_tests;
 #[path = "tests/unavailable_commands_tests.rs"]
 mod unavailable_commands;
 

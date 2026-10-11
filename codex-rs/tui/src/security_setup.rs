@@ -15,6 +15,8 @@ use codex_http_client::ClientRouteClass;
 use codex_http_client::RouteAwareClientPool;
 use codex_login::CodexAuth;
 use serde::Deserialize;
+use sha2::Digest;
+use sha2::Sha256;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -41,6 +43,24 @@ pub(crate) struct Identity {
     pub user: String,
 }
 impl Identity {
+    pub(crate) fn dismissal_key(&self) -> String {
+        // Length prefixes keep distinct account/user pairs distinct without storing IDs.
+        let mut digest = Sha256::new();
+        digest.update((self.account.len() as u64).to_be_bytes());
+        digest.update(self.account.as_bytes());
+        digest.update((self.user.len() as u64).to_be_bytes());
+        digest.update(self.user.as_bytes());
+        let hash = digest.finalize();
+        format!("{hash:x}")
+    }
+
+    pub(crate) fn dismissed_in(&self, preferences: &codex_config::types::Notice) -> bool {
+        preferences
+            .security_setup_dismissed
+            .get(&self.dismissal_key())
+            == Some(&true)
+    }
+
     fn from_auth(auth: &CodexAuth) -> Option<Self> {
         Some(Self {
             account: auth.get_account_id()?,
@@ -70,6 +90,7 @@ impl Notice {
 
 pub(crate) fn prefetch(
     config: &Config,
+    preferences: &codex_config::types::Notice,
     server: &AppServerSession,
     tx: AppEventSender,
     request_id: Uuid,
@@ -78,6 +99,7 @@ pub(crate) fn prefetch(
         return;
     }
     let config = config.clone();
+    let preferences = preferences.clone();
     let request_handle = server.request_handle();
     tokio::spawn(async move {
         let result = tokio::time::timeout(Duration::from_secs(3), async {
@@ -108,6 +130,9 @@ pub(crate) fn prefetch(
                 return None;
             }
             let identity = Identity::from_auth(&auth)?;
+            if identity.dismissed_in(&preferences) {
+                return None;
+            }
             let client = RouteAwareClientPool::new_without_redirects(
                 config.http_client_factory(),
                 ClientRouteClass::Api,

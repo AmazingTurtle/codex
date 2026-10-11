@@ -315,6 +315,10 @@ pub(crate) enum AppEvent {
         identity: crate::security_setup::Identity,
         notice: crate::security_setup::Notice,
     },
+    DismissSecuritySetupPermanently {
+        request_id: uuid::Uuid,
+        identity: crate::security_setup::Identity,
+    },
     OpenDaemonMenu,
     ConfirmDaemonRestart,
     RunDaemonRestart,

@@ -1,9 +1,12 @@
 //! Presents the optional setup reminder without displacing account usage controls.
-//! Dismissal survives banner replacement and account notifications until a different identity is verified.
+//! Temporary dismissal survives banner replacement and same-account notifications.
+//! Permanent dismissal is stored per verified account/user in the local host config.
 use super::ChatWidget;
 use crate::app_event::AppEvent;
 use crate::bottom_pane::ActionableBanner;
 use crate::bottom_pane::SelectionItem;
+use crate::legacy_core::config::edit::ConfigEdit;
+use crate::legacy_core::config::edit::ConfigEditsBuilder;
 use crate::security_setup::Identity;
 use crate::security_setup::Notice;
 
@@ -47,11 +50,14 @@ impl ChatWidget {
         }
         if self.security_setup_identity.as_ref() != Some(&identity) {
             self.invalidate_security_setup();
-            self.security_setup_identity = Some(identity);
+            self.security_setup_identity = Some(identity.clone());
             self.security_setup_dismissed = false;
         }
         // Reconnect fetches must preserve the current occurrence, including Esc dismissal.
-        if self.security_setup_presented || self.security_setup_dismissed {
+        if self.security_setup_presented
+            || self.security_setup_dismissed
+            || identity.dismissed_in(&self.local_settings.notices)
+        {
             return;
         }
         tracing::debug!(
@@ -62,19 +68,72 @@ impl ChatWidget {
             return;
         }
         self.security_setup_presented = true;
+        let request_id = self.security_setup_request_id;
         self.bottom_pane.set_inline_banner(Some(ActionableBanner {
             title: notice.title,
             description: notice.description,
-            actions: vec![SelectionItem {
-                name: notice.action.label,
-                actions: vec![Box::new(move |tx| {
-                    tx.send(AppEvent::OpenUrlInBrowser {
-                        url: notice.action.url.clone(),
-                    })
-                })],
-                ..Default::default()
-            }],
+            actions: vec![
+                SelectionItem {
+                    name: notice.action.label,
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::OpenUrlInBrowser {
+                            url: notice.action.url.clone(),
+                        })
+                    })],
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: "Don't show again".into(),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::DismissSecuritySetupPermanently {
+                            request_id,
+                            identity: identity.clone(),
+                        });
+                    })],
+                    ..Default::default()
+                },
+            ],
             ..Default::default()
         }));
+    }
+
+    pub(crate) async fn dismiss_security_setup_permanently(
+        &mut self,
+        request_id: uuid::Uuid,
+        identity: Identity,
+    ) -> bool {
+        if request_id != self.security_setup_request_id
+            || self.security_setup_identity.as_ref() != Some(&identity)
+            || !self.security_setup_presented
+        {
+            return false;
+        }
+        let key = identity.dismissal_key();
+        let result =
+            ConfigEditsBuilder::for_config_path(self.local_settings.user_config_path.as_path())
+                .with_edits([ConfigEdit::SetPath {
+                    segments: vec![
+                        "notice".into(),
+                        "security_setup_dismissed".into(),
+                        key.clone(),
+                    ],
+                    value: toml_edit::value(true),
+                }])
+                .apply()
+                .await;
+        if let Err(err) = result {
+            tracing::error!(error = %err, "failed to save security reminder preference");
+            self.add_error_message(
+                "Couldn't save your security reminder preference. Try again after checking that your config file is writable and valid.".into(),
+            );
+            return false;
+        }
+        self.local_settings
+            .notices
+            .security_setup_dismissed
+            .insert(key, true);
+        self.clear_security_setup_banner();
+        self.security_setup_dismissed = true;
+        true
     }
 }

@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/security_setup_tests.rs
-assertion_line: 19
 expression: rendered
 ---
   Keep using Daybreak mode
@@ -9,6 +8,7 @@ expression: rendered
   15 to skip re-verification.
 
 › 1. Set up security
+  2. Don't show again
 
   Press a number to choose · esc to dismiss · type to continue
 
