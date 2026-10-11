@@ -66,6 +66,8 @@ mod pagination_completion_tests;
 mod patch_approval_tests;
 #[path = "tests/permission_selection_tests.rs"]
 mod permission_selection_tests;
+#[path = "tests/projectless_auto_review_tests.rs"]
+mod projectless_auto_review_tests;
 #[path = "tests/projectless_tests.rs"]
 mod projectless_tests;
 #[path = "tests/quick_dials_tests.rs"]

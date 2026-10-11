@@ -4,6 +4,7 @@
 use crate::app_server_session::AppServerSession;
 use crate::legacy_core::config::Config;
 use crate::legacy_core::config::ConfigOverrides;
+use codex_config::types::ApprovalsReviewer;
 use codex_exec_server::EnvironmentManager;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
@@ -63,19 +64,25 @@ pub(crate) fn apply_defaults(
     {
         return false;
     }
-    let granular = AskForApproval::Granular(GranularApprovalConfig {
-        sandbox_approval: false,
-        rules: false,
-        skill_approval: false,
-        request_permissions: true,
-        mcp_elicitations: true,
-    });
+    let implicit_approval = if config.approvals_reviewer == ApprovalsReviewer::AutoReview {
+        // Auto-review needs requests to reach the reviewer. The projectless granular
+        // default rejects sandbox elevation before review can assess the action.
+        AskForApproval::OnRequest
+    } else {
+        AskForApproval::Granular(GranularApprovalConfig {
+            sandbox_approval: false,
+            rules: false,
+            skill_approval: false,
+            request_permissions: true,
+            mcp_elicitations: true,
+        })
+    };
     if overrides.approval_policy.is_none() && effective.get("approval_policy").is_none() {
-        let granular = defaults
+        let approval = defaults
             .approval_policy
             .as_ref()
-            .map_or(granular, |policy| policy.to_core());
-        let _ = config.permissions.approval_policy.set(granular);
+            .map_or(implicit_approval, |policy| policy.to_core());
+        let _ = config.permissions.approval_policy.set(approval);
     }
     #[cfg(target_os = "windows")]
     if config.effective_local_windows_sandbox_type() == codex_sandboxing::SandboxType::None {

@@ -7,6 +7,15 @@ use pretty_assertions::assert_eq;
 
 #[tokio::test]
 async fn projectless_permissions_survive_session_transitions_without_trust() -> Result<()> {
+    projectless_session_transitions(ApprovalsReviewer::User).await
+}
+
+#[tokio::test]
+async fn projectless_auto_review_survives_session_transitions_without_trust() -> Result<()> {
+    projectless_session_transitions(ApprovalsReviewer::AutoReview).await
+}
+
+async fn projectless_session_transitions(reviewer: ApprovalsReviewer) -> Result<()> {
     let (mut app, mut events, _) = make_test_app_with_channels().await;
     let home = tempfile::tempdir()?;
     app.config.codex_home = home.path().to_path_buf().abs();
@@ -27,6 +36,7 @@ async fn projectless_permissions_survive_session_transitions_without_trust() -> 
         format!(
             r#"model = "gpt-5.2"
 model_provider = "test"
+approvals_reviewer = {}
 [model_providers.test]
 name = "test"
 base_url = "{}/v1"
@@ -34,6 +44,7 @@ wire_api = "responses"
 [windows]
 sandbox = "unelevated"
 "#,
+            serde_json::to_string(&reviewer)?,
             model.uri()
         ),
     )?;
@@ -63,10 +74,26 @@ sandbox = "unelevated"
             .file_system_sandbox_policy()
             .can_write_local_path_with_cwd(source.path(), source.path())
     );
-    assert!(matches!(
-        app.config.permissions.approval_policy.value(),
-        codex_protocol::protocol::AskForApproval::Granular(_)
-    ));
+    let expected_approval = if reviewer == ApprovalsReviewer::AutoReview {
+        codex_protocol::protocol::AskForApproval::OnRequest
+    } else {
+        codex_protocol::protocol::AskForApproval::Granular(
+            codex_protocol::protocol::GranularApprovalConfig {
+                sandbox_approval: false,
+                rules: false,
+                skill_approval: false,
+                request_permissions: true,
+                mcp_elicitations: true,
+            },
+        )
+    };
+    assert_eq!(
+        (
+            app.config.permissions.approval_policy.value(),
+            app.config.approvals_reviewer
+        ),
+        (expected_approval, reviewer)
+    );
     // Saving history must not turn implicit writable defaults into read-only on /cd.
     server
         .thread_inject_items(
@@ -89,10 +116,13 @@ sandbox = "unelevated"
             app.config.permissions.active_permission_profile(),
             Some(ActivePermissionProfile::new(":workspace"))
         );
-        assert!(matches!(
-            app.config.permissions.approval_policy.value(),
-            codex_protocol::protocol::AskForApproval::Granular(_)
-        ));
+        assert_eq!(
+            (
+                app.config.permissions.approval_policy.value(),
+                app.config.approvals_reviewer
+            ),
+            (expected_approval, reviewer)
+        );
     }
     let mut readonly = app.config.clone();
     readonly
@@ -166,6 +196,13 @@ sandbox = "unelevated"
     .await??;
     response.single_request();
     let (next, _) = app.load_new_session_config(&server).await?;
+    assert_eq!(
+        (
+            next.permissions.approval_policy.value(),
+            next.approvals_reviewer
+        ),
+        (expected_approval, reviewer)
+    );
     assert_eq!(
         next.permissions.permission_profile(),
         &PermissionProfile::workspace_write()
@@ -242,6 +279,20 @@ async fn local_projectless_defaults_respect_trust_scope_and_explicit_settings() 
     use codex_protocol::protocol::AskForApproval as Approval;
     for (settings, project_marker, expected_profile, expected_approval, sandbox_ready) in [
         ("", false, ":workspace", None, true),
+        (
+            "approvals_reviewer = \"auto_review\"\n",
+            false,
+            ":workspace",
+            Some(Approval::OnRequest),
+            true,
+        ),
+        (
+            "approvals_reviewer = \"auto_review\"\napproval_policy = \"never\"\n",
+            false,
+            ":workspace",
+            Some(Approval::Never),
+            true,
+        ),
         #[cfg(target_os = "windows")]
         ("", false, ":read-only", None, false),
         ("", true, ":read-only", None, true),
