@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionControlState": {
+      "description": "Inference state shared by an independent conversation and its owned workers.",
+      "enum": [
+        "running",
+        "pausing",
+        "paused"
+      ],
+      "type": "string"
+    },
+    "ThreadExecutionControl": {
+      "properties": {
+        "canPause": {
+          "default": false,
+          "description": "Whether the owning tree currently has work that can be paused. Older servers that omit this capability are treated conservatively.",
+          "type": "boolean"
+        },
+        "rootThreadId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/ExecutionControlState"
+        }
+      },
+      "required": [
+        "rootThreadId",
+        "state"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "executionControl": {
+      "$ref": "#/definitions/ThreadExecutionControl"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "executionControl",
+    "threadId"
+  ],
+  "title": "ThreadExecutionControlChangedNotification",
+  "type": "object"
+}

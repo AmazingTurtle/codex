@@ -275,6 +275,11 @@ impl RetainedContext {
         order
     }
 
+    /// Preserve acceptance order reserved by durable, not-yet-recorded input.
+    pub fn advance_order_past(&mut self, order: u64) {
+        self.next_order = self.next_order.max(order.saturating_add(1));
+    }
+
     fn record_order(&mut self, acceptance_order: Option<u64>) -> u64 {
         let order = acceptance_order.unwrap_or(self.next_order);
         self.next_order = self.next_order.max(order.saturating_add(1));

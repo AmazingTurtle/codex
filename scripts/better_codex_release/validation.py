@@ -65,6 +65,12 @@ FEATURES = {
         "codex-core": "test(auto_review::require_escalated_bypasses_extension_approval_and_runs_guardian)",
     },
     "security-setup-dismissal": {"codex-tui": "test(security_setup)"},
+    "conversation-pause": {
+        "codex-core": "test(/conversation_pause::|conversation_activity::|execution_control::tests::|stopped_spawn_leaves_no_child|pause_before_guardian_finalization|active_turn_keeps_first_root_when_mail_coalesces|async_hook_finishing_while_idle_waits_for_the_next_turn|idle_response_items_include_pending_mailbox_in_first_request|queued_inter_agent_mail_does_not_restart_after_final_answer|idle_eviction_preserves_worker_context_for_followup|evicted_role_subagent_uses_root_service_tier_after_reload/)",
+        "codex-thread-store": "test(persisted_input)",
+        "codex-app-server-protocol": "test(schema_fixtures_tests::)",
+        "codex-app-server": "test(/v2::execution_control::|assigned_forks_inherit_projects_for_persistent_and_ephemeral_children|project_import_is_atomic_and_notifies_after_commit_in_order/)",
+    },
 }
 
 

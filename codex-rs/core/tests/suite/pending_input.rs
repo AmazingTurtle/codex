@@ -25,6 +25,7 @@ use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::MessagePhase;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -1157,6 +1158,7 @@ async fn queued_inter_agent_mail_triggers_follow_up_after_commentary_message_ite
 #[test_case(" \n\t"; "whitespace_final")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn queued_inter_agent_mail_does_not_restart_after_final_answer(final_answer: &str) {
+    let (gate_completed_tx, gate_completed_rx) = oneshot::channel();
     let first_chunks = vec![
         chunk(ev_response_created("resp-1")),
         chunk(ev_message_item_added("msg-1", "")),
@@ -1171,7 +1173,7 @@ async fn queued_inter_agent_mail_does_not_restart_after_final_answer(final_answe
                 "phase": "final_answer",
             }
         })),
-        chunk(ev_completed("resp-1")),
+        gated_chunk(gate_completed_rx, vec![ev_completed("resp-1")]),
     ];
 
     let (server, _completions) = start_streaming_sse_server(vec![
@@ -1181,8 +1183,19 @@ async fn queued_inter_agent_mail_does_not_restart_after_final_answer(final_answe
     .await;
     let codex = build_codex(&server).await;
 
-    submit_queue_only_agent_mail(&codex, "queued child update").await;
     submit_user_input(&codex, "first prompt").await;
+    wait_for_event(&codex, |event| {
+        matches!(event, EventMsg::ItemCompleted(completed)
+            if matches!(&completed.item, TurnItem::AgentMessage(message)
+                if message.phase == Some(MessagePhase::FinalAnswer)))
+    })
+    .await;
+    // This report arrives after the terminal answer, while response completion
+    // is still held. Its FIFO fence proves delivery before the stream finishes.
+    submit_queue_only_agent_mail(&codex, "queued child update").await;
+    gate_completed_tx
+        .send(())
+        .expect("release response completion after late mail");
     wait_for_turn_complete(&codex).await;
 
     let mut requests = server.requests().await;

@@ -25,6 +25,9 @@ pub enum SpawnAgentForkMode {
 
 #[derive(Clone, Debug, Default)]
 pub struct SpawnAgentOptions {
+    /// Cancels waiting for tree admission. Once membership is admitted, native
+    /// spawn ownership runs through acceptance independently of this token.
+    pub admission_cancellation: Option<tokio_util::sync::CancellationToken>,
     pub fork_parent_spawn_call_id: Option<String>,
     pub fork_mode: Option<SpawnAgentForkMode>,
     pub parent_thread_id: Option<ThreadId>,

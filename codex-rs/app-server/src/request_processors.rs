@@ -603,6 +603,7 @@ pub(crate) use command_exec_processor::CommandExecRequestProcessor;
 pub(crate) use config_processor::ConfigRequestProcessor;
 pub(crate) use diagnostics::read_server_diagnostics;
 pub(crate) use environment_processor::EnvironmentRequestProcessor;
+pub(crate) use execution_control::ExecutionControlRequestProcessor;
 pub(crate) use feedback_processor::FeedbackRequestProcessor;
 pub(crate) use fs_processor::FsRequestProcessor;
 pub(crate) use git_processor::GitRequestProcessor;
@@ -723,6 +724,7 @@ fn resolve_runtime_workspace_roots(workspace_roots: Vec<AbsolutePathBuf>) -> Vec
 }
 
 pub(crate) mod config_errors;
+mod execution_control;
 mod request_errors;
 mod thread_delete;
 mod thread_goal_processor;

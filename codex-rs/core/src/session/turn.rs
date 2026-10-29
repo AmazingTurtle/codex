@@ -178,6 +178,11 @@ pub(crate) async fn run_turn(
     prewarmed_client_session: Option<ModelClientSession>,
     cancellation_token: CancellationToken,
 ) -> CodexResult<Option<String>> {
+    let protected_input = sess
+        .services
+        .thread_extension_data
+        .get::<crate::guardian::PendingReviewContext>()
+        .map(|_| input.clone());
     let auto_compaction_enabled = sess
         .services
         .thread_extension_data
@@ -382,16 +387,29 @@ pub(crate) async fn run_turn(
         )
         .await?;
     }
-    let mut can_drain_pending_input = input.is_empty();
-    if run_hooks_and_record_inputs(
+    let mut can_drain_pending_input = input.is_empty()
+        || (protected_input.is_none()
+            && input
+                .iter()
+                .all(|item| matches!(item, TurnInput::InterAgentCommunication(_))));
+    let blocked_input = run_hooks_and_record_inputs(
         &sess,
         &turn_context,
         &first_step_context.settings.model_info,
         &input,
         PersistContext::TurnStart,
     )
-    .await
-    {
+    .await;
+    if let Some(original) = protected_input {
+        if blocked_input {
+            for input in original {
+                sess.discard_rejected_input(&input).await?;
+            }
+        } else {
+            sess.acknowledge_recorded_input(&original).await?;
+        }
+    }
+    if blocked_input {
         return Ok(None);
     }
 
@@ -470,6 +488,8 @@ pub(crate) async fn run_turn(
     let mut next_step_context = Some(first_step_context);
     let mut guardian_budget_compacted = false;
     loop {
+        sess.wait_until_running(&cancellation_token).await?;
+        sess.drain_paused_signals().await?;
         // Note that pending_input would be something like a message the user
         // submitted through the UI while the model was running. Though the UI
         // may support this, the model might not.
@@ -971,6 +991,9 @@ pub(crate) async fn run_hooks_and_record_inputs(
         if hook_outcome.should_stop {
             blocked_input = true;
             record_additional_contexts(sess, turn_context, hook_outcome.additional_contexts).await;
+            if let Err(error) = sess.discard_rejected_input(input_item).await {
+                tracing::error!(%error, "failed to discard rejected durable input");
+            }
         } else {
             if let TurnInput::UserInput { content, .. } = input_item {
                 // Prompt telemetry can contain the full text, so emit it only after hooks accept it.
@@ -997,6 +1020,9 @@ pub(crate) async fn run_hooks_and_record_inputs(
             )
             .await;
         }
+    }
+    if let Err(error) = sess.acknowledge_recorded_input(input).await {
+        tracing::error!(%error, "failed to acknowledge durable paused input");
     }
     blocked_input && !accepted_user_input
 }
@@ -2253,6 +2279,7 @@ pub(super) fn realtime_text_for_event(msg: &EventMsg) -> Option<RealtimeEventTex
         | EventMsg::ThreadRolledBack(_)
         | EventMsg::TurnStarted(_)
         | EventMsg::ThreadSettingsApplied(_)
+        | EventMsg::ExecutionControlChanged(_)
         | EventMsg::TurnComplete(_)
         | EventMsg::TokenCount(_)
         | EventMsg::UserMessage(_)
@@ -2619,6 +2646,16 @@ async fn drain_in_flight(
                     vec![envelope],
                 )
                 .await;
+                if sess
+                    .services
+                    .local_agent_runtime
+                    .execution_control
+                    .is_paused()
+                {
+                    sess.flush_rollout()
+                        .await
+                        .map_err(|error| CodexErr::Fatal(error.to_string()))?;
+                }
             }
             Err(err) => {
                 error_or_panic(format!("in-flight tool future failed during drain: {err}"));
@@ -2742,7 +2779,13 @@ async fn try_run_sampling_request(
     let mut request_token_usage = None;
     sess.set_server_reasoning_included(step_context.settings.model_info.use_responses_lite)
         .await;
-    let mut stream = match client_session
+    let inference = sess
+        .services
+        .local_agent_runtime
+        .execution_control
+        .inference(&cancellation_token)
+        .await?;
+    let stream_request = client_session
         .stream(
             prompt,
             &step_context.settings.model_info,
@@ -2754,9 +2797,16 @@ async fn try_run_sampling_request(
             &inference_trace,
         )
         .instrument(trace_span!("stream_request"))
-        .or_cancel(&cancellation_token)
-        .await?
-    {
+        .or_cancel(&cancellation_token);
+    let opened = tokio::select! {
+        biased;
+        _ = inference.paused() => return Ok(SamplingRequestResult {
+            needs_follow_up: true,
+            last_agent_message: None,
+        }),
+        opened = stream_request => opened?,
+    };
+    let mut stream = match opened {
         Ok(stream) => stream,
         Err(error) => {
             if let Some(finish_post_request) = finish_post_request {
@@ -2818,12 +2868,26 @@ async fn try_run_sampling_request(
             codex.usage.total_tokens = field::Empty,
         );
 
-        let event = stream
-            .next()
-            .instrument(trace_span!(parent: &handle_responses, "receiving"))
-            .or_cancel(&preempt)
-            .or_cancel(&cancellation_token)
-            .await;
+        let event = {
+            let receive = stream
+                .next()
+                .instrument(trace_span!(parent: &handle_responses, "receiving"))
+                .or_cancel(&preempt)
+                .or_cancel(&cancellation_token);
+            let event = tokio::select! {
+                biased;
+                _ = inference.paused() => None,
+                event = receive => Some(event),
+            };
+            event
+        };
+        let Some(event) = event else {
+            drop(stream);
+            break Ok(SamplingRequestResult {
+                needs_follow_up: true,
+                last_agent_message,
+            });
+        };
         // Account for an already-received terminal error even if cancellation raced it.
         // Cancellation still stops ordinary stream events before they can run tools.
         let event = match event {
@@ -3397,6 +3461,9 @@ async fn try_run_sampling_request(
     drop(sampling_span);
     drop(sampling_timing_guard);
     drop(wake_sampling_guard);
+    // Producers and approval waiters can outlive inference. Pausing waits for the
+    // stream to close, without cancelling or waiting for those independent futures.
+    drop(inference);
     if let Some(finish_post_request) = finish_post_request {
         let (status, error) = match (response_completed, &outcome) {
             (true, _) => (ModelRequestStatus::Completed, None),

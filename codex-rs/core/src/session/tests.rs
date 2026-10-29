@@ -6778,6 +6778,19 @@ async fn responses_metadata_uses_selected_harness_analytics_client() {
     }
 }
 
+async fn initialize_test_execution_control(session: &Session, config: &Config) {
+    let control = &session.services.local_agent_runtime.execution_control;
+    let root = session.services.agent_control.identity().into();
+    if config.ephemeral {
+        control.initialize_ephemeral(root).await;
+    } else {
+        control
+            .initialize(config.codex_home.as_path(), root)
+            .await
+            .expect("initialize test conversation execution control");
+    }
+}
+
 // todo: use online model info
 pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
     let (tx_event, _rx_event) = async_channel::unbounded();
@@ -7039,6 +7052,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         forked_from_ordinal_exclusive: None,
         next_internal_sub_id: AtomicU64::new(0),
     };
+    initialize_test_execution_control(&session, &config).await;
     let per_turn_config = session.build_per_turn_config(
         &session_configuration,
         resolved_turn_environments.local_selection(),
@@ -9330,6 +9344,7 @@ where
         forked_from_ordinal_exclusive: None,
         next_internal_sub_id: AtomicU64::new(0),
     });
+    initialize_test_execution_control(&session, &config).await;
     let per_turn_config = session.build_per_turn_config(
         &session_configuration,
         resolved_turn_environments.local_selection(),
@@ -12909,10 +12924,53 @@ async fn trigger_turn_mailbox_mail_waits_for_next_turn_after_answer_boundary() {
 #[test_case(Some("root-a"); "inherited root")]
 #[tokio::test]
 async fn active_turn_keeps_first_root_when_mail_coalesces(inherited_root: Option<&str>) {
+    type CapturedInput = (Vec<TurnInput>, codex_history::TurnAttribution);
+
+    struct InputCaptureTask {
+        captured: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<CapturedInput>>>,
+    }
+
+    impl SessionTask for InputCaptureTask {
+        fn kind(&self) -> TaskKind {
+            TaskKind::Regular
+        }
+
+        fn span_name(&self) -> &'static str {
+            "session_task.input_capture"
+        }
+
+        async fn run(
+            self: Arc<Self>,
+            _session: Arc<Session>,
+            ctx: Arc<TurnContext>,
+            input: Vec<TurnInput>,
+            cancellation_token: CancellationToken,
+        ) -> SessionTaskResult {
+            self.captured
+                .lock()
+                .await
+                .take()
+                .expect("task should capture its input once")
+                .send((input, ctx.attribution()))
+                .expect("test should receive the initial task input");
+            cancellation_token.cancelled().await;
+            Ok(None)
+        }
+    }
+
     let (sess, tc, _rx) = make_session_and_context_with_rx().await;
     if let Some(root) = inherited_root {
         tc.turn_metadata_state.set_root_turn_id(root.to_string());
     }
+    tc.turn_metadata_state
+        .set_parent_turn_id("original-parent".to_string());
+    tc.turn_metadata_state.set_initiating_agent_path(
+        AgentPath::try_from("/root/original").expect("original path should parse"),
+    );
+    let mut expected_attribution = tc.attribution();
+    expected_attribution.root_turn_id = Some(inherited_root.unwrap_or(&tc.sub_id).to_string());
+    let (captured_tx, captured_rx) = tokio::sync::oneshot::channel();
+    let mut captured_tx = Some(captured_tx);
     let first = InterAgentCommunication::new(
         AgentPath::try_from("/root/worker_a").expect("worker path should parse"),
         AgentPath::root(),
@@ -12934,12 +12992,14 @@ async fn active_turn_keeps_first_root_when_mail_coalesces(inherited_root: Option
     .into_iter()
     .enumerate()
     {
+        let initiating_agent_path = communication.author.clone();
         sess.input_queue
             .enqueue_mailbox_communication(
                 communication.into(),
                 codex_protocol::turn_input::TurnStartOptions {
                     parent_turn_id: Some(parent_turn_id.to_string()),
                     root_turn_id: Some(root_turn_id.to_string()),
+                    initiating_agent_path: Some(initiating_agent_path),
                     ..Default::default()
                 },
             )
@@ -12950,22 +13010,30 @@ async fn active_turn_keeps_first_root_when_mail_coalesces(inherited_root: Option
             sess.spawn_task(
                 Arc::clone(&tc),
                 Vec::new(),
-                NeverEndingTask {
-                    kind: TaskKind::Regular,
-                    listen_to_cancellation_token: true,
+                InputCaptureTask {
+                    captured: tokio::sync::Mutex::new(captured_tx.take()),
                 },
             )
             .await;
         }
     }
 
+    let captured = tokio::time::timeout(Duration::from_secs(5), captured_rx)
+        .await
+        .expect("task should start")
+        .expect("task should capture its input");
+    assert_eq!(
+        captured,
+        (
+            vec![TurnInput::InterAgentCommunication(first.into())],
+            expected_attribution.clone(),
+        )
+    );
     assert_eq!(
         (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
-        vec![
-            TurnInput::InterAgentCommunication(first.into()),
-            TurnInput::InterAgentCommunication(second.into()),
-        ]
+        vec![TurnInput::InterAgentCommunication(second.into())]
     );
+    assert_eq!(tc.attribution(), expected_attribution);
     assert_eq!(
         tc.turn_metadata_state.root_turn_id().as_deref(),
         Some(inherited_root.unwrap_or(&tc.sub_id))

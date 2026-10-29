@@ -329,7 +329,7 @@ impl LocalAgentControl {
         thread_id: ThreadId,
         parent: Option<Arc<CodexThread>>,
     ) -> CodexResult<Option<tokio::sync::OwnedRwLockReadGuard<()>>> {
-        let membership = self.runtime.admit_start()?;
+        let inspection = self.runtime.track_tree_member()?;
         let state = self.runtime.upgrade()?;
         let owner_thread_id = parent.as_ref().map(|parent| parent.session.thread_id);
         if let Some(parent) = &parent {
@@ -413,6 +413,8 @@ impl LocalAgentControl {
                 return self.runtime.pin_v2_residency(&state, &thread).await;
             }
         }
+        let membership = self.runtime.admit_start()?;
+        drop(inspection);
         let parent = if let Some(parent) = parent {
             let turn = parent
                 .session
@@ -728,7 +730,21 @@ impl LocalAgentControl {
         session_source: Option<SessionSource>,
         options: SpawnAgentOptions,
     ) -> CodexResult<(LiveAgent, ThreadConfigSnapshot)> {
-        let membership = self.runtime.admit_start()?;
+        let admission_cancellation = options.admission_cancellation.clone().unwrap_or_default();
+        let membership = loop {
+            tokio::select! {
+                biased;
+                _ = admission_cancellation.cancelled() => return Err(CodexErr::TurnAborted),
+                result = self.runtime.execution_control.wait_until_running(&self.runtime.shutdown) => result?,
+            }
+            if admission_cancellation.is_cancelled() {
+                return Err(CodexErr::TurnAborted);
+            }
+            match self.runtime.admit_start() {
+                Err(_) if self.runtime.execution_control.is_paused() => continue,
+                result => break result?,
+            }
+        };
         let spawn_started_at = Instant::now();
         let state = self.runtime.upgrade()?;
         // Resolve the parent before inheriting settings or copying attachments.

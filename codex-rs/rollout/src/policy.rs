@@ -159,6 +159,7 @@ fn persisted_event_msg(
 
         // Transient, non-durable events.
         EventMsg::Error(_)
+        | EventMsg::ExecutionControlChanged(_)
         | EventMsg::ThreadQueueChanged(_)
         | EventMsg::GuardianAssessment(_)
         | EventMsg::ExecCommandEnd(_)

@@ -1,4 +1,6 @@
 use super::*;
+#[path = "control_pause_tests.rs"]
+mod pause;
 use crate::CodexThread;
 use crate::StateDbHandle;
 use crate::ThreadManager;
@@ -284,6 +286,20 @@ impl AgentControlHarness {
             state_db.clone(),
         );
         let control = manager.agent_control();
+        if config.ephemeral {
+            control
+                .runtime
+                .execution_control
+                .initialize_ephemeral(control.session_id().into())
+                .await;
+        } else {
+            control
+                .runtime
+                .execution_control
+                .initialize(config.codex_home.as_path(), control.session_id().into())
+                .await
+                .expect("initialize harness conversation execution control");
+        }
         Self {
             _home: home,
             config,
@@ -1024,13 +1040,14 @@ async fn send_input_submits_user_message() {
 async fn send_inter_agent_communication_without_turn_queues_message_without_triggering_turn() {
     let harness = AgentControlHarness::new().await;
     let (thread_id, thread) = harness.start_thread().await;
-    let communication = InterAgentCommunication::new(
+    let mut communication = InterAgentCommunication::new(
         AgentPath::root(),
         AgentPath::try_from("/root/worker").expect("agent path"),
         Vec::new(),
         "hello from tests".to_string(),
         /*trigger_turn*/ false,
     );
+    communication.id = Some(ResponseItemId::from_server("queued-test-mail".to_owned()));
 
     let submission_id = harness
         .control
@@ -1168,13 +1185,14 @@ async fn cancelled_v2_send_finishes_reload_registration() {
     drop(send);
     drop(pin_blocker);
 
-    assert_eq!(
-        timeout(Duration::from_secs(5), created.recv())
-            .await
-            .expect("cancelled sender must not cancel reload registration")
-            .unwrap(),
-        child_id,
-    );
+    let registration_released = timeout(Duration::from_secs(5), async {
+        assert_eq!(created.recv().await.unwrap(), child_id);
+        // Publication precedes returning the registration task's residency pin.
+        // Acquire the lease before asserting that eviction can proceed.
+        Arc::clone(&reloaded.residency_gate).write_owned().await
+    })
+    .await
+    .expect("cancelled sender must finish registration and release its residency pin");
     assert!(
         control
             .runtime
@@ -1182,6 +1200,7 @@ async fn cancelled_v2_send_finishes_reload_registration() {
             .evicted_environments(child_id)
             .is_none()
     );
+    drop(registration_released);
     // Evict and reload again with the single child slot. This also catches a leaked
     // pin or pending residency reservation left behind by the cancelled sender.
     assert_eq!(
@@ -1193,6 +1212,31 @@ async fn cancelled_v2_send_finishes_reload_registration() {
         .await
         .expect("follow-up should reload the same child after cancellation");
     assert_eq!(receipt.thread_id, child_id);
+    let delivery_ids = control
+        .runtime
+        .execution_control
+        .pending_input_ids(child_id)
+        .await;
+    let [codex_thread_store::PersistedInputId::ResponseItem(delivery_id)] = delivery_ids.as_slice()
+    else {
+        panic!(
+            "the accepted follow-up must retain exactly one durable message receipt: {delivery_ids:?}"
+        );
+    };
+    uuid::Uuid::parse_str(
+        delivery_id
+            .strip_prefix("amsg_")
+            .expect("controller assigns a stable agent-message ID"),
+    )
+    .expect("agent-message receipt has a UUID suffix");
+    let mut expected_message = InterAgentCommunication::new(
+        AgentPath::root(),
+        child.metadata.agent_path.unwrap(),
+        Vec::new(),
+        "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\nfollow-up after cancellation".to_string(),
+        /*trigger_turn*/ true,
+    );
+    expected_message.id = Some(delivery_id.clone());
     let messages: Vec<_> = harness
         .manager
         .captured_ops()
@@ -1204,16 +1248,7 @@ async fn cancelled_v2_send_finishes_reload_registration() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        messages,
-        vec![InterAgentCommunication::new(
-            AgentPath::root(),
-            child.metadata.agent_path.unwrap(),
-            Vec::new(),
-            "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\nfollow-up after cancellation".to_string(),
-            /*trigger_turn*/ true,
-        )],
-    );
+    assert_eq!(messages, vec![expected_message],);
 }
 
 #[derive(Clone, Copy)]
@@ -1482,13 +1517,14 @@ async fn check_v2_agent_reload(route: V2ReloadRoute) {
         "residency reload must preserve the worker provider instead of inheriting its sender's provider",
     );
 
-    let communication = InterAgentCommunication::new(
+    let mut communication = InterAgentCommunication::new(
         AgentPath::root(),
         agent_path,
         Vec::new(),
         "hello after reload".to_string(),
         /*trigger_turn*/ false,
     );
+    communication.id = Some(ResponseItemId::from_server("reloaded-test-mail".to_owned()));
     control
         .send_inter_agent_communication(
             spawned_agent.thread_id,
@@ -4625,7 +4661,7 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
         &AgentStatus::Completed(Some("done".to_string())),
     )
     .expect("completed status should render");
-    let expected = (
+    let mut expected = (
         worker_thread_id,
         Op::InterAgentCommunication {
             communication: InterAgentCommunication::new(
@@ -4641,12 +4677,33 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
 
     timeout(Duration::from_secs(5), async {
         loop {
+            let ids = harness
+                .control
+                .runtime
+                .execution_control
+                .pending_input_ids(worker_thread_id)
+                .await;
+            let receipt_ready =
+                if let [codex_thread_store::PersistedInputId::ResponseItem(id)] = ids.as_slice() {
+                    uuid::Uuid::parse_str(
+                        id.strip_prefix("amsg_")
+                            .expect("completion assigns a stable agent-message ID"),
+                    )
+                    .expect("completion receipt has a UUID suffix");
+                    let Op::InterAgentCommunication { communication, .. } = &mut expected.1 else {
+                        unreachable!();
+                    };
+                    communication.id = Some(id.clone());
+                    true
+                } else {
+                    false
+                };
             let captured = harness
                 .manager
                 .captured_ops()
                 .into_iter()
                 .find(|entry| captured_op_matches(entry, &expected));
-            if captured.is_some() {
+            if receipt_ready && captured.is_some() {
                 break;
             }
             sleep(Duration::from_millis(10)).await;

@@ -406,6 +406,7 @@ impl ChatWidget {
             | ServerNotification::FuzzyFileSearchSessionUpdated(_)
             | ServerNotification::FuzzyFileSearchSessionCompleted(_)
             | ServerNotification::ThreadRealtimeItemAdded(_)
+            | ServerNotification::ThreadExecutionControlChanged(_)
             | ServerNotification::ThreadRealtimeItemStarted(_)
             | ServerNotification::ThreadRealtimeItemTranscriptDelta(_)
             | ServerNotification::ThreadRealtimeItemCompleted(_)

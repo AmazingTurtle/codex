@@ -696,6 +696,8 @@ impl TurnRequestProcessor {
             TurnInputSubmission::NotSubmitted { reason } => {
                 let error = if reason == NotSubmittedReason::ServerDraining {
                     crate::error_code::server_draining_error()
+                } else if reason == NotSubmittedReason::ConversationPaused {
+                    crate::error_code::conversation_paused_error()
                 } else {
                     internal_error(format!("failed to submit turn input: {reason:?}"))
                 };
@@ -1112,6 +1114,9 @@ impl TurnRequestProcessor {
                 let (message, data, error_type) = match reason {
                     NotSubmittedReason::ServerDraining => {
                         return Err(crate::error_code::server_draining_error());
+                    }
+                    NotSubmittedReason::ConversationPaused => {
+                        return Err(crate::error_code::conversation_paused_error());
                     }
                     NotSubmittedReason::NoActiveTurn | NotSubmittedReason::NotIdle => (
                         "no active turn to steer".to_string(),

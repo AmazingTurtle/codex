@@ -664,6 +664,12 @@ pub enum Op {
     /// This server sends [`EventMsg::TurnAborted`] in response.
     Interrupt,
 
+    /// Pause inference throughout the owning independent conversation tree.
+    Pause,
+
+    /// Resume inference throughout the owning independent conversation tree.
+    Unpause,
+
     /// Interrupt the named turn only if no input is queued for it.
     /// The decision is acknowledged before cancellation finishes.
     #[debug("InterruptIfNoPendingInput {{ turn_id: {turn_id:?} }}")]
@@ -1049,6 +1055,8 @@ impl Op {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Interrupt => "interrupt",
+            Self::Pause => "pause",
+            Self::Unpause => "unpause",
             Self::InterruptIfNoPendingInput { .. } => "interrupt_if_no_pending_input",
             Self::CleanBackgroundTerminals => "clean_background_terminals",
             Self::RealtimeConversationStart(_) => "realtime_conversation_start",
@@ -1474,6 +1482,9 @@ pub struct EnvironmentConnectionEvent {
 #[ts(tag = "type")]
 #[strum(serialize_all = "snake_case")]
 pub enum EventMsg {
+    /// The independent conversation tree's inference gate changed.
+    ExecutionControlChanged(ExecutionControlChangedEvent),
+
     /// Error while executing a submission
     Error(ErrorEvent),
 
@@ -2055,6 +2066,22 @@ impl CodexErrorInfo {
 #[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
 pub struct RawResponseItemEvent {
     pub item: ResponseItem,
+}
+
+/// Inference state shared by an independent conversation and its owned workers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ExecutionControlState {
+    Running,
+    Pausing,
+    Paused,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+pub struct ExecutionControlChangedEvent {
+    pub root_thread_id: ThreadId,
+    pub state: ExecutionControlState,
 }
 
 /// Observer events that a private session forwards without modifying its parent's history.

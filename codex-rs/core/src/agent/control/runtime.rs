@@ -201,6 +201,7 @@ pub(crate) struct LocalAgentRuntime {
     pub(super) mailboxes: Arc<super::mailbox::Mailboxes>,
     /// Shared by every session in this tree, including private delegates.
     pub(crate) shutdown: CancellationToken,
+    pub(crate) execution_control: Arc<crate::execution_control::TreeExecutionControl>,
     shutdown_state: Arc<AgentTreeShutdownState>,
 }
 
@@ -217,6 +218,7 @@ impl LocalAgentRuntime {
             residency: Arc::default(),
             mailboxes: Arc::default(),
             shutdown: CancellationToken::new(),
+            execution_control: Arc::default(),
             shutdown_state: Arc::default(),
             agent_execution_limiter: Arc::default(),
             rollout_budget: Arc::default(),
@@ -273,6 +275,14 @@ impl AgentControlInit {
 
 impl LocalAgentRuntime {
     pub(crate) fn admit_start(&self) -> CodexResult<AgentTreeMembership> {
+        if self.execution_control.is_paused() {
+            return Err(CodexErr::InvalidRequest("conversation is paused".into()));
+        }
+        self.track_tree_member()
+    }
+
+    /// Tracks tree work through teardown without admitting new agent execution.
+    pub(crate) fn track_tree_member(&self) -> CodexResult<AgentTreeMembership> {
         if self.shutdown_state.members.is_closed() {
             return Err(
                 CodexErr::InvalidRequest("agent runtime is shutting down".to_owned())

@@ -1926,11 +1926,24 @@ async fn async_hook_finishing_while_idle_waits_for_the_next_turn(
         .await
         .context("timed out waiting for the async hook to finish")?;
 
+    // The completed turn may still publish its running-state activity edge.
+    // Every other event remains forbidden while the hook's output is buffered.
+    let idle_event = timeout(Duration::from_millis(150), async {
+        loop {
+            let event = test.codex.next_event().await?;
+            if matches!(&event.msg, EventMsg::ExecutionControlChanged(change)
+                if change.root_thread_id == test.session_configured.thread_id
+                    && change.state == codex_protocol::protocol::ExecutionControlState::Running)
+            {
+                continue;
+            }
+            return Ok::<_, codex_protocol::error::CodexErr>(event);
+        }
+    })
+    .await;
     assert!(
-        timeout(Duration::from_millis(150), test.codex.next_event())
-            .await
-            .is_err(),
-        "an async hook result from the previous turn must not emit warnings or raw response items"
+        idle_event.is_err(),
+        "an async hook result from the previous turn must not emit warnings or raw response items: {idle_event:?}"
     );
 
     assert_eq!(

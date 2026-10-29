@@ -312,6 +312,17 @@ pub(super) async fn ensure_listener_task_running(
         if let ListenerStart::AfterLifecycle(ready) = listener_start {
             let _ = ready.await;
         }
+        // Attaching or reconnecting clients need the current capability even
+        // when no execution transition occurs after the subscription.
+        let mut execution_snapshot = None;
+        super::execution_control::notify(
+            conversation_id,
+            &conversation,
+            &outgoing_for_task,
+            &thread_state_manager,
+            &mut execution_snapshot,
+        )
+        .await;
         loop {
             tokio::select! {
                 biased;
@@ -347,6 +358,7 @@ pub(super) async fn ensure_listener_task_running(
                             codex_app_server_protocol::ThreadWakeStateChangedNotification {
                                 thread_id: conversation_id.to_string(), wake_state,
                             })).await;
+                    super::execution_control::notify(conversation_id,&conversation,&outgoing_for_task,&thread_state_manager,&mut execution_snapshot).await;
                 }
                 event = conversation.next_event() => {
                     let event = match event {
@@ -356,6 +368,11 @@ pub(super) async fn ensure_listener_task_running(
                             break;
                         }
                     };
+
+                    if matches!(&event.msg,EventMsg::ExecutionControlChanged(_)) {
+                        super::execution_control::notify(conversation_id,&conversation,&outgoing_for_task,&thread_state_manager,&mut execution_snapshot).await;
+                        continue;
+                    }
 
                     if let Some(worker) = &turn_cost_worker {
                         worker.observe_event(

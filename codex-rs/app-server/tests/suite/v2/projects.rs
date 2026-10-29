@@ -29,6 +29,7 @@ use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::SortDirection;
 use codex_app_server_protocol::ThreadArchiveParams;
 use codex_app_server_protocol::ThreadArchiveResponse;
+use codex_app_server_protocol::ThreadExecutionControlChangedNotification;
 use codex_app_server_protocol::ThreadForkParams;
 use codex_app_server_protocol::ThreadForkResponse;
 use codex_app_server_protocol::ThreadHistoryMode;
@@ -44,13 +45,78 @@ use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
+use codex_app_server_protocol::TurnCompletedNotification;
 use codex_app_server_protocol::TurnStartParams;
+use codex_app_server_protocol::TurnStartResponse;
+use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::UserInput;
 use codex_features::Feature;
+use codex_protocol::protocol::ExecutionControlState;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use core_test_support::responses;
+use core_test_support::streaming_sse::StreamingSseChunk;
+use core_test_support::streaming_sse::start_streaming_sse_server;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use uuid::Uuid;
+
+/// Fence the previous turn's activity notifications before checking raw RPC
+/// ordering. A held provider response makes its busy edge observable, so an
+/// initial idle snapshot cannot satisfy the final settlement barrier.
+async fn persist_thread_and_wait_for_settlement(
+    server: &mut TestAppServer,
+    thread_id: &str,
+    release_response: tokio::sync::oneshot::Sender<()>,
+) -> Result<()> {
+    tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 10), async {
+        let request = server
+            .send_turn_start_request(TurnStartParams {
+                thread_id: thread_id.to_string(),
+                input: vec![UserInput::Text {
+                    text: "persist this thread".to_string(),
+                    text_elements: Vec::new(),
+                }],
+                ..Default::default()
+            })
+            .await?;
+        let started: TurnStartResponse = server.read_response(request).await?;
+        loop {
+            let activity: ThreadExecutionControlChangedNotification = server
+                .read_notification("thread/executionControl/changed")
+                .await?;
+            if activity.thread_id == thread_id
+                && activity.execution_control.state == ExecutionControlState::Running
+                && activity.execution_control.can_pause
+            {
+                break;
+            }
+        }
+        release_response
+            .send(())
+            .expect("release the observed active persistence turn");
+        loop {
+            let completed: TurnCompletedNotification =
+                server.read_notification("turn/completed").await?;
+            if completed.thread_id == thread_id && completed.turn.id == started.turn.id {
+                assert_eq!(completed.turn.status, TurnStatus::Completed);
+                break;
+            }
+        }
+        loop {
+            let activity: ThreadExecutionControlChangedNotification = server
+                .read_notification("thread/executionControl/changed")
+                .await?;
+            if activity.thread_id == thread_id
+                && activity.execution_control.state == ExecutionControlState::Running
+                && !activity.execution_control.can_pause
+            {
+                break;
+            }
+        }
+        Ok(())
+    })
+    .await?
+}
 
 #[tokio::test]
 async fn projects_list_by_recency_and_preserve_metadata_timestamps() -> Result<()> {
@@ -745,9 +811,23 @@ async fn deleted_project_is_dropped_before_first_durable_thread_persistence() ->
 
 #[tokio::test]
 async fn project_import_is_atomic_and_notifies_after_commit_in_order() -> Result<()> {
-    let responses = create_mock_responses_server_repeating_assistant("Done").await;
+    let (release, gate) = tokio::sync::oneshot::channel();
+    let (responses, _) = start_streaming_sse_server(vec![vec![
+        StreamingSseChunk {
+            gate: None,
+            body: responses::sse(vec![responses::ev_response_created("persist-project")]),
+        },
+        StreamingSseChunk {
+            gate: Some(gate),
+            body: responses::sse(vec![
+                responses::ev_assistant_message("persist-result", "Done"),
+                responses::ev_completed("persist-project"),
+            ]),
+        },
+    ]])
+    .await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
+    MockResponsesConfig::new(responses.uri())
         .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
@@ -757,16 +837,7 @@ async fn project_import_is_atomic_and_notifies_after_commit_in_order() -> Result
 
     let started = server.start_thread(ThreadStartParams::default()).await?;
     let _: serde_json::Value = server.read_notification("thread/started").await?;
-    server
-        .start_turn_and_wait_for_completion(TurnStartParams {
-            thread_id: started.thread.id.clone(),
-            input: vec![UserInput::Text {
-                text: "persist this thread".to_string(),
-                text_elements: Vec::new(),
-            }],
-            ..Default::default()
-        })
-        .await?;
+    persist_thread_and_wait_for_settlement(&mut server, &started.thread.id, release).await?;
     server.clear_message_buffer();
     let import_id = server
         .send_project_import_request(ProjectImportParams {
@@ -892,6 +963,8 @@ async fn project_import_is_atomic_and_notifies_after_commit_in_order() -> Result
         })
         .await?;
     assert_eq!(listed.data.len(), 1);
+    drop(server);
+    responses.shutdown().await;
     Ok(())
 }
 
@@ -1033,9 +1106,23 @@ async fn projects_validate_filters_cursors_and_sqlite_less_assignment() -> Resul
 
 #[tokio::test]
 async fn assigned_forks_inherit_projects_for_persistent_and_ephemeral_children() -> Result<()> {
-    let responses = create_mock_responses_server_repeating_assistant("Done").await;
+    let (release, gate) = tokio::sync::oneshot::channel();
+    let (responses, _) = start_streaming_sse_server(vec![vec![
+        StreamingSseChunk {
+            gate: None,
+            body: responses::sse(vec![responses::ev_response_created("persist-parent")]),
+        },
+        StreamingSseChunk {
+            gate: Some(gate),
+            body: responses::sse(vec![
+                responses::ev_assistant_message("persist-result", "Done"),
+                responses::ev_completed("persist-parent"),
+            ]),
+        },
+    ]])
+    .await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&responses.uri())
+    MockResponsesConfig::new(responses.uri())
         .enable_feature(Feature::Sqlite)
         .write(codex_home.path())?;
     let mut server = TestAppServer::builder()
@@ -1061,16 +1148,7 @@ async fn assigned_forks_inherit_projects_for_persistent_and_ephemeral_children()
         })
         .await?;
     let _: serde_json::Value = server.read_notification("thread/started").await?;
-    server
-        .start_turn_and_wait_for_completion(TurnStartParams {
-            thread_id: started.thread.id.clone(),
-            input: vec![UserInput::Text {
-                text: "persist this thread".to_string(),
-                text_elements: Vec::new(),
-            }],
-            ..Default::default()
-        })
-        .await?;
+    persist_thread_and_wait_for_settlement(&mut server, &started.thread.id, release).await?;
 
     server.clear_message_buffer();
     let fork_id = server
@@ -1105,5 +1183,7 @@ async fn assigned_forks_inherit_projects_for_persistent_and_ephemeral_children()
     assert_eq!(ephemeral_fork.thread.project_id, Some(project.project.id));
     assert!(ephemeral_fork.thread.ephemeral);
     assert!(ephemeral_fork.thread.path.is_none());
+    drop(server);
+    responses.shutdown().await;
     Ok(())
 }

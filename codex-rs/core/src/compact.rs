@@ -324,15 +324,29 @@ async fn run_compact_task_inner_impl(
         let responses_metadata = sess
             .compaction_responses_metadata(turn_context.as_ref(), compaction_metadata)
             .await;
-        let attempt_result = drain_to_completed(
+        let inference = sess
+            .services
+            .local_agent_runtime
+            .execution_control
+            .inference(&sess.services.local_agent_runtime.shutdown)
+            .await?;
+        let attempt = drain_to_completed(
             &sess,
             turn_context.as_ref(),
             &mut client_session,
             &responses_metadata,
             &prompt,
             compaction_metadata.phase(),
-        )
-        .await;
+        );
+        let attempt_result = tokio::select! {
+            biased;
+            _ = inference.paused() => None,
+            result = attempt => Some(result),
+        };
+        drop(inference);
+        let Some(attempt_result) = attempt_result else {
+            continue;
+        };
 
         match attempt_result {
             Ok(response) => {

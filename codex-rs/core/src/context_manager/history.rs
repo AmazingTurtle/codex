@@ -286,6 +286,10 @@ impl ContextManager {
         Arc::make_mut(&mut self.retained_context).reserve_order()
     }
 
+    pub(crate) fn advance_input_order_past(&mut self, order: u64) {
+        Arc::make_mut(&mut self.retained_context).advance_order_past(order);
+    }
+
     pub(crate) fn record_retained_context(&mut self, event: &RetainedContextEvent) -> bool {
         if !Arc::make_mut(&mut self.retained_context).record(event) {
             return false;

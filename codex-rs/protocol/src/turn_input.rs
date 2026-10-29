@@ -59,11 +59,20 @@ pub struct ResponseItemAnnotations {
 #[derive(Clone, Debug)]
 pub struct TurnInputRequest {
     pub input: TurnInput,
+    pub source: TurnInputSource,
     pub thread_settings: ThreadSettingsOverrides,
     pub start: TurnStartOptions,
     pub additional_context: BTreeMap<String, AdditionalContextEntry>,
     pub responsesapi_client_metadata: ResponsesApiClientMetadataUpdate,
     pub trace: Option<W3cTraceContext>,
+}
+
+/// Trusted caller provenance for input that can resume a paused conversation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TurnInputSource {
+    #[default]
+    User,
+    Agent,
 }
 
 /// An optional replacement followed by a patch to the turn's client metadata.
@@ -116,6 +125,7 @@ impl TurnInputRequest {
     pub fn new(input: TurnInput) -> Self {
         Self {
             input,
+            source: TurnInputSource::User,
             thread_settings: ThreadSettingsOverrides::default(),
             start: TurnStartOptions::default(),
             additional_context: BTreeMap::new(),
@@ -130,6 +140,12 @@ impl TurnInputRequest {
             content,
             client_id: None,
         })
+    }
+
+    /// Marks agent input so it cannot implicitly resume a paused conversation.
+    pub fn from_agent(mut self) -> Self {
+        self.source = TurnInputSource::Agent;
+        self
     }
 
     /// Persistent thread settings applied when Core accepts this input.
@@ -214,7 +230,7 @@ pub enum CyberAccessProgram {
 /// `final_output_json_schema` is a compatibility requirement: Core only
 /// accepts the steer if the active turn already uses the same schema. For
 /// child input, Core also compares root lineage to detect ambiguity.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TurnStartOptions {
     /// Source classification for this request. Recorded on new turns and captured
     /// as input provenance when steering, without changing the active turn's trigger.
@@ -290,6 +306,9 @@ pub enum NotSubmittedReason {
 
     /// The host is draining and no longer permits new regular turns.
     ServerDraining,
+
+    /// The owning conversation is paused; automatic admission can retry after resume.
+    ConversationPaused,
 
     /// `start_turn_if_idle` found an active turn.
     NotIdle,

@@ -131,8 +131,17 @@ impl Session {
             .acquire()
             .await
             .unwrap_or_else(|_| unreachable!("communication boundary remains open"));
+        let pending_order = self
+            .services
+            .local_agent_runtime
+            .execution_control
+            .max_pending_user_order(self.thread_id)
+            .await;
         let (order, pending) = {
             let mut state = self.state.lock().await;
+            if let Some(order) = pending_order {
+                state.history.advance_input_order_past(order);
+            }
             let order = state.history.reserve_input_order();
             (order, self.pending_code_mode_message_recordings())
         };

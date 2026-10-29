@@ -12,6 +12,11 @@ import tempfile
 def main():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     env = os.environ.copy()
+    # Cached test binaries can retain another worktree's workspace discovery.
+    # Set this only after Cargo launches tests so it does not change build inputs.
+    env.setdefault(
+        "INSTA_WORKSPACE_ROOT", str(Path(__file__).resolve().parents[2] / "codex-rs")
+    )
     # Binary lookup helpers must resolve the binary, not this Cargo runner.
     env.pop("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER", None)
     program = Path(sys.argv[1]).name

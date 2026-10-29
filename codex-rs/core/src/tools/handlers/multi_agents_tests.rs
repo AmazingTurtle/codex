@@ -1502,6 +1502,24 @@ async fn multi_agent_v2_list_agents_returns_completed_status() {
         .get_thread(agent_id)
         .await
         .expect("child thread should exist");
+    // Spawn acceptance precedes the initial turn's asynchronous event delivery.
+    // Publish the synthetic result only after that real lifecycle has started.
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if matches!(
+                child_thread
+                    .next_event()
+                    .await
+                    .expect("child event stream should stay open")
+                    .msg,
+                EventMsg::TurnStarted(_)
+            ) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("the accepted child turn should start");
     let child_turn = child_thread.session.new_default_turn().await;
     child_thread
         .session

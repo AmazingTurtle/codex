@@ -55,6 +55,10 @@ fn stores() -> &'static Mutex<HashMap<String, Arc<InMemoryThreadStore>>> {
 }
 
 #[cfg(test)]
+#[path = "in_memory_persisted_input_tests.rs"]
+mod persisted_input_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::ItemSortKey;
@@ -982,6 +986,33 @@ impl ThreadStore for InMemoryThreadStore {
         params: LoadThreadHistoryParams,
     ) -> ThreadStoreFuture<'_, StoredModelContext> {
         Box::pin(InMemoryThreadStore::load_latest_model_context(self, params))
+    }
+
+    fn find_persisted_input_ids(
+        &self,
+        params: crate::FindPersistedInputIdsParams,
+    ) -> ThreadStoreFuture<'_, std::collections::BTreeSet<crate::PersistedInputId>> {
+        Box::pin(async move {
+            let mut search = crate::persisted_input::PersistedInputSearch::new(params.ids)?;
+            if search.is_complete() {
+                return Ok(search.finish());
+            }
+            let state = self.state.lock().await;
+            let history =
+                state
+                    .histories
+                    .get(&params.thread_id)
+                    .ok_or(ThreadStoreError::ThreadNotFound {
+                        thread_id: params.thread_id,
+                    })?;
+            for item in history.iter().rev() {
+                search.observe(item);
+                if search.is_complete() {
+                    break;
+                }
+            }
+            Ok(search.finish())
+        })
     }
 
     fn read_thread(&self, params: ReadThreadParams) -> ThreadStoreFuture<'_, StoredThread> {

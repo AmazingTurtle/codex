@@ -548,6 +548,21 @@ client_request_definitions! {
 
     /// NEW APIs
     // Thread lifecycle
+    ThreadPause => "thread/pause" {
+        params: v2::ThreadPauseParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadPauseResponse,
+    },
+    ThreadUnpause => "thread/unpause" {
+        params: v2::ThreadUnpauseParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadUnpauseResponse,
+    },
+    ThreadExecutionControlRead => "thread/executionControl/read" {
+        params: v2::ThreadExecutionControlReadParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadExecutionControlReadResponse,
+    },
     // Uses `inspect_params` because only some fields are experimental.
     ThreadStart => "thread/start" {
         params: v2::ThreadStartParams,
@@ -2011,6 +2026,7 @@ server_notification_definitions! {
     Error => "error" (v2::ErrorNotification),
     ThreadStarted => "thread/started" (v2::ThreadStartedNotification),
     ThreadStatusChanged => "thread/status/changed" (v2::ThreadStatusChangedNotification),
+    ThreadExecutionControlChanged => "thread/executionControl/changed" (v2::ThreadExecutionControlChangedNotification),
     #[experimental("thread/readState/changed")]
     ThreadReadStateChanged => "thread/readState/changed" (v2::ThreadReadStateChangedNotification),
     ThreadWakeStateChanged => "thread/wakeState/changed" (v2::ThreadWakeStateChangedNotification),

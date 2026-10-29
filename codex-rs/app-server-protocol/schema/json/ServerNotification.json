@@ -1281,6 +1281,15 @@
       ],
       "type": "object"
     },
+    "ExecutionControlState": {
+      "description": "Inference state shared by an independent conversation and its owned workers.",
+      "enum": [
+        "running",
+        "pausing",
+        "paused"
+      ],
+      "type": "string"
+    },
     "ExternalAgentConfigImportCompletedNotification": {
       "properties": {
         "importId": {
@@ -4550,6 +4559,41 @@
       ],
       "type": "object"
     },
+    "ThreadExecutionControl": {
+      "properties": {
+        "canPause": {
+          "default": false,
+          "description": "Whether the owning tree currently has work that can be paused. Older servers that omit this capability are treated conservatively.",
+          "type": "boolean"
+        },
+        "rootThreadId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/ExecutionControlState"
+        }
+      },
+      "required": [
+        "rootThreadId",
+        "state"
+      ],
+      "type": "object"
+    },
+    "ThreadExecutionControlChangedNotification": {
+      "properties": {
+        "executionControl": {
+          "$ref": "#/definitions/ThreadExecutionControl"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "executionControl",
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadExtra": {
       "description": "Extra app-server data for a thread.",
       "type": "object"
@@ -7259,6 +7303,26 @@
         "params"
       ],
       "title": "Thread/status/changedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "thread/executionControl/changed"
+          ],
+          "title": "Thread/executionControl/changedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadExecutionControlChangedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Thread/executionControl/changedNotification",
       "type": "object"
     },
     {

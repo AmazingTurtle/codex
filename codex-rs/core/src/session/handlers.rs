@@ -86,9 +86,42 @@ pub async fn inter_agent_communication(
     start_options: codex_protocol::turn_input::TurnStartOptions,
 ) {
     let trigger_turn = communication.trigger_turn;
+    let signal = crate::execution_control::QueuedSignal::new(
+        sess.thread_id,
+        vec![super::TurnInput::InterAgentCommunication(communication)],
+    )
+    .on_start(start_options.clone());
+    let super::TurnInput::InterAgentCommunication(communication) = signal.input[0].clone() else {
+        unreachable!("agent communication signal keeps its input kind")
+    };
+    match sess
+        .services
+        .local_agent_runtime
+        .execution_control
+        .queue_if_paused(signal.clone())
+        .await
+    {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => {
+            tracing::error!(%error, "failed to preserve paused agent message");
+            return;
+        }
+    }
+    if let Err(error) = sess
+        .services
+        .local_agent_runtime
+        .execution_control
+        .retain_input(signal, crate::execution_control::SignalDelivery::Owned)
+        .await
+    {
+        tracing::error!(%error, "failed to persist agent message");
+        return;
+    }
     sess.input_queue
         .enqueue_mailbox_communication(communication, start_options)
         .await;
+    sess.refresh_execution_activity().await;
     crate::agent_communication::emit_agent_communication_receive(&sub_id);
     if trigger_turn
         || sess.features.enabled(Feature::WakeOnAgentMessages)
@@ -447,6 +480,15 @@ pub(super) async fn submission_loop(
 ) {
     // Session shutdown and tree shutdown both use the existing teardown handler.
     let mut shutdown_received = false;
+    if !sess
+        .services
+        .local_agent_runtime
+        .execution_control
+        .is_paused()
+        && let Err(error) = sess.drain_paused_signals().await
+    {
+        tracing::error!(%error, "failed to recover durable paused input");
+    }
     let mut mailbox = sess.input_queue.mailbox_updates();
     if let Some(updates) = &mut mailbox {
         updates.mark_changed();
@@ -497,6 +539,21 @@ pub(super) async fn submission_loop(
             match sub.op {
                 Op::Interrupt => {
                     interrupt(&sess).await;
+                    false
+                }
+                Op::Pause | Op::Unpause => {
+                    let result = if matches!(sub.op, Op::Pause) {
+                        sess.pause_execution().await
+                    } else {
+                        sess.unpause_execution().await
+                    };
+                    if let Err(error) = result {
+                        sess.send_event_raw(Event {
+                            id: sub.id,
+                            msg: EventMsg::Error(error.to_error_event(/*message_prefix*/ None)),
+                        })
+                        .await;
+                    }
                     false
                 }
                 Op::InterruptIfNoPendingInput { turn_id, reply } => {

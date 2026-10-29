@@ -13,6 +13,12 @@ pub(crate) fn server_draining_error() -> JSONRPCErrorError {
     error
 }
 
+pub(crate) fn conversation_paused_error() -> JSONRPCErrorError {
+    let mut error = invalid_request("Conversation is paused; retry after unpausing");
+    error.data = Some(serde_json::json!({ "reason": "conversationPaused" }));
+    error
+}
+
 pub(crate) fn invalid_request(message: impl Into<String>) -> JSONRPCErrorError {
     error(INVALID_REQUEST_ERROR_CODE, message)
 }

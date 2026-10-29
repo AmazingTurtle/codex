@@ -98,6 +98,7 @@ impl SessionTask for RegularTask {
             }
         };
         let mut next_input = input;
+        sess.include_resumed_input(&ctx, &mut next_input).await;
         let mut prewarmed_client_session = prewarmed_client_session;
         let mut mcp_startup_requirements = McpStartupRequirements::default();
         loop {
@@ -116,6 +117,9 @@ impl SessionTask for RegularTask {
             if ctx.terminal_error.lock().await.is_some() {
                 return Ok(last_agent_message);
             }
+            // More durable signals may remain after the bounded batch consumed by
+            // this request. Feed them to the same task before deciding it is idle.
+            sess.drain_paused_signals().await?;
             if !sess.input_queue.has_pending_input(&sess.active_turn).await {
                 return Ok(last_agent_message);
             }

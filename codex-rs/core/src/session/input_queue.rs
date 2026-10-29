@@ -212,6 +212,14 @@ impl InputQueue {
         let mut pending = self.mailbox_pending_mails.lock().await;
         // Mail retained while unloaded precedes new submissions to the loaded session.
         self.read_mailbox(&mut pending);
+        if communication.id.as_ref().is_some_and(|id| {
+            !id.is_empty()
+                && pending
+                    .iter()
+                    .any(|mail| mail.communication.id.as_ref() == Some(id))
+        }) {
+            return;
+        }
         pending.push_back(PendingMailboxCommunication {
             communication,
             start_options,

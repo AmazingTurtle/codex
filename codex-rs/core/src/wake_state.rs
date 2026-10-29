@@ -130,6 +130,19 @@ impl WakeTracker {
         *self.0.updates.borrow()
     }
 
+    pub(crate) fn has_pending_work(&self) -> bool {
+        let state = self
+            .0
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.turns != 0
+            || state.sampling != 0
+            || !state.commands.is_empty()
+            || !state.tools.is_empty()
+            || !state.waits.is_empty()
+    }
+
     pub(crate) fn turn(&self) -> WakeGuard {
         self.update(|state| state.turns += 1);
         WakeGuard {

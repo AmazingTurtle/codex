@@ -57,6 +57,7 @@ mod environment_add;
 mod environment_info;
 mod environment_status;
 mod exec_server_test_support;
+mod execution_control;
 #[cfg(not(target_os = "windows"))]
 mod executor_mcp;
 mod executor_skills;

@@ -125,6 +125,7 @@ async fn handle_spawn_agent(
                 /*task_name*/ None,
             )?,
             options: SpawnAgentOptions {
+                admission_cancellation: None,
                 fork_parent_spawn_call_id: fork_mode.as_ref().map(|_| call_id.clone()),
                 fork_mode: fork_mode.clone(),
                 parent_thread_id: Some(session.thread_id),

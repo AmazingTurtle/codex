@@ -288,7 +288,7 @@ impl Session {
     pub(crate) async fn start_task<T: SessionTask>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
-        input: Vec<TurnInput>,
+        mut input: Vec<TurnInput>,
         task: T,
     ) {
         // Replace the cache; in-flight acquisitions retain their previous Arc.
@@ -325,7 +325,21 @@ impl Session {
         let cancellation_token = CancellationToken::new();
         let done = Arc::new(Notify::new());
 
-        let (pending_items, _) = self.input_queue.drain_mailbox_input_items().await;
+        let (mut pending_items, _) = self.input_queue.drain_mailbox_input_items().await;
+        if task_kind == TaskKind::Regular
+            && self
+                .services
+                .thread_extension_data
+                .get::<crate::guardian::PendingReviewContext>()
+                .is_none()
+        {
+            // Mail accepted before this task belongs in its first request,
+            // before the new guidance. Protected reviews keep their original
+            // input until finalization; later mail retains pending delivery.
+            pending_items.append(&mut input);
+            input = pending_items;
+            pending_items = Vec::new();
+        }
         let turn_state = {
             let mut active = self.active_turn.lock().await;
             let turn = active.get_or_insert_with(ActiveTurn::default);
@@ -384,6 +398,10 @@ impl Session {
         );
         let storage_originator = AuthStorageOriginator::from_client_name(&turn_context.originator);
         let task_future = async move {
+            if session.wait_until_running(&task_cancellation_token).await.is_err() {
+                done_clone.notify_waiters();
+                return;
+            }
             let ctx_for_finish = Arc::clone(&ctx);
             let task_result = task_for_run
                 .run(
@@ -419,6 +437,7 @@ impl Session {
                     .await;
             }
             drop(wake_turn_guard);
+            session.refresh_execution_activity().await;
             done_clone.notify_waiters();
         }
         .instrument(task_span);
@@ -439,6 +458,8 @@ impl Session {
             _timer: timer,
         };
         turn.task = Some(running_task);
+        drop(active);
+        self.refresh_execution_activity().await;
     }
 
     /// Returns whether an extension has marked this thread as durably asleep.
@@ -572,6 +593,10 @@ impl Session {
             .await;
     }
 
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "fence wake generation and durable pending-input discard with turn admission"
+    )]
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) {
         if matches!(
             reason,
@@ -583,6 +608,7 @@ impl Session {
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
                 + 1;
             self.wake_tracker.invalidate_commands(generation);
+            self.discard_interrupted_execution_input(generation).await;
         }
         let mut aborted_turn = false;
         let mut active_turn_to_clear = None;
@@ -611,6 +637,7 @@ impl Session {
         if reason == TurnAbortReason::Interrupted && aborted_turn {
             self.maybe_start_turn_for_pending_work().await;
         }
+        self.refresh_execution_activity().await;
     }
 
     #[expect(
@@ -641,6 +668,7 @@ impl Session {
                         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
                         + 1;
                     self.wake_tracker.invalidate_commands(generation);
+                    self.discard_interrupted_execution_input(generation).await;
                 }
                 active.take()
             } else {

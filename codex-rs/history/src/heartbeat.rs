@@ -16,6 +16,8 @@ pub enum UserInputOrigin {
     /// Ordinary or unclassified input, never eligible for heartbeat coalescing.
     #[default]
     User,
+    /// Input delegated by another model or workflow rather than a person.
+    Agent,
     /// Input submitted by a scheduled heartbeat, including when it steers an active turn.
     Heartbeat,
 }

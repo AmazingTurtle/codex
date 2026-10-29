@@ -2,6 +2,7 @@ use codex_protocol::ThreadId;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_rollout::RolloutItem;
 use std::any::Any;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
@@ -20,6 +21,7 @@ use crate::DeleteThreadParams;
 use crate::DeleteThreadSectionParams;
 use crate::DeleteThreadsParams;
 use crate::DeletedProject;
+use crate::FindPersistedInputIdsParams;
 use crate::ItemPage;
 use crate::ListItemsParams;
 use crate::ListProjectsParams;
@@ -31,6 +33,7 @@ use crate::ListTurnsParams;
 use crate::LoadThreadHistoryParams;
 use crate::MoveProjectParams;
 use crate::MoveThreadToSectionParams;
+use crate::PersistedInputId;
 use crate::PrepareForkParams;
 use crate::PreparedFork;
 use crate::ProjectMoveOutcome;
@@ -253,6 +256,21 @@ pub trait ThreadStore: Any + Send + Sync {
         &self,
         params: LoadThreadHistoryParams,
     ) -> ThreadStoreFuture<'_, StoredThreadHistory>;
+
+    /// Finds requested delivery identities in raw durable history, including inputs
+    /// omitted by compaction or UI projection. Queries accept at most 256 keys;
+    /// implementations must not report unreadable history as confirmed absence.
+    /// Local scanning streams records with the existing reader's per-record buffer.
+    fn find_persisted_input_ids(
+        &self,
+        _params: FindPersistedInputIdsParams,
+    ) -> ThreadStoreFuture<'_, BTreeSet<PersistedInputId>> {
+        Box::pin(async {
+            Err(ThreadStoreError::Unsupported {
+                operation: "find_persisted_input_ids",
+            })
+        })
+    }
 
     /// Loads the persisted rollout items needed to reconstruct the latest model-visible context.
     ///

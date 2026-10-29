@@ -271,6 +271,8 @@ pub(crate) fn spawn_exit_watcher(
         session_ref
             .wake_tracker
             .complete_command(&completion_call_id);
+        drop(_interaction_guard);
+        session_ref.refresh_execution_activity().await;
     });
 }
 

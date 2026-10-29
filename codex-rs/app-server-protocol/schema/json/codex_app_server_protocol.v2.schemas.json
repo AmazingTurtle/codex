@@ -2213,6 +2213,78 @@
             },
             "method": {
               "enum": [
+                "thread/pause"
+              ],
+              "title": "Thread/pauseRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadPauseParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/pauseRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/unpause"
+              ],
+              "title": "Thread/unpauseRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadUnpauseParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/unpauseRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/executionControl/read"
+              ],
+              "title": "Thread/executionControl/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadExecutionControlReadParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/executionControl/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "thread/start"
               ],
               "title": "Thread/startRequestMethod",
@@ -7491,6 +7563,15 @@
       ],
       "title": "ErrorNotification",
       "type": "object"
+    },
+    "ExecutionControlState": {
+      "description": "Inference state shared by an independent conversation and its owned workers.",
+      "enum": [
+        "running",
+        "pausing",
+        "paused"
+      ],
+      "type": "string"
     },
     "ExperimentalFeature": {
       "properties": {
@@ -17048,6 +17129,26 @@
           "properties": {
             "method": {
               "enum": [
+                "thread/executionControl/changed"
+              ],
+              "title": "Thread/executionControl/changedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadExecutionControlChangedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/executionControl/changedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "thread/readState/changed"
               ],
               "title": "Thread/readState/changedNotificationMethod",
@@ -20101,6 +20202,69 @@
       ],
       "type": "object"
     },
+    "ThreadExecutionControl": {
+      "properties": {
+        "canPause": {
+          "default": false,
+          "description": "Whether the owning tree currently has work that can be paused. Older servers that omit this capability are treated conservatively.",
+          "type": "boolean"
+        },
+        "rootThreadId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/ExecutionControlState"
+        }
+      },
+      "required": [
+        "rootThreadId",
+        "state"
+      ],
+      "type": "object"
+    },
+    "ThreadExecutionControlChangedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "executionControl": {
+          "$ref": "#/definitions/ThreadExecutionControl"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "executionControl",
+        "threadId"
+      ],
+      "title": "ThreadExecutionControlChangedNotification",
+      "type": "object"
+    },
+    "ThreadExecutionControlReadParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "title": "ThreadExecutionControlReadParams",
+      "type": "object"
+    },
+    "ThreadExecutionControlReadResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "executionControl": {
+          "$ref": "#/definitions/ThreadExecutionControl"
+        }
+      },
+      "required": [
+        "executionControl"
+      ],
+      "title": "ThreadExecutionControlReadResponse",
+      "type": "object"
+    },
     "ThreadExtra": {
       "description": "Extra app-server data for a thread.",
       "type": "object"
@@ -21916,6 +22080,32 @@
         "threadId"
       ],
       "title": "ThreadNameUpdatedNotification",
+      "type": "object"
+    },
+    "ThreadPauseParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "title": "ThreadPauseParams",
+      "type": "object"
+    },
+    "ThreadPauseResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "executionControl": {
+          "$ref": "#/definitions/ThreadExecutionControl"
+        }
+      },
+      "required": [
+        "executionControl"
+      ],
+      "title": "ThreadPauseResponse",
       "type": "object"
     },
     "ThreadPredictionResult": {
@@ -24035,6 +24225,32 @@
         "threadId"
       ],
       "title": "ThreadUnarchivedNotification",
+      "type": "object"
+    },
+    "ThreadUnpauseParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "title": "ThreadUnpauseParams",
+      "type": "object"
+    },
+    "ThreadUnpauseResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "executionControl": {
+          "$ref": "#/definitions/ThreadExecutionControl"
+        }
+      },
+      "required": [
+        "executionControl"
+      ],
+      "title": "ThreadUnpauseResponse",
       "type": "object"
     },
     "ThreadUnreadPosition": {

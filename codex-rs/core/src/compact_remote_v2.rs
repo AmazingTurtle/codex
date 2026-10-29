@@ -295,6 +295,12 @@ async fn run_remote_compaction_request_v2(
         CompactionRequestTransport::Background(turn_state, auth_owner_generation) => {
             let settings = &step_context.settings;
             let cancellation = crate::session::async_compaction::shutdown_cancellation(sess).await;
+            let inference = sess
+                .services
+                .local_agent_runtime
+                .execution_control
+                .inference(&cancellation)
+                .await?;
             let effort = sess
                 .reasoning_effort_for_request(settings, RequestEffortUsage::Compaction)
                 .await;
@@ -304,6 +310,7 @@ async fn run_remote_compaction_request_v2(
             let http_executor = ResponsesHttpExecutor::new(&sess.services.model_client);
             let stream = tokio::select! {
                 biased;
+                _ = inference.paused() => return Err(CodexErr::TurnAborted),
                 _ = cancellation.cancelled() => return Err(CodexErr::TurnAborted),
                 stream = http_executor.stream_responses_http(
                     &turn_state, auth_owner_generation, /*event_sender*/ None, prompt, &settings.model_info, &step_context.session_telemetry, effort,
@@ -311,13 +318,17 @@ async fn run_remote_compaction_request_v2(
                     &trace,
                 ) => stream?,
             };
-            return collect_compaction_output(
+            let collect = collect_compaction_output(
                 sess,
                 turn_context,
                 stream,
                 CompactionRequestKind::Background(&cancellation),
-            )
-            .await;
+            );
+            return tokio::select! {
+                biased;
+                _ = inference.paused() => Err(CodexErr::TurnAborted),
+                result = collect => result,
+            };
         }
         CompactionRequestTransport::Foreground(client_session) => client_session,
     };
@@ -329,31 +340,46 @@ async fn run_remote_compaction_request_v2(
         .min(MAX_REMOTE_COMPACTION_V2_STREAM_RETRIES);
     let mut retry_state = ResponsesStreamRetryState::default();
     loop {
-        let result = match client_session
-            .stream(
-                prompt,
-                &settings.model_info,
-                &turn_context.session_telemetry,
-                sess.reasoning_effort_for_request(settings, RequestEffortUsage::Compaction)
-                    .await,
-                settings.reasoning_summary,
-                step_context.settings.service_tier.clone(),
-                responses_metadata,
-                &InferenceTraceContext::disabled(),
-            )
-            .await
-        {
-            Ok(stream) => {
-                collect_compaction_output(
-                    sess,
-                    turn_context,
-                    stream,
-                    CompactionRequestKind::Foreground,
+        let inference = sess
+            .services
+            .local_agent_runtime
+            .execution_control
+            .inference(&sess.services.local_agent_runtime.shutdown)
+            .await?;
+        let attempt = async {
+            match client_session
+                .stream(
+                    prompt,
+                    &settings.model_info,
+                    &turn_context.session_telemetry,
+                    sess.reasoning_effort_for_request(settings, RequestEffortUsage::Compaction)
+                        .await,
+                    settings.reasoning_summary,
+                    step_context.settings.service_tier.clone(),
+                    responses_metadata,
+                    &InferenceTraceContext::disabled(),
                 )
                 .await
+            {
+                Ok(stream) => {
+                    collect_compaction_output(
+                        sess,
+                        turn_context,
+                        stream,
+                        CompactionRequestKind::Foreground,
+                    )
+                    .await
+                }
+                Err(err) => Err(err),
             }
-            Err(err) => Err(err),
         };
+        let result = tokio::select! {
+            biased;
+            _ = inference.paused() => None,
+            result = attempt => Some(result),
+        };
+        drop(inference);
+        let Some(result) = result else { continue };
         match result {
             Ok(compaction_output) => return Ok(compaction_output),
             Err(err) => {

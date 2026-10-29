@@ -30,6 +30,8 @@ use codex_protocol::protocol::SubAgentSource;
 
 /// Child creation options; omitted overrides retain native MAv2 inheritance and role rules.
 pub(crate) struct ThreadSpawnRequest {
+    /// Cancels only native pre-admission waits; accepted children retain normal ownership.
+    pub admission_cancellation: Option<tokio_util::sync::CancellationToken>,
     pub task_name: String,
     /// Explicit encoding: hosts normally provide plaintext; native tools can forward ciphertext.
     pub message: AgentMessage,
@@ -64,6 +66,7 @@ pub(crate) async fn spawn(
 ) -> Result<ThreadSpawnResult, ThreadSpawnError> {
     let turn = &step_context.turn;
     let ThreadSpawnRequest {
+        admission_cancellation,
         task_name,
         message,
         fork_mode,
@@ -146,6 +149,7 @@ pub(crate) async fn spawn(
             },
             source: spawn_source,
             options: SpawnAgentOptions {
+                admission_cancellation,
                 fork_parent_spawn_call_id: fork_mode.as_ref().map(|_| call_id.to_string()),
                 fork_mode,
                 parent_thread_id: Some(session.thread_id),

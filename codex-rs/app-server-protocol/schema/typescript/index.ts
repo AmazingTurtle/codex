@@ -20,6 +20,7 @@ export type { ConversationTextRole } from "./ConversationTextRole";
 export type { ExecCommandApprovalParams } from "./ExecCommandApprovalParams";
 export type { ExecCommandApprovalResponse } from "./ExecCommandApprovalResponse";
 export type { ExecPolicyAmendment } from "./ExecPolicyAmendment";
+export type { ExecutionControlState } from "./ExecutionControlState";
 export type { FileChange } from "./FileChange";
 export type { ForcedLoginMethod } from "./ForcedLoginMethod";
 export type { FunctionCallOutputBody } from "./FunctionCallOutputBody";

@@ -31,6 +31,7 @@ use crate::request_processors::CatalogRequestProcessor;
 use crate::request_processors::CommandExecRequestProcessor;
 use crate::request_processors::ConfigRequestProcessor;
 use crate::request_processors::EnvironmentRequestProcessor;
+use crate::request_processors::ExecutionControlRequestProcessor;
 use crate::request_processors::FeedbackRequestProcessor;
 use crate::request_processors::FsRequestProcessor;
 use crate::request_processors::GitRequestProcessor;
@@ -155,6 +156,7 @@ pub(crate) struct MessageProcessor {
     process_exec_processor: ProcessExecRequestProcessor,
     config_processor: ConfigRequestProcessor,
     environment_processor: EnvironmentRequestProcessor,
+    execution_control_processor: ExecutionControlRequestProcessor,
     external_agent_config_processor: ExternalAgentConfigRequestProcessor,
     feedback_processor: FeedbackRequestProcessor,
     fs_processor: FsRequestProcessor,
@@ -589,6 +591,8 @@ impl MessageProcessor {
             });
         let environment_processor =
             EnvironmentRequestProcessor::new(thread_manager.environment_manager());
+        let execution_control_processor =
+            ExecutionControlRequestProcessor::new(Arc::clone(&thread_manager));
         let fs_processor = FsRequestProcessor::new(
             Arc::clone(&environment_manager_for_requests),
             FsWatchManager::new(outgoing.clone()),
@@ -613,6 +617,7 @@ impl MessageProcessor {
             process_exec_processor,
             config_processor,
             environment_processor,
+            execution_control_processor,
             external_agent_config_processor,
             feedback_processor,
             fs_processor,
@@ -1295,6 +1300,21 @@ impl MessageProcessor {
             ClientRequest::ModelProviderCapabilitiesRead { .. } => self
                 .config_processor
                 .model_provider_capabilities_read()
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ThreadPause { params, .. } => self
+                .execution_control_processor
+                .pause(&params.thread_id)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ThreadUnpause { params, .. } => self
+                .execution_control_processor
+                .unpause(&params.thread_id)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ThreadExecutionControlRead { params, .. } => self
+                .execution_control_processor
+                .read(&params.thread_id)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::ThreadStart { params, .. } => {

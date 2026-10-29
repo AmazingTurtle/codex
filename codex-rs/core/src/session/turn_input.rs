@@ -235,6 +235,28 @@ pub(super) async fn handle(
     submission_id: String,
 ) -> CodexResult<TurnInputSubmission> {
     let request = request.into();
+    if matches!(
+        &mode,
+        TurnInputMode::StartIfIdle | TurnInputMode::ContinueIfIdle { .. }
+    ) && session
+        .services
+        .local_agent_runtime
+        .execution_control
+        .is_paused()
+    {
+        return Ok(TurnInputSubmission::NotSubmitted {
+            reason: NotSubmittedReason::ConversationPaused,
+        });
+    }
+    let human_input = matches!(&request.request.input,
+        SubmittedTurnInput::UserInput { content, .. } if !content.is_empty())
+        && request.request.source == codex_protocol::turn_input::TurnInputSource::User
+        && matches!(
+            &mode,
+            TurnInputMode::StartOrSteer | TurnInputMode::Steer { .. }
+        )
+        && UserInputOrigin::from_turn_trigger(request.request.start.turn_trigger.as_deref())
+            == UserInputOrigin::User;
     let result = match mode {
         TurnInputMode::StartOrSteer => start_or_steer(session, request, submission_id).await,
         TurnInputMode::StartIfIdle => {
@@ -280,6 +302,19 @@ pub(super) async fn handle(
             steer(session, request, expected_turn_id, submission_id).await
         }
     };
+    if human_input
+        && matches!(
+            &result,
+            Ok(TurnInputSubmission::Started { .. } | TurnInputSubmission::Steered { .. })
+        )
+        && session
+            .services
+            .local_agent_runtime
+            .execution_control
+            .is_paused()
+    {
+        session.unpause_execution().await?;
+    }
     // Link this request's trace to the accepted turn, which may have an older trace.
     if let Ok(
         TurnInputSubmission::Started { turn_id, .. } | TurnInputSubmission::Steered { turn_id, .. },
@@ -302,6 +337,16 @@ pub(super) async fn handle_recovery(
     start_options: TurnStartOptions,
     submission_id: String,
 ) -> CodexResult<TurnInputSubmission> {
+    if session
+        .services
+        .local_agent_runtime
+        .execution_control
+        .is_paused()
+    {
+        return Ok(TurnInputSubmission::NotSubmitted {
+            reason: NotSubmittedReason::ConversationPaused,
+        });
+    }
     let WithTurnExtensionData {
         request: thread_settings,
         turn_extension_init,
@@ -342,13 +387,19 @@ async fn start_or_steer(
     } = request;
     let TurnInputRequest {
         mut input,
+        source,
         thread_settings,
         start,
         additional_context,
         responsesapi_client_metadata,
         ..
     } = request;
-    let origin = UserInputOrigin::from_turn_trigger(start.turn_trigger.as_deref());
+    let origin = match source {
+        codex_protocol::turn_input::TurnInputSource::User => {
+            UserInputOrigin::from_turn_trigger(start.turn_trigger.as_deref())
+        }
+        codex_protocol::turn_input::TurnInputSource::Agent => UserInputOrigin::Agent,
+    };
     let has_explicit_input = match &input {
         SubmittedTurnInput::UserInput { content, .. } => !content.is_empty(),
         SubmittedTurnInput::ResponseItem(ResponseItem::FunctionCallOutput {
@@ -386,7 +437,7 @@ async fn start_or_steer(
             responsesapi_client_metadata.clone(),
             origin,
         )
-        .await
+        .await?
     {
         Ok((turn_id, root_turn_id)) => {
             settings.apply_steered(session, submission_id).await?;
@@ -444,6 +495,9 @@ async fn start_or_steer(
                 );
             }
             session
+                .retain_turn_input(&mut task_input, &turn_context)
+                .await?;
+            session
                 .spawn_task(Arc::clone(&turn_context), task_input, RegularTask::new())
                 .await;
             Ok(TurnInputSubmission::Started {
@@ -473,13 +527,19 @@ async fn start_if_idle(
     } = request;
     let TurnInputRequest {
         mut input,
+        source,
         thread_settings,
         start,
         additional_context,
         responsesapi_client_metadata,
         ..
     } = request;
-    let origin = UserInputOrigin::from_turn_trigger(start.turn_trigger.as_deref());
+    let origin = match source {
+        codex_protocol::turn_input::TurnInputSource::User => {
+            UserInputOrigin::from_turn_trigger(start.turn_trigger.as_deref())
+        }
+        codex_protocol::turn_input::TurnInputSource::Agent => UserInputOrigin::Agent,
+    };
     if session.input_queue.has_trigger_turn_mailbox_items().await {
         return Ok(TurnInputSubmission::NotSubmitted {
             reason: NotSubmittedReason::PendingTriggerTurn,
@@ -620,6 +680,9 @@ async fn start_if_idle(
         }
     }
     session
+        .retain_turn_input(&mut task_input, &turn_context)
+        .await?;
+    session
         .start_task(Arc::clone(&turn_context), task_input, RegularTask::new())
         .await;
     Ok(TurnInputSubmission::Started {
@@ -640,13 +703,19 @@ async fn steer(
     } = request;
     let TurnInputRequest {
         mut input,
+        source,
         thread_settings,
         start,
         additional_context,
         responsesapi_client_metadata,
         ..
     } = request;
-    let origin = UserInputOrigin::from_turn_trigger(start.turn_trigger.as_deref());
+    let origin = match source {
+        codex_protocol::turn_input::TurnInputSource::User => {
+            UserInputOrigin::from_turn_trigger(start.turn_trigger.as_deref())
+        }
+        codex_protocol::turn_input::TurnInputSource::Agent => UserInputOrigin::Agent,
+    };
     if !matches!(&input, SubmittedTurnInput::UserInput { .. }) {
         return Err(CodexErr::InvalidRequest(
             "only user input can steer a turn".to_string(),
@@ -671,7 +740,7 @@ async fn steer(
             responsesapi_client_metadata,
             origin,
         )
-        .await
+        .await?
     {
         Ok((turn_id, root_turn_id)) => {
             settings.apply_steered(session, submission_id).await?;
@@ -705,6 +774,14 @@ impl Session {
     pub(crate) async fn reserve_pending_work_turn(
         &self,
     ) -> Option<(Arc<tokio::sync::Mutex<TurnState>>, TurnStartOptions)> {
+        if self
+            .services
+            .local_agent_runtime
+            .execution_control
+            .is_paused()
+        {
+            return None;
+        }
         let mut active_turn = self.active_turn.lock().await;
         if active_turn.is_some() {
             return None;
@@ -740,6 +817,14 @@ impl Session {
         &self,
         turn_state: &Arc<tokio::sync::Mutex<TurnState>>,
     ) -> Option<SessionConfiguration> {
+        if self
+            .services
+            .local_agent_runtime
+            .execution_control
+            .is_paused()
+        {
+            return None;
+        }
         // Discovery can outlive an interrupt or a settings update. Keep cancellation
         // atomic with admission so newly arriving mail can retry a rejected wake.
         let mut active = self.active_turn.lock().await;
@@ -855,42 +940,42 @@ impl Session {
         required_final_output_json_schema: Option<&Value>,
         responsesapi_client_metadata: ResponsesApiClientMetadataUpdate,
         origin: UserInputOrigin,
-    ) -> Result<(String, String), NotSubmittedReason> {
+    ) -> CodexResult<Result<(String, String), NotSubmittedReason>> {
         let mut active = self.active_turn.lock().await;
         let Some(active_turn) = active.as_mut() else {
-            return Err(NotSubmittedReason::NoActiveTurn);
+            return Ok(Err(NotSubmittedReason::NoActiveTurn));
         };
 
         let Some(active_task) = active_turn.task.as_ref() else {
-            return Err(NotSubmittedReason::NoActiveTurn);
+            return Ok(Err(NotSubmittedReason::NoActiveTurn));
         };
         let active_turn_id = &active_task.turn_context.sub_id;
 
         if let Some(expected_turn_id) = expected_turn_id
             && expected_turn_id != active_turn_id
         {
-            return Err(NotSubmittedReason::ExpectedTurnMismatch {
+            return Ok(Err(NotSubmittedReason::ExpectedTurnMismatch {
                 expected: expected_turn_id.to_string(),
                 actual: active_turn_id.clone(),
-            });
+            }));
         }
 
         match active_task.kind {
             crate::state::TaskKind::Regular => {}
             crate::state::TaskKind::Review => {
-                return Err(NotSubmittedReason::ActiveTurnNotSteerable {
+                return Ok(Err(NotSubmittedReason::ActiveTurnNotSteerable {
                     turn_kind: NonSteerableTurnKind::Review,
-                });
+                }));
             }
             crate::state::TaskKind::Compact => {
-                return Err(NotSubmittedReason::ActiveTurnNotSteerable {
+                return Ok(Err(NotSubmittedReason::ActiveTurnNotSteerable {
                     turn_kind: NonSteerableTurnKind::Compact,
-                });
+                }));
             }
         }
 
         if matches!(input, SubmittedTurnInput::UserInput { content, .. } if content.is_empty()) {
-            return Err(NotSubmittedReason::EmptyInput);
+            return Ok(Err(NotSubmittedReason::EmptyInput));
         }
         // Compare JSON values directly instead of serialized schema text.
         // Value equality ignores object key order while preserving array and
@@ -898,7 +983,7 @@ impl Session {
         if let Some(required_schema) = required_final_output_json_schema
             && active_task.turn_context.final_output_json_schema.as_ref() != Some(required_schema)
         {
-            return Err(NotSubmittedReason::ActiveTurnOutputSchemaMismatch);
+            return Ok(Err(NotSubmittedReason::ActiveTurnOutputSchemaMismatch));
         }
         let mut pending_input = merge_additional_context_input(self, additional_context).await;
 
@@ -922,16 +1007,18 @@ impl Session {
             }
         };
         pending_input.push(input);
+        self.retain_turn_input(&mut pending_input, &active_task.turn_context)
+            .await?;
         self.input_queue
             .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
                 active_turn.turn_state.as_ref(),
                 pending_input,
             )
             .await;
-        Ok((
+        Ok(Ok((
             active_turn_id.clone(),
             active_task.turn_context.root_turn_id(),
-        ))
+        )))
     }
 }
 

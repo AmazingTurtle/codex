@@ -126,6 +126,7 @@ async fn handle_spawn_agent(
         &step_context,
         &call_id,
         ThreadSpawnRequest {
+            admission_cancellation: None,
             task_name: args.task_name,
             message: agent_message_from_tool(
                 message,

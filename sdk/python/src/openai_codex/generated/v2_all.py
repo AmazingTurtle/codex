@@ -1337,6 +1337,12 @@ class EnvironmentSkillsParams(BaseModel):
     ] = None
 
 
+class ExecutionControlState(Enum):
+    running = "running"
+    pausing = "pausing"
+    paused = "paused"
+
+
 class ExperimentalFeatureEnablementSetParams(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -5303,6 +5309,43 @@ class ThreadEnvironment(BaseModel):
     ]
 
 
+class ThreadExecutionControl(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    can_pause: Annotated[
+        bool | None,
+        Field(
+            alias="canPause",
+            description="Whether the owning tree currently has work that can be paused. Older servers that omit this capability are treated conservatively.",
+        ),
+    ] = False
+    root_thread_id: Annotated[str, Field(alias="rootThreadId")]
+    state: ExecutionControlState
+
+
+class ThreadExecutionControlChangedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    execution_control: Annotated[ThreadExecutionControl, Field(alias="executionControl")]
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class ThreadExecutionControlReadParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class ThreadExecutionControlReadResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    execution_control: Annotated[ThreadExecutionControl, Field(alias="executionControl")]
+
+
 class ThreadExtra(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -5702,6 +5745,20 @@ class ThreadNameUpdatedNotification(BaseModel):
     )
     thread_id: Annotated[str, Field(alias="threadId")]
     thread_name: Annotated[str | None, Field(alias="threadName")] = None
+
+
+class ThreadPauseParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class ThreadPauseResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    execution_control: Annotated[ThreadExecutionControl, Field(alias="executionControl")]
 
 
 class CompletedThreadPredictionResult(BaseModel):
@@ -6321,6 +6378,20 @@ class ThreadUnarchivedNotification(BaseModel):
         populate_by_name=True,
     )
     thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class ThreadUnpauseParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class ThreadUnpauseResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    execution_control: Annotated[ThreadExecutionControl, Field(alias="executionControl")]
 
 
 class ThreadStartThreadUnreadPosition(BaseModel):
@@ -6991,6 +7062,36 @@ class InitializeRequest(BaseModel):
     id: RequestId
     method: Annotated[Literal["initialize"], Field(title="InitializeRequestMethod")]
     params: InitializeParams
+
+
+class ThreadPauseRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[Literal["thread/pause"], Field(title="Thread/pauseRequestMethod")]
+    params: ThreadPauseParams
+
+
+class ThreadUnpauseRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[Literal["thread/unpause"], Field(title="Thread/unpauseRequestMethod")]
+    params: ThreadUnpauseParams
+
+
+class ThreadExecutionControlReadRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["thread/executionControl/read"],
+        Field(title="Thread/executionControl/readRequestMethod"),
+    ]
+    params: ThreadExecutionControlReadParams
 
 
 class ThreadResumeRequest(BaseModel):
@@ -9366,6 +9467,24 @@ class ThreadStatusChangedServerNotification(BaseModel):
         Literal["thread/status/changed"], Field(title="Thread/status/changedNotificationMethod")
     ]
     params: ThreadStatusChangedNotification
+
+
+class ThreadExecutionControlChangedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["thread/executionControl/changed"],
+        Field(title="Thread/executionControl/changedNotificationMethod"),
+    ]
+    params: ThreadExecutionControlChangedNotification
 
 
 class ThreadWakeStateChangedServerNotification(BaseModel):
@@ -13010,6 +13129,9 @@ class ExternalAgentConfigImportRecordHistoryRequest(BaseModel):
 class ClientRequest(
     RootModel[
         InitializeRequest
+        | ThreadPauseRequest
+        | ThreadUnpauseRequest
+        | ThreadExecutionControlReadRequest
         | ThreadStartRequest
         | ThreadResumeRequest
         | ThreadForkRequest
@@ -13125,6 +13247,9 @@ class ClientRequest(
 ):
     root: Annotated[
         InitializeRequest
+        | ThreadPauseRequest
+        | ThreadUnpauseRequest
+        | ThreadExecutionControlReadRequest
         | ThreadStartRequest
         | ThreadResumeRequest
         | ThreadForkRequest
@@ -13415,6 +13540,7 @@ class ServerNotification(
         ErrorServerNotification
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
+        | ThreadExecutionControlChangedServerNotification
         | ThreadReadStateChangedServerNotification
         | ThreadWakeStateChangedServerNotification
         | ThreadArchivedServerNotification
@@ -13504,6 +13630,7 @@ class ServerNotification(
         ErrorServerNotification
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
+        | ThreadExecutionControlChangedServerNotification
         | ThreadReadStateChangedServerNotification
         | ThreadWakeStateChangedServerNotification
         | ThreadArchivedServerNotification

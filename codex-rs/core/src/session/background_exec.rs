@@ -30,11 +30,32 @@ impl Session {
         {
             return;
         }
-        let input = input
+        let mut input = input
             .into_iter()
             .map(ResponseItemEnvelope::new)
             .map(PendingTurnInput::ResponseItem)
             .collect::<Vec<_>>();
+        match self
+            .services
+            .local_agent_runtime
+            .execution_control
+            .queue_if_paused(
+                crate::execution_control::QueuedSignal::new(self.thread_id, input.clone())
+                    .with_wake_generation(wake_generation),
+            )
+            .await
+        {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(error) => {
+                tracing::error!(%error, "failed to preserve paused process completion");
+                return;
+            }
+        }
+        if let Err(error) = self.retain_accepted_input(&mut input).await {
+            tracing::error!(%error, "failed to persist process completion");
+            return;
+        }
         let mut active = self.active_turn.lock().await;
         if let Some(active_turn) = active.as_mut() {
             self.input_queue

@@ -1082,6 +1082,17 @@ impl Session {
                 (control, runtime)
             }
         };
+        if config.ephemeral {
+            local_agent_runtime
+                .execution_control
+                .initialize_ephemeral(agent_control.identity().into())
+                .await;
+        } else {
+            local_agent_runtime
+                .execution_control
+                .initialize(config.codex_home.as_path(), agent_control.identity().into())
+                .await?;
+        }
         let time_provider = crate::current_time::resolve_time_provider(
             config.current_time_reminder.as_ref(),
             external_time_provider,
@@ -1956,6 +1967,11 @@ impl Session {
                 forked_from_ordinal_exclusive,
                 next_internal_sub_id: AtomicU64::new(0),
             });
+            sess.services
+                .local_agent_runtime
+                .execution_control
+                .register(&sess)
+                .await;
             if let Some(startup) = &startup {
                 startup.set_session(Arc::clone(&sess));
             }
@@ -2069,6 +2085,7 @@ impl Session {
 
             // record_initial_history can emit events. We record only after the SessionConfiguredEvent is emitted.
             Box::pin(sess.record_initial_history(initial_history)).await;
+            sess.restore_pending_input_order().await;
             if restore_child_window {
                 sess.state.lock().await.restore_auto_compact_window(
                     /*window_number*/ 0,

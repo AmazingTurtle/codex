@@ -1,3 +1,4 @@
+mod execution_control;
 pub(crate) mod startup;
 
 use crate::PromptCacheKey;

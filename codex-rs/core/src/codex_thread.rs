@@ -238,6 +238,32 @@ pub struct BackgroundTerminalInfo {
 /// Conduit for the bidirectional stream of messages that compose a thread
 /// (formerly called a conversation) in Codex.
 impl CodexThread {
+    /// Pause inference and new work for this thread's entire owning conversation tree.
+    pub async fn pause_execution(&self) -> CodexResult<crate::ConversationExecutionState> {
+        self.session.pause_execution().await
+    }
+
+    /// Whether any member or producer in this owning conversation has work.
+    pub async fn can_pause_execution(&self) -> CodexResult<bool> {
+        self.session.can_pause_execution().await
+    }
+
+    /// Resume this conversation and deliver work queued while it was paused.
+    pub async fn unpause_execution(&self) -> CodexResult<crate::ConversationExecutionState> {
+        self.session.unpause_execution().await
+    }
+
+    pub async fn execution_state(&self) -> CodexResult<crate::ConversationExecutionState> {
+        self.session.execution_state().await
+    }
+
+    /// Wait without starting work while this owning conversation is paused.
+    pub async fn wait_until_running(&self) -> CodexResult<()> {
+        self.session
+            .wait_until_running(&self.session.services.local_agent_runtime.shutdown)
+            .await
+    }
+
     pub(crate) fn new(
         session: Arc<Session>,
         io: SessionIo,

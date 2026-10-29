@@ -1312,6 +1312,7 @@ impl UnifiedExecProcessManager {
             wake_on_exit,
             wake_generation,
         );
+        context.session.refresh_execution_activity().await;
         // Install the watcher before cancellable cleanup, and outside the process-store lock.
         if let Some(pruned_entry) = pruned_entry {
             unregister_network_approval_for_entry(&pruned_entry).await;

@@ -54,6 +54,9 @@ pub(super) fn server_notification_thread_target(
         ServerNotification::ThreadWakeStateChanged(notification) => {
             Some(notification.thread_id.as_str())
         }
+        ServerNotification::ThreadExecutionControlChanged(notification) => {
+            Some(notification.thread_id.as_str())
+        }
         ServerNotification::ThreadReverted(notification) => Some(notification.thread_id.as_str()),
         ServerNotification::ThreadArchived(notification) => Some(notification.thread_id.as_str()),
         ServerNotification::ThreadDeleted(notification) => Some(notification.thread_id.as_str()),

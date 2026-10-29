@@ -9,6 +9,7 @@ mod model_context;
 mod move_thread_to_section;
 mod paginated_fork;
 mod pending_thread_metadata;
+mod persisted_input;
 mod projects;
 mod read_thread;
 mod revert_thread;
@@ -614,6 +615,13 @@ impl ThreadStore for LocalThreadStore {
         params: LoadThreadHistoryParams,
     ) -> ThreadStoreFuture<'_, StoredModelContext> {
         Box::pin(async move { model_context::load_latest_model_context(self, params).await })
+    }
+
+    fn find_persisted_input_ids(
+        &self,
+        params: crate::FindPersistedInputIdsParams,
+    ) -> ThreadStoreFuture<'_, std::collections::BTreeSet<crate::PersistedInputId>> {
+        Box::pin(async move { persisted_input::find(self, params).await })
     }
 
     fn is_model_context_current(

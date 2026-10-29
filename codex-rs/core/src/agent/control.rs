@@ -145,7 +145,11 @@ impl LocalAgentControl {
         let state = self.runtime.upgrade()?;
         let thread = state.get_thread(agent_id).await?;
         let result = match thread
-            .start_or_steer_turn(TurnInputRequest::user_input(input).on_start(start_options))
+            .start_or_steer_turn(
+                TurnInputRequest::user_input(input)
+                    .from_agent()
+                    .on_start(start_options),
+            )
             .await
         {
             Ok(TurnInputSubmission::Started { turn_id, .. }) => Ok(turn_id),
@@ -173,7 +177,7 @@ impl LocalAgentControl {
         start_options: TurnStartOptions,
     ) -> CodexResult<String> {
         let state = self.runtime.upgrade()?;
-        if communication.trigger_turn {
+        if communication.trigger_turn && !self.runtime.execution_control.is_paused() {
             let thread = state.get_thread(agent_id).await?;
             thread
                 .ensure_execution_capacity_for_turn_start(self)
@@ -265,6 +269,9 @@ impl LocalAgentControl {
         start_options: TurnStartOptions,
     ) -> CodexResult<String> {
         let observers = state.extensions.message_lifecycle_contributors();
+        if communication.id.as_ref().is_none_or(|id| id.is_empty()) {
+            communication.id = Some(ResponseItemId::new("amsg"));
+        }
         let delivery = (!observers.is_empty()).then(|| {
             let message_id = communication
                 .id
@@ -276,6 +283,29 @@ impl LocalAgentControl {
         });
         let communication_for_log =
             crate::agent_communication::logging_enabled().then(|| communication.clone());
+        let queued = crate::PendingAgentMessage::new(communication.clone(), delivery.clone());
+        let signal = crate::execution_control::QueuedSignal::new(
+            agent_id,
+            vec![crate::session::TurnInput::InterAgentCommunication(queued)],
+        )
+        .on_start(start_options.clone());
+        if self
+            .runtime
+            .execution_control
+            .queue_if_paused(signal.clone())
+            .await?
+        {
+            return Ok(Uuid::now_v7().to_string());
+        }
+        if !self
+            .runtime
+            .execution_control
+            .retain_input(signal, crate::execution_control::SignalDelivery::Queued)
+            .await?
+        {
+            return Ok(Uuid::now_v7().to_string());
+        }
+        self.runtime.execution_control.refresh_activity().await?;
         {
             // Keep unloaded delivery atomic with publication of a reloaded session.
             let threads = state.threads.read().await;
@@ -481,7 +511,7 @@ impl LocalAgentControl {
         else {
             return;
         };
-        let Ok(membership) = self.runtime.admit_start() else {
+        let Ok(membership) = self.runtime.track_tree_member() else {
             return;
         };
         let teardown = membership.into_teardown_guard("completion_watcher", Some(child_thread_id));

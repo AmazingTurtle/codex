@@ -51,12 +51,12 @@ Scenario: A parent with no configured environment delegates an API migration, qu
 07:function_call/collaboration.spawn_agent:{"fork_turns":"none","message":"Check who owns the API migration.","task_name":"worker"}
 08:function_call_output:{"task_name":"/root/worker"}
 -- request 3 (turn) --
-09:message/user:
+09:agent_message
+10:message/user:
     Run send_message for the API migration.
 -- request 4 (turn) --
-10:function_call/collaboration.send_message:{"message":"Use the new API for the migration.","target":"worker"}
-11:function_call_output:
-12:agent_message
+11:function_call/collaboration.send_message:{"message":"Use the new API for the migration.","target":"worker"}
+12:function_call_output:
 -- request 5 (turn) --
 13:message/user:
     Run followup_task for the API migration.
