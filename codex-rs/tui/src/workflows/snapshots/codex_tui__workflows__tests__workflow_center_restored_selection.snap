@@ -1,0 +1,22 @@
+---
+source: tui/src/workflows/workflow_tests.rs
+expression: "render(&reopened, 120, 18)"
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt         │  1 Overview   2 Transcript   3 Source
+  Current conversation              │ • ## Actual transcript
+    Review changes · Running        │
+  ›   review · Running              │   Shared history renderer.
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+  Esc close · ↑/↓ select · Enter chat · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · f4 tools · Space Actions · ? help

@@ -273,6 +273,7 @@ fn legacy_transcript_preview_falls_back_when_scan_budget_is_exhausted() {
 #[test]
 fn transcript_preview_reverse_scan_stops_before_older_items() {
     let newest = ThreadItem::AgentMessage {
+        workflow: None,
         id: String::from("final"),
         text: String::from("one\ntwo\nthree\nfour\nfive\nsix"),
         phase: None,

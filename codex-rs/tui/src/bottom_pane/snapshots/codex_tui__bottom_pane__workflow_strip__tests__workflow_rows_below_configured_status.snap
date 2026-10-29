@@ -1,0 +1,13 @@
+---
+source: tui/src/bottom_pane/workflow_strip_tests.rs
+expression: "lines.join(\"\\n\")"
+---
+
+› draft to preserve
+
+  Configured status line
+  Review source · [········] No agent steps · in ? · out ? · ↓ open
+  Workflow 2 · [········] No agent steps · in ? · out ?
+  Workflow 3 · [········] No agent steps · in ? · out ?
+  Workflow 4 · [········] No agent steps · in ? · out ?
+  … +1 workflow · ↓ open

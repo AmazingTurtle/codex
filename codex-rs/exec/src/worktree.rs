@@ -29,6 +29,7 @@ pub(super) async fn fork_source(
     .await?;
     let client = InProcessAppServerClient::start(InProcessClientStartArgs {
         arg0_paths: arg0_paths.clone(),
+        code_mode_session_provider: None,
         config: std::sync::Arc::new(config.clone()),
         cli_overrides: cli_overrides.to_vec(),
         loader_overrides: LoaderOverrides {

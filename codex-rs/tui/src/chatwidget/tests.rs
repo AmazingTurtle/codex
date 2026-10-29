@@ -314,6 +314,8 @@ mod usage;
 mod usage_picker_tests;
 #[path = "tests/wake_state_tests.rs"]
 mod wake_state_tests;
+#[path = "tests/workflow_history.rs"]
+mod workflow_history;
 #[path = "tests/worktree_picker_tests.rs"]
 mod worktree_picker;
 

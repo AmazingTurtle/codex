@@ -313,6 +313,7 @@ async fn session_execution_limits_are_isolated_on_a_shared_process_host() {
         ));
     let limited = provider
         .create_session_with_limits(CodeModeSessionCellExecutionLimits {
+            profile: Default::default(),
             max_yield_time_ms: Some(1),
             max_heap_size_bytes: None,
         })
@@ -320,6 +321,7 @@ async fn session_execution_limits_are_isolated_on_a_shared_process_host() {
         .expect("create limited session");
     let other = provider
         .create_session_with_limits(CodeModeSessionCellExecutionLimits {
+            profile: Default::default(),
             max_yield_time_ms: Some(1_000),
             max_heap_size_bytes: None,
         })

@@ -238,12 +238,22 @@ pub struct BackgroundTerminalInfo {
 /// Conduit for the bidirectional stream of messages that compose a thread
 /// (formerly called a conversation) in Codex.
 impl CodexThread {
+    /// Returns the durable agent workflow service owned by this conversation.
+    pub async fn workflows(&self) -> Result<Arc<crate::workflows::DynamicWorkflowService>, String> {
+        crate::workflows::service(&self.session).await
+    }
+
+    /// Whether an existing workflow attempt owns this child in its conversation tree.
+    /// This inspects recorded membership without creating a service or loading another thread.
+    pub async fn is_workflow_owned_child(&self) -> bool {
+        crate::workflows::is_workflow_child(&self.session, &self.session_source).await
+    }
     /// Pause inference and new work for this thread's entire owning conversation tree.
     pub async fn pause_execution(&self) -> CodexResult<crate::ConversationExecutionState> {
         self.session.pause_execution().await
     }
 
-    /// Whether any member or producer in this owning conversation has work.
+    /// Whether any member, producer, or workflow in this owning conversation has work.
     pub async fn can_pause_execution(&self) -> CodexResult<bool> {
         self.session.can_pause_execution().await
     }
@@ -490,6 +500,22 @@ impl CodexThread {
             request,
             TurnInputMode::ContinueIfIdle {
                 expected_previous_turn_id,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn continue_workflow_turn_if_idle(
+        &self,
+        request: TurnInputRequest,
+        expected_previous_turn_id: String,
+        expected_wake_generation: u64,
+    ) -> CodexResult<TurnInputSubmission> {
+        self.submit_turn_input_with_mode(
+            request,
+            TurnInputMode::ContinueIfIdleAtGeneration {
+                expected_previous_turn_id,
+                expected_wake_generation,
             },
         )
         .await
@@ -849,6 +875,14 @@ impl CodexThread {
     /// `thread/tokenUsage/updated` payload incomplete.
     pub async fn token_usage_info(&self) -> Option<TokenUsageInfo> {
         self.session.token_usage_info().await
+    }
+
+    /// Subscribes to this thread's own cumulative response usage, including the
+    /// current restored snapshot. Descendant usage is reported by its own thread.
+    pub async fn subscribe_own_token_usage(
+        &self,
+    ) -> watch::Receiver<Option<codex_protocol::protocol::TokenUsageRecord>> {
+        self.session.subscribe_own_token_usage().await
     }
 
     /// Records a context fragment without creating a new user turn boundary.

@@ -299,6 +299,7 @@ impl ChatWidget {
             ThreadItem::AgentMessage {
                 id,
                 text,
+                workflow,
                 phase,
                 memory_citation,
                 delivery,
@@ -314,6 +315,7 @@ impl ChatWidget {
                         memory_citation: memory_citation.clone(),
                         delivery,
                         questions: questions.clone(),
+                        workflow: workflow.clone(),
                     },
                     from_replay,
                 ) {
@@ -347,6 +349,9 @@ impl ChatWidget {
                     &turn_id,
                     from_replay,
                 );
+                if let Some(proof) = workflow {
+                    self.remember_workflow_final(proof);
+                }
             }
             ThreadItem::Plan { text, .. } => self.on_plan_item_completed(text),
             ThreadItem::Reasoning {

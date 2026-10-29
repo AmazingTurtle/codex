@@ -18,6 +18,9 @@ mod rollout_history;
 mod startup_launch;
 mod thread_list;
 mod web_search;
+mod workflow_history;
+mod workflow_watch;
+pub(crate) mod workflows;
 
 #[cfg(test)]
 #[path = "app_server_session/collaboration_catalog_tests.rs"]
@@ -333,10 +336,14 @@ pub(crate) struct AppServerBootstrap {
 }
 
 pub(crate) struct AppServerSession {
+    workflow_library_watches: Arc<workflow_watch::LibraryWatchState>,
+    input_only_threads: HashSet<ThreadId>,
     backend_id: crate::backend_id::BackendId,
     client: AppServerClient,
     next_request_id: i64,
     history_pagination: HashMap<ThreadId, history::ThreadHistoryPagination>,
+    timeline_history: HashMap<ThreadId, workflow_history::TimelineHistory>,
+    timeline_unsupported: bool,
     task_tool_threads: HashSet<ThreadId>,
     task_tool_capabilities_dir: Option<AbsolutePathBuf>,
     task_search_generation: Arc<AtomicU64>,
@@ -457,10 +464,14 @@ impl AppServerSession {
         thread_params_mode: ThreadParamsMode,
     ) -> Self {
         Self {
+            input_only_threads: HashSet::new(),
+            workflow_library_watches: Arc::default(),
             backend_id,
             client,
             next_request_id: 1,
             history_pagination: HashMap::new(),
+            timeline_history: HashMap::new(),
+            timeline_unsupported: false,
             task_tool_threads: HashSet::new(),
             task_tool_capabilities_dir: None,
             task_search_generation: Arc::new(AtomicU64::new(0)),
@@ -1201,6 +1212,7 @@ impl AppServerSession {
             self.thread_params_mode(),
         )
         .await?;
+        started.session.timeline = self.timeline_snapshot(thread_id);
         if let Some(permissions) = selected_permissions {
             started.session.permission_profile = permissions;
         }
@@ -1305,7 +1317,10 @@ impl AppServerSession {
             })
             .await;
         let mut response: ThreadReadResponse = match response {
-            Ok(response) => return Ok(response.thread),
+            Ok(response) => {
+                self.record_thread_input_capability(&response.thread);
+                return Ok(response.thread);
+            }
             Err(TypedRequestError::Server { source, .. })
                 if include_turns
                     && source.message
@@ -1334,6 +1349,7 @@ impl AppServerSession {
             HistoryHydrationScope::Initial,
         )
         .await?;
+        self.record_thread_input_capability(&response.thread);
         Ok(response.thread)
     }
 
@@ -2739,6 +2755,7 @@ async fn thread_session_state_from_thread_response(
     );
     let (log_id, entry_count) = codex_message_history::history_metadata(&history_config).await;
     Ok(ThreadSessionState {
+        timeline: None,
         daybreak_enabled: false,
         wake_state: None,
         windows_sandbox_host,
@@ -4428,6 +4445,7 @@ mod tests {
                             }],
                         },
                         codex_app_server_protocol::ThreadItem::AgentMessage {
+                            workflow: None,
                             id: "assistant-1".to_string(),
                             text: "assistant reply".to_string(),
                             phase: None,

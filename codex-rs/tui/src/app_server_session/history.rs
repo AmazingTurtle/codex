@@ -39,7 +39,7 @@ pub(crate) enum HistoryHydrationScope<'a> {
 }
 
 /// Limits initial hydration independently from the number of items retained by later paging.
-struct HistoryLoadBudget {
+pub(super) struct HistoryLoadBudget {
     rows: Option<usize>,
     items: Option<usize>,
 }
@@ -78,7 +78,7 @@ impl HistoryLoadBudget {
         Self { rows, items }
     }
 
-    fn next_page_size(&self, rendered_rows: usize, scanned_items: usize) -> Option<u32> {
+    pub(super) fn next_page_size(&self, rendered_rows: usize, scanned_items: usize) -> Option<u32> {
         let remaining_rows = self.rows.map(|budget| budget.saturating_sub(rendered_rows));
         let remaining_items = self
             .items
@@ -129,7 +129,7 @@ fn advancing_cursor(
 pub(crate) struct ThreadHistoryPagination {
     pub(super) history_mode: ThreadHistoryMode,
     next_turn_cursor: Option<String>,
-    next_item_cursor: Option<String>,
+    pub(super) next_item_cursor: Option<String>,
     seen_turn_cursors: HashSet<String>,
     seen_item_cursors: HashSet<String>,
     loading_older: bool,
@@ -168,10 +168,44 @@ impl AppServerSession {
         } else if let Some(page) = self.history_pagination.get_mut(&thread_id) {
             page.loading_older = false;
         }
+        // Revert invalidates canonical positions and any in-flight older page.
+        // Refill only after success, so a rejected edit retains the old snapshot.
+        self.timeline_history.remove(&thread_id);
+        if !self.timeline_unsupported && retained_turns.iter().all(|turn| turn.items.is_empty()) {
+            // The edited window is now empty. Its older retained prefix has not
+            // been rendered, so leave a real end-of-history page for the viewport.
+            self.timeline_history.entry(thread_id).or_default();
+            return Ok(response);
+        }
+        let mut retained = response.thread.clone();
+        retained.turns = retained_turns.to_vec();
+        let (width, _) = crossterm::terminal::size().unwrap_or(/*default*/ (80, 24));
+        // Refresh only the visible retained anchors. Prefetching older items here
+        // would mark them loaded without inserting their cells in the transcript.
+        let budget = HistoryLoadBudget {
+            rows: Some(1),
+            items: Some(HISTORY_ITEM_SCAN_LIMIT),
+        };
+        self.hydrate_timeline_history(
+            &mut retained,
+            &budget,
+            width.max(1),
+            /*complete*/ false,
+        )
+        .await
+        .map_err(
+            |error| codex_app_server_client::TypedRequestError::Transport {
+                method: "thread/timeline/list after revert".into(),
+                source: std::io::Error::other(error.to_string()),
+            },
+        )?;
         Ok(response)
     }
 
     pub(crate) fn has_older_history(&self, thread_id: ThreadId) -> bool {
+        if let Some(history) = self.timeline_history.get(&thread_id) {
+            return history.cursor != super::workflow_history::TimelinePageCursor::Complete;
+        }
         self.history_pagination
             .get(&thread_id)
             .is_some_and(|page| page.next_item_cursor.is_some())
@@ -262,7 +296,7 @@ impl AppServerSession {
             .wrap_err("failed to load a bounded thread history page")
     }
 
-    async fn merge_thread_item_page(
+    pub(super) async fn merge_thread_item_page(
         &mut self,
         thread_id: ThreadId,
         page: ThreadItemsListResponse,
@@ -336,6 +370,15 @@ impl AppServerSession {
                     .turns;
             }
             self.history_pagination.entry(thread_id).or_default();
+            let (width, height) = crossterm::terminal::size().unwrap_or(/*default*/ (80, 24));
+            let budget = HistoryLoadBudget::new(scope, config, local_settings, height);
+            self.hydrate_timeline_history(
+                thread,
+                &budget,
+                width.max(1),
+                scope == HistoryHydrationScope::Complete,
+            )
+            .await?;
             return Ok(());
         }
 
@@ -401,6 +444,13 @@ impl AppServerSession {
         if config.is_some() {
             self.history_pagination.insert(thread_id, state);
         }
+        self.hydrate_timeline_history(
+            thread,
+            &budget,
+            width,
+            scope == HistoryHydrationScope::Complete,
+        )
+        .await?;
         Ok(())
     }
 }

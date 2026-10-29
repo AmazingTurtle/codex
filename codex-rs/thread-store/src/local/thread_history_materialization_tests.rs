@@ -738,7 +738,7 @@ async fn paginated_realtime_items_materialize_separately_in_rollout_order() {
         .execute(&pool)
         .await
         .expect("rewind projection checkpoint");
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("replay canonical rollout");
 
@@ -2014,7 +2014,7 @@ async fn paginated_projection_accepts_float_rate_limits_and_later_final_answers(
         .expect("queue unprojected history");
     recorder.flush().await.expect("flush unprojected history");
     assert_eq!(projection_state(&pool, thread_id).await, checkpoint);
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("project floating-point rate limits");
 
@@ -2192,7 +2192,7 @@ async fn synchronized_catch_up_does_not_replay_old_rows() {
         .live_rollout_path(thread_id)
         .await
         .expect("rollout path");
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("catch up synchronized rollout");
 
@@ -2240,7 +2240,7 @@ async fn catch_up_preserves_trailing_partial_line_boundaries() {
         format!("{complete_suffix}{partial_line}").as_str(),
     );
 
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("catch up complete suffix");
 
@@ -2251,7 +2251,7 @@ async fn catch_up_preserves_trailing_partial_line_boundaries() {
         (expected_offset, 2)
     );
     append_suffix(rollout_path.as_path(), "\n");
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("catch up completed partial suffix");
 
@@ -2320,7 +2320,7 @@ async fn catch_up_skips_invalid_complete_suffixes_and_projects_later_history() {
             .expect("rollout path");
         append_suffix(rollout_path.as_path(), suffix.as_str());
 
-        super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+        super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
             .await
             .expect(name);
 
@@ -2426,7 +2426,7 @@ async fn catch_up_preserves_committed_batches_on_reader_or_writer_failure() {
                 .expect("reject a later batch");
             }
         }
-        super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+        super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
             .await
             .expect_err("failed batch must not commit");
         let turn_count =
@@ -2472,7 +2472,7 @@ async fn catch_up_preserves_committed_batches_on_reader_or_writer_failure() {
         .execute(&pool)
         .await
         .expect("reject replay of committed rows");
-        super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+        super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
             .await
             .expect("retry uncommitted suffix");
         let turn_count =
@@ -2549,6 +2549,7 @@ async fn paused_projection_releases_writer_and_retains_progress_when_stopped() {
             super::pipeline::apply_batches(
                 &consumer_store,
                 thread_id,
+                thread_id,
                 before.0 as u64,
                 /*initial_ordinal*/ 0,
                 receiver,
@@ -2593,7 +2594,7 @@ async fn paused_projection_releases_writer_and_retains_progress_when_stopped() {
             }
         }
         assert_eq!(projection_state(pool, thread_id).await, (next_offset, 2));
-        super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+        super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
             .await
             .expect("resume after stopped producer");
         assert_eq!(projection_state(pool, thread_id).await, (next_offset, 2));
@@ -2620,7 +2621,7 @@ async fn catch_up_rejects_missing_rollout_after_projection() {
         .expect("close rollout");
     fs::remove_file(rollout_path.as_path()).expect("remove rollout");
 
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect_err("missing projected rollout should fail");
 }
@@ -2692,7 +2693,7 @@ async fn blank_and_rejected_rollout_lines_advance_projection() {
             .len(),
     )
     .expect("rollout length");
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("skip rejected tail");
     assert_eq!(
@@ -2729,7 +2730,7 @@ async fn blank_and_rejected_rollout_lines_advance_projection() {
         .is_err()
     );
 
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("project valid retry after rejected line");
 
@@ -2782,7 +2783,7 @@ async fn unknown_rollout_lines_leave_ordinals_pending_for_valid_retries() {
     let pending_line = unknown_line(1);
     append_suffix(rollout_path.as_path(), format!("{pending_line}\n").as_str());
 
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("skip unknown tail");
     let expected_pending_offset =
@@ -2803,7 +2804,7 @@ async fn unknown_rollout_lines_leave_ordinals_pending_for_valid_retries() {
         .as_str(),
     );
 
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("project valid retry and later history");
 
@@ -2858,7 +2859,7 @@ async fn event_timestamps_allow_invalid_rollout_timestamps() {
         .as_str(),
     );
 
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("project records with event timestamps");
 
@@ -2906,7 +2907,7 @@ async fn malformed_rollout_lines_skip_inferred_ordinal_gaps() {
         .as_str(),
     );
 
-    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+    super::materialize_to_sqlite(&store, thread_id, thread_id, rollout_path.as_path())
         .await
         .expect("skip malformed gap and project later history");
 

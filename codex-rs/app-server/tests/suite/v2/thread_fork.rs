@@ -2901,7 +2901,52 @@ async fn inheriting_fork_preserves_parent_config(history_mode: ThreadHistoryMode
 
         }))
     };
-    assert_eq!(comparable(1), comparable(2));
+    // Ephemeral prediction forks preserve inherited configuration and history,
+    // while retiring durable workflow capabilities that they cannot execute.
+    let mut expected_child = comparable(2);
+    let workflow_tools = [
+        "workflow_start",
+        "workflow_read",
+        "workflow_list",
+        "workflow_stop",
+        "workflow_retry",
+        "workflow_save",
+        "saved_workflow_list",
+        "saved_workflow_read",
+        "saved_workflow_delete",
+        "workflow_control",
+        "workflow_revision",
+    ];
+    let tools = expected_child["tools"]
+        .as_array_mut()
+        .expect("parent tool declarations");
+    let removed = tools
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .filter(|name| workflow_tools.contains(name))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    assert_eq!(removed, workflow_tools);
+    tools.retain(|tool| {
+        !tool["name"]
+            .as_str()
+            .is_some_and(|name| workflow_tools.contains(&name))
+    });
+    let input = expected_child["input"]
+        .as_array_mut()
+        .expect("parent model input");
+    assert_eq!(
+        input.last(),
+        Some(&json!({
+            "type":"message","role":"user",
+            "content":[{"type":"input_text","text":"Continue identically"}],
+        }))
+    );
+    input.insert(input.len() - 1, json!({
+        "type":"message","role":"developer",
+        "content":[{"type":"input_text","text":"<dynamic_workflows>\nWorkflow tools are unavailable for this step. The previous dynamic-workflow policy no longer applies; do not launch workflows.\n</dynamic_workflows>"}],
+    }));
+    assert_eq!(comparable(1), expected_child);
     assert_eq!(
         requests[1].body_json()["prompt_cache_key"],
         requests[2].body_json()["prompt_cache_key"]

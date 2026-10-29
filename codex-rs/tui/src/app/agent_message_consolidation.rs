@@ -24,7 +24,7 @@ impl App {
     pub(super) fn handle_consolidate_agent_message(
         &mut self,
         tui: &mut tui::Tui,
-        source: history_cell::AgentMarkdownCell,
+        source: Arc<dyn HistoryCell>,
         scrollback_reflow: ConsolidationScrollbackReflow,
         deferred_history_cell: Option<Box<dyn HistoryCell>>,
     ) -> Result<()> {
@@ -54,7 +54,7 @@ impl App {
             tracing::debug!(
                 "ConsolidateAgentMessage: replacing cells [{start}..{end}] with AgentMarkdownCell"
             );
-            let consolidated: Arc<dyn HistoryCell> = Arc::new(source);
+            let consolidated = source;
             self.native_history
                 .consolidate(&self.transcript_cells[start..end], &consolidated);
             if tui.is_owned_screen() {

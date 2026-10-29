@@ -149,12 +149,14 @@ mod chat_composer_history;
 mod command_popup;
 pub(crate) mod custom_prompt_view;
 mod effort_status_line;
+mod execution_control;
 mod experimental_features_view;
 mod file_search_popup;
 mod footer;
 mod list_selection_view;
 mod memories_settings_view;
 mod mention_usage;
+mod workflow_strip;
 pub(crate) use mention_usage::MentionUsage;
 mod mentions_v2;
 mod picker_presets;
@@ -293,6 +295,7 @@ struct DelayedApprovalRequest {
 /// (`BottomPaneView`). It performs local input routing and renders time-based hints, while leaving
 /// process-level decisions (quit, interrupt, shutdown) to `ChatWidget`.
 pub(crate) struct BottomPane {
+    pub(crate) workflow_strip: crate::workflows::WorkflowStrip,
     /// Composer is retained even when a BottomPaneView is displayed so the
     /// input state is retained when the view is closed.
     composer: ChatComposer,
@@ -325,8 +328,9 @@ pub(crate) struct BottomPane {
     /// Running-hook summary supplied by the lifecycle owner after its reveal delay.
     hook_status_message: Option<String>,
     inline_banner: Option<actionable_banner::InlineBanner>,
-    /// Streaming may drop the row without losing its elapsed time or modal pause.
+    /// Streaming may drop the row without losing elapsed time or independent modal/execution pauses.
     status_timer: crate::status_indicator_widget::StatusTimer,
+    execution_state: Option<codex_protocol::protocol::ExecutionControlState>,
     /// Unified exec session summary source.
     ///
     /// When a status row exists, this summary is mirrored inline in that row;
@@ -399,6 +403,7 @@ impl BottomPane {
         composer.set_keymap_bindings(&keymap);
         composer.set_skill_mentions(skills);
         Self {
+            workflow_strip: crate::workflows::WorkflowStrip(Default::default()),
             composer,
             view_stack: Vec::new(),
             key_chord_reset_requested: false,
@@ -419,6 +424,7 @@ impl BottomPane {
             hook_status_message: None,
             inline_banner: None,
             status_timer: crate::status_indicator_widget::StatusTimer::default(),
+            execution_state: None,
             unified_exec_footer: UnifiedExecFooter::new(),
             pending_input_preview: PendingInputPreview::new(),
             pending_thread_approvals: PendingThreadApprovals::new(),
@@ -658,6 +664,15 @@ impl BottomPane {
     pub fn set_service_tier_commands(&mut self, commands: Vec<ServiceTierCommand>) {
         self.composer.set_service_tier_commands(commands);
         self.request_redraw();
+    }
+
+    pub(crate) fn set_saved_workflow_commands(
+        &mut self,
+        commands: Vec<crate::workflows::saved_commands::SavedCommand>,
+    ) {
+        if self.composer.set_saved_workflow_commands(commands) {
+            self.request_redraw();
+        }
     }
 
     pub fn set_goal_command_enabled(&mut self, enabled: bool) {
@@ -1420,6 +1435,7 @@ impl BottomPane {
             // Hide the status indicator when a task completes, but keep other modal views.
             self.hide_status_indicator();
         }
+        self.sync_execution_status();
     }
 
     pub(crate) fn set_queue_submissions(&mut self, queue_submissions: bool) {
@@ -1452,6 +1468,7 @@ impl BottomPane {
             self.sync_status_inline_message();
             self.request_redraw();
         }
+        self.sync_execution_status();
     }
 
     pub(crate) fn set_interrupt_hint_visible(&mut self, visible: bool) {
@@ -1836,6 +1853,13 @@ impl BottomPane {
             .is_some_and(|(name, _, _)| matches!(name, "agents" | "subagents"));
 
         self.keymap.chat.interrupt_turn.is_pressed(key_event)
+            && !matches!(
+                self.execution_state,
+                Some(
+                    codex_protocol::protocol::ExecutionControlState::Pausing
+                        | codex_protocol::protocol::ExecutionControlState::Paused
+                )
+            )
             && !(self.shortcut_overlay_visible()
                 && key_hint::plain(KeyCode::Esc).is_press(key_event))
             && self.is_task_running
@@ -2575,6 +2599,10 @@ impl BottomPane {
                 }))
             };
             flex2.push(/*flex*/ 0, composer);
+            flex2.push(
+                /*flex*/ 1,
+                RenderableItem::Borrowed(&self.workflow_strip),
+            );
             RenderableItem::Owned(Box::new(flex2))
         }
     }

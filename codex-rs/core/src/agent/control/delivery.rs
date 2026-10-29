@@ -17,6 +17,9 @@ impl AgentMessage {
     ) -> InterAgentCommunication {
         let trigger_turn = mode == MessageDeliveryMode::TriggerTurn;
         match self {
+            Self::WorkflowTask(message) => {
+                crate::workflows::workflow_task_communication(message, author, recipient, mode)
+            }
             Self::Encrypted(message) => InterAgentCommunication::new_encrypted(
                 author,
                 recipient,

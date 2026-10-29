@@ -1,0 +1,28 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: help
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0               Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+  Navigate                                 Workflows
+  ↑      Up                                space  Actions for selected work
+  ↓      Down                              o      Open agent chat
+  pgup   Top of details                    s      Stop
+  pgdn   Bottom of details                 r      Retry
+  home   First row                         c      Recover
+  end    Last row                          w      Save
+  enter  Open Main / worker / run saved
+  esc    Back / close                      Views
+  j      Scroll details up 4 rows          Tab / Shift+Tab    Status filter
+  k      Scroll details down 4 rows        f                  Choose scope
+  f4     Toggle visible tool details       g                  Group
+                                           l                  Saved library / runs
+                                           a                  Earlier attempts
+                                           1 / 2 / 3 · ← / →  Overview / transcript / source
+                                           [ / ]              Previous / next page
+                                           p                  Older transcript items
+                                           R                  Refresh
+
+
+  Esc back · ↑/↓ scroll

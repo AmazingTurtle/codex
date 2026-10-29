@@ -144,8 +144,13 @@ fn codex_apps_mcp_protocol_can_be_enabled_independently_of_generic_mcp() {
 #[test]
 fn default_enabled_features_are_stable() {
     for spec in crate::FEATURES {
-        // Instant interrupts are enabled by default while retaining their development stage.
-        if spec.default_enabled && spec.id != Feature::InstantInterrupt {
+        // These features are intentionally enabled before stabilization.
+        if spec.default_enabled
+            && !matches!(
+                spec.id,
+                Feature::InstantInterrupt | Feature::DynamicWorkflows
+            )
+        {
             assert!(
                 matches!(spec.stage, Stage::Stable | Stage::Removed),
                 "feature `{}` is enabled by default but is not stable/removed ({:?})",
@@ -197,6 +202,40 @@ fn code_mode_host_feature_config_preserves_boolean_toggle() {
         features.entries(),
         BTreeMap::from([("code_mode_host".to_string(), false)])
     );
+}
+
+#[test]
+fn dynamic_workflows_accepts_boolean_and_mode_table() {
+    for (input, expected, entries) in [
+        (
+            "dynamic_workflows = false",
+            FeatureToml::Enabled(false),
+            BTreeMap::from([("dynamic_workflows".to_string(), false)]),
+        ),
+        (
+            "[dynamic_workflows]\nenabled = true\nmode = 'explicit'",
+            FeatureToml::Config(crate::DynamicWorkflowsConfigToml {
+                enabled: Some(true),
+                mode: Some(crate::DynamicWorkflowsMode::Explicit),
+            }),
+            BTreeMap::from([("dynamic_workflows".to_string(), true)]),
+        ),
+        (
+            "[dynamic_workflows]\nmode = 'off'",
+            FeatureToml::Config(crate::DynamicWorkflowsConfigToml {
+                enabled: None,
+                mode: Some(crate::DynamicWorkflowsMode::Off),
+            }),
+            BTreeMap::new(),
+        ),
+    ] {
+        let features: FeaturesToml = toml::from_str(input).expect("valid workflow config");
+        assert_eq!(
+            (features.dynamic_workflows.clone(), features.entries()),
+            (Some(expected), entries)
+        );
+    }
+    assert!(toml::from_str::<FeaturesToml>("[dynamic_workflows]\nmode = 'unknown'").is_err());
 }
 
 #[test]

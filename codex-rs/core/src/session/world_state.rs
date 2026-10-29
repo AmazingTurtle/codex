@@ -9,6 +9,7 @@ use crate::context::world_state::AppsInstructionsState;
 use crate::context::world_state::CollaborationModeState;
 use crate::context::world_state::CompactPermissionsState;
 use crate::context::world_state::ContextWindowGuidanceState;
+use crate::context::world_state::DynamicWorkflowsState;
 use crate::context::world_state::EnvironmentsInstructionsState;
 use crate::context::world_state::EnvironmentsState;
 use crate::context::world_state::ManagedDeveloperInstructionsState;
@@ -22,6 +23,7 @@ use crate::context::world_state::PluginsInstructionsState;
 use crate::context::world_state::RealtimeState;
 use crate::context::world_state::ToolsState;
 use crate::context::world_state::TopLevelToolsState;
+use crate::context::world_state::WorkflowAvailability;
 use crate::context::world_state::WorldState;
 use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use codex_connectors::AppToolPolicyEvaluator;
@@ -177,6 +179,23 @@ impl Session {
             )?);
         }
         world_state.add_section(model_state);
+        let workflow_availability = if step_context
+            .tool_router
+            .exposes_tool(&ToolName::plain("workflow_read"))
+        {
+            WorkflowAvailability::Available
+        } else {
+            WorkflowAvailability::Unavailable
+        };
+        world_state.add_section(DynamicWorkflowsState::new(
+            turn_context.config.dynamic_workflows_mode,
+            workflow_availability,
+            model_info
+                .model_messages
+                .as_ref()
+                .and_then(|messages| messages.tools.as_ref())
+                .and_then(|tools| tools.dynamic_workflows.as_ref()),
+        ));
         let token_budget_enabled = turn_context.config.features.enabled(Feature::TokenBudget)
             && step_context
                 .settings

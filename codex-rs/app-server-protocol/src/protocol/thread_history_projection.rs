@@ -14,12 +14,59 @@ use crate::protocol::v2::ThreadItem;
 use crate::protocol::v2::TurnError;
 use crate::protocol::v2::TurnStatus;
 
+/// Projects a real native input without treating its delivery as a new human submission.
+/// Identity and turn provenance must come from the stored native item, never surrounding text.
+pub fn project_native_agent_input(
+    item: &codex_protocol::models::ResponseItem,
+) -> Option<ThreadHistoryItemChange> {
+    use codex_protocol::models::AgentMessageInputContent;
+    use codex_protocol::models::ResponseItem;
+    let ResponseItem::AgentMessage {
+        id: Some(id),
+        content,
+        ..
+    } = item
+    else {
+        return None;
+    };
+    let turn_id = item.turn_id()?;
+    let content = content
+        .iter()
+        .map(|content| match content {
+            AgentMessageInputContent::InputText { text } => {
+                Some(crate::protocol::v2::UserInput::Text {
+                    text: text.clone(),
+                    text_elements: Vec::new(),
+                })
+            }
+            AgentMessageInputContent::EncryptedContent { .. } => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if content.is_empty() {
+        return None;
+    }
+    Some(ThreadHistoryItemChange {
+        turn_id: turn_id.into(),
+        item: ThreadItem::UserMessage {
+            id: id.to_string(),
+            client_id: None,
+            content,
+        },
+        started_at_ms: None,
+        completed_at_ms: None,
+    })
+}
+
 /// Project one durable rollout line without reconstructing earlier history.
 ///
 /// Callers that replay a JSONL suffix should invoke it once per line, in ordinal order, so storage
 /// can preserve the first and latest timestamps for repeated item snapshots independently.
 pub fn project_rollout_line(line: &RolloutLine) -> ThreadHistoryChangeSet {
     match &line.item {
+        RolloutItem::ResponseItem(item) => ThreadHistoryChangeSet {
+            changed_items: project_native_agent_input(&item.item).into_iter().collect(),
+            ..Default::default()
+        },
         RolloutItem::EventMsg(EventMsg::TurnStarted(event)) => ThreadHistoryChangeSet {
             changed_turns: vec![ThreadHistoryTurnMetadata {
                 turn_id: event.turn_id.clone(),
@@ -85,7 +132,6 @@ pub fn project_rollout_line(line: &RolloutLine) -> ThreadHistoryChangeSet {
             ..Default::default()
         },
         RolloutItem::SessionMeta(_)
-        | RolloutItem::ResponseItem(_)
         | RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. }
         | RolloutItem::Compacted(_)

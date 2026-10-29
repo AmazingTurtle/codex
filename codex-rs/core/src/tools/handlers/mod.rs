@@ -35,6 +35,7 @@ pub(crate) mod unified_exec;
 mod view_image;
 pub(crate) mod view_image_spec;
 mod wait_for_environment;
+pub(crate) mod workflows;
 
 use crate::tools::context::ToolEnvironments;
 use crate::tools::context::ToolInvocation;

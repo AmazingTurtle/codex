@@ -1,0 +1,21 @@
+---
+source: tui/src/workflows/actions/actions_tests.rs
+expression: "render(&picker, 100, 22)"
+---
+
+  Revision 2 · Draft
+  Preserve 2 / 5 statements
+  Rerun 3 statements
+  Statement 3 changed; its suffix will run again
+  Same workflow budget · 2 / 8 starts · 14K / 100K tokens
+  Review staged workflow revision
+  Staging has not applied or saved this revision
+
+
+› 1. Apply after accepted work     Keep accepted agents running, then replay the safe prefix
+  2. Interrupt and apply           Interrupt accepted agents before replaying the safe prefix
+  3. Inspect execution 1           Read this execution's immutable result, source, and owned agent
+                                   chat
+  4. Inspect execution 2           Read this execution's immutable result, source, and owned agent
+                                   chat
+  5. Inspect source and arguments  Read the exact staged source before applying

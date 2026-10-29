@@ -316,6 +316,7 @@ async fn malformed_system_defaults_do_not_block_existing_thread_turn() -> Result
     );
     let mut client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
+        code_mode_session_provider: None,
         config,
         cli_overrides: Vec::new(),
         loader_overrides: overrides,

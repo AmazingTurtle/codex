@@ -1,0 +1,18 @@
+---
+source: tui/src/workflows/display_v2_tests.rs
+expression: screen
+---
+  Saved workflows  Tab / Shift+Tab filt…
+   All 1   Project 1   User 0
+  ──────────────────────────────────────
+   1 Overview   2 Unavailable          ›
+  Legacy saved workflow is read-only.
+  Review project
+  Project workflow
+  Legacy saved workflow is read-only.
+  3 Source to inspect this script
+
+
+
+  Esc library · 1/3 view · read-only · ↑
+  Tab filter · ? help

@@ -85,7 +85,7 @@ impl ExecutionControlRequestProcessor {
     }
 }
 
-/// Refresh on native activity and queued-wake changes. The
+/// Refresh on native activity, workflow updates, and queued-wake changes. The
 /// listener owns the last snapshot so repeated lifecycle signals are silent.
 pub(super) async fn notify(
     thread_id: ThreadId,

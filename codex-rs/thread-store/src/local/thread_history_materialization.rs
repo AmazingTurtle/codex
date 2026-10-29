@@ -31,12 +31,14 @@ const BATCH_STEPS: usize = 256;
 pub(super) async fn materialize_to_sqlite(
     store: &LocalThreadStore,
     thread_id: ThreadId,
+    owner_thread_id: ThreadId,
     rollout_path: &Path,
 ) -> ThreadStoreResult<()> {
     if store.state_db.is_none() {
         return Ok(());
     }
-    let result = materialize_to_sqlite_with_state_db(store, thread_id, rollout_path).await;
+    let result =
+        materialize_to_sqlite_with_state_db(store, thread_id, owner_thread_id, rollout_path).await;
     record_projection_outcome(&result);
     result
 }
@@ -44,12 +46,10 @@ pub(super) async fn materialize_to_sqlite(
 async fn materialize_to_sqlite_with_state_db(
     store: &LocalThreadStore,
     thread_id: ThreadId,
+    owner_thread_id: ThreadId,
     rollout_path: &Path,
 ) -> ThreadStoreResult<()> {
-    let projection_state = super::thread_history::projection_state(store, thread_id).await?;
-    let start_offset = projection_state
-        .as_ref()
-        .map_or(0, |state| state.next_byte_offset);
+    let mut projection_state = super::thread_history::projection_state(store, thread_id).await?;
     if projection_state.is_none()
         && codex_rollout::existing_rollout_path(rollout_path)
             .await
@@ -61,6 +61,26 @@ async fn materialize_to_sqlite_with_state_db(
         .await
         .map_err(thread_store_io_error)?
         .meta;
+    if session_meta.id != owner_thread_id {
+        return Err(ThreadStoreError::InvalidRequest {
+            message: "canonical workflow history metadata belongs to another thread".into(),
+        });
+    }
+    if session_meta.forked_from_id.is_some()
+        && session_meta.history_base.is_none()
+        && projection_state
+            .as_ref()
+            .is_some_and(|state| state.workflow_origin_state.is_none())
+    {
+        // Old copied-fork checkpoints cannot prove where their inherited prefix
+        // ended. Rebuild this derived SQLite projection once through the existing
+        // bounded materializer; the authoritative rollout remains unchanged.
+        super::thread_history::delete_thread(store, thread_id).await?;
+        projection_state = None;
+    }
+    let start_offset = projection_state
+        .as_ref()
+        .map_or(0, |state| state.next_byte_offset);
     let initial_ordinal = session_meta
         .history_base
         .map_or(0, |base| base.end_ordinal_exclusive);
@@ -70,7 +90,10 @@ async fn materialize_to_sqlite_with_state_db(
         .map_or(initial_ordinal, |state| state.next_ordinal);
     pipeline::read_and_apply(
         store,
-        thread_id,
+        pipeline::ProjectionIdentity {
+            rollout_id: thread_id,
+            owner_thread_id,
+        },
         rollout_path,
         start_offset,
         expected_ordinal,
@@ -304,6 +327,16 @@ fn read_projection_batches(
                 end_byte_offset: line_end_offset,
                 fallback_created_at_ms,
                 changes,
+                workflow_source:
+                    super::thread_history::workflow_origin::WorkflowSourceBoundary::from_item(
+                        &line.item,
+                    ),
+                workflow_event: match &line.item {
+                    RolloutItem::EventMsg(
+                        codex_protocol::protocol::EventMsg::WorkflowLifecycle(event),
+                    ) if !is_inherited_subagent_history => Some(event.clone().into()),
+                    _ => None,
+                },
                 realtime_item: match line.item {
                     RolloutItem::RealtimeItem(item) if !is_inherited_subagent_history => Some(item),
                     _ => None,

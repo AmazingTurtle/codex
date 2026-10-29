@@ -23,11 +23,35 @@ pub enum SpawnAgentForkMode {
     FullHistory,
 }
 
+/// Optional host admission checks. The admitted callback runs exactly after
+/// native membership is accepted, separating rejection from uncertain creation.
+#[derive(Clone)]
+pub struct AgentAdmissionControl {
+    pub(crate) check: std::sync::Arc<
+        dyn Fn() -> futures::future::BoxFuture<'static, codex_protocol::error::Result<()>>
+            + Send
+            + Sync,
+    >,
+    pub(crate) admitted:
+        std::sync::Arc<dyn Fn() -> codex_protocol::error::Result<()> + Send + Sync>,
+}
+
+impl std::fmt::Debug for AgentAdmissionControl {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AgentAdmissionControl")
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SpawnAgentOptions {
     /// Cancels waiting for tree admission. Once membership is admitted, native
     /// spawn ownership runs through acceptance independently of this token.
     pub admission_cancellation: Option<tokio_util::sync::CancellationToken>,
+    pub admission_control: Option<AgentAdmissionControl>,
+    /// Optional structured-output contract for the child's initial turn.
+    pub final_output_json_schema: Option<serde_json::Value>,
     pub fork_parent_spawn_call_id: Option<String>,
     pub fork_mode: Option<SpawnAgentForkMode>,
     pub parent_thread_id: Option<ThreadId>,
@@ -69,6 +93,8 @@ pub enum MessageDeliveryMode {
 /// Keeps model-provided encrypted content distinct from text that needs a context wrapper.
 pub enum AgentMessage {
     Plaintext(String),
+    /// Full workflow task retained durably; request copies may use bounded ordered parts.
+    WorkflowTask(String),
     Encrypted(String),
 }
 

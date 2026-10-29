@@ -1197,6 +1197,16 @@ impl LocalThreadStore {
                     } else {
                         project_rollout_line(&line)
                     },
+                    workflow_source:
+                        super::thread_history::workflow_origin::WorkflowSourceBoundary::from_item(
+                            &line.item,
+                        ),
+                    workflow_event: match &line.item {
+                        RolloutItem::EventMsg(
+                            codex_protocol::protocol::EventMsg::WorkflowLifecycle(event),
+                        ) if !is_inherited_subagent_history => Some(event.clone().into()),
+                        _ => None,
+                    },
                     realtime_item: match line.item {
                         RolloutItem::RealtimeItem(item) if !is_inherited_subagent_history => {
                             Some(item)
@@ -1211,6 +1221,7 @@ impl LocalThreadStore {
                 thread_history::apply_projection(
                     self,
                     thread_id,
+                    thread_id,
                     batch_start,
                     offset,
                     /*initial_ordinal*/ 0,
@@ -1224,6 +1235,7 @@ impl LocalThreadStore {
         if batch_start != offset {
             thread_history::apply_projection(
                 self,
+                thread_id,
                 thread_id,
                 batch_start,
                 offset,

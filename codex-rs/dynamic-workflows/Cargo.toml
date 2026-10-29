@@ -1,0 +1,30 @@
+[package]
+name = "codex-dynamic-workflows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+blake3 = { workspace = true }
+codex-code-mode-protocol = { workspace = true }
+codex-protocol = { workspace = true }
+codex-utils-absolute-path = { workspace = true }
+jsonschema = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["sync", "macros", "rt", "time"] }
+tokio-util = { workspace = true, features = ["rt"] }
+tree-sitter = { workspace = true }
+tree-sitter-javascript = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+codex-code-mode-runtime = { workspace = true }
+pretty_assertions = { workspace = true }

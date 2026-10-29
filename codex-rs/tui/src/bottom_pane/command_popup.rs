@@ -30,6 +30,7 @@ const COMMAND_COLUMN_WIDTH: ColumnWidthConfig = ColumnWidthConfig::new(
 pub(crate) enum CommandItem {
     Builtin(SlashCommand),
     ServiceTier(ServiceTierCommand),
+    Workflow(crate::workflows::saved_commands::SavedCommand),
 }
 
 pub(crate) struct CommandPopup {
@@ -49,6 +50,8 @@ pub(crate) struct CommandPopupFlags {
     pub(crate) service_tier_commands_enabled: bool,
     pub(crate) daybreak_command_description: Option<&'static str>,
     pub(crate) goal_command_enabled: bool,
+    pub(crate) pause_command_visible: bool,
+    pub(crate) unpause_command_visible: bool,
     pub(crate) voice_command_enabled: bool,
     pub(crate) worktrees_enabled: bool,
     pub(crate) windows_degraded_sandbox_active: bool,
@@ -65,6 +68,8 @@ impl From<CommandPopupFlags> for BuiltinCommandFlags {
             service_tier_commands_enabled: value.service_tier_commands_enabled,
             daybreak_command_description: value.daybreak_command_description,
             goal_command_enabled: value.goal_command_enabled,
+            pause_command_visible: value.pause_command_visible,
+            unpause_command_visible: value.unpause_command_visible,
             voice_command_enabled: value.voice_command_enabled,
             worktrees_enabled: value.worktrees_enabled,
             allow_elevate_sandbox: value.windows_degraded_sandbox_active,
@@ -87,11 +92,19 @@ impl CommandPopup {
             &service_tier_commands,
         )
         .into_iter()
+        .filter(|command| match command {
+            SlashCommandItem::Builtin(SlashCommand::Pause) => flags.pause_command_visible,
+            SlashCommandItem::Builtin(SlashCommand::Unpause) => flags.unpause_command_visible,
+            SlashCommandItem::Builtin(_)
+            | SlashCommandItem::ServiceTier(_)
+            | SlashCommandItem::Workflow(_) => true,
+        })
         .filter_map(|command| match command {
             SlashCommandItem::Builtin(cmd) => (!cmd.command().starts_with("debug")
                 && cmd != SlashCommand::Apps)
                 .then_some(CommandItem::Builtin(cmd)),
             SlashCommandItem::ServiceTier(command) => Some(CommandItem::ServiceTier(command)),
+            SlashCommandItem::Workflow(command) => Some(CommandItem::Workflow(command)),
         })
         .collect();
         Self {
@@ -101,6 +114,15 @@ impl CommandPopup {
             state: ScrollState::new(),
             daybreak_command_description: flags.daybreak_command_description,
         }
+    }
+
+    pub(crate) fn with_workflows(
+        mut self,
+        commands: &[crate::workflows::saved_commands::SavedCommand],
+    ) -> Self {
+        self.commands
+            .extend(commands.iter().cloned().map(CommandItem::Workflow));
+        self
     }
 
     /// Update the filter string based on the current composer text. The text
@@ -216,6 +238,19 @@ impl CommandPopup {
         self.filtered().into_iter().map(|(c, _)| c).collect()
     }
 
+    pub(crate) fn restore_selection(&mut self, selected: Option<&CommandItem>) {
+        if let Some(selected) = selected
+            && let Some(index) = self
+                .filtered_items()
+                .iter()
+                .position(|item| item == selected)
+        {
+            self.state.selected_idx = Some(index);
+            self.state
+                .ensure_visible(self.filtered_items().len(), MAX_POPUP_ROWS);
+        }
+    }
+
     fn rows_from_matches(
         &self,
         matches: Vec<(CommandItem, Option<Vec<usize>>)>,
@@ -295,6 +330,9 @@ impl CommandPopup {
             && match item {
                 CommandItem::Builtin(cmd) => !cmd.available_in_side_conversation(),
                 CommandItem::ServiceTier(_) => true,
+                CommandItem::Workflow(_) => {
+                    !SlashCommand::Workflows.available_in_side_conversation()
+                }
             }
     }
 }
@@ -304,6 +342,7 @@ impl CommandItem {
         match self {
             Self::Builtin(cmd) => cmd.command(),
             Self::ServiceTier(command) => &command.name,
+            Self::Workflow(command) => &command.name,
         }
     }
 
@@ -311,6 +350,7 @@ impl CommandItem {
         match self {
             Self::Builtin(cmd) => cmd.description(),
             Self::ServiceTier(command) => &command.description,
+            Self::Workflow(command) => &command.description,
         }
     }
 }
@@ -334,6 +374,43 @@ impl WidgetRef for CommandPopup {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn execution_commands_follow_authoritative_availability() {
+        for (pause_command_visible, unpause_command_visible, expected) in [
+            (false, false, Vec::new()),
+            (true, false, vec![SlashCommand::Pause]),
+            (false, true, vec![SlashCommand::Unpause]),
+        ] {
+            let popup = CommandPopup::new(
+                CommandPopupFlags {
+                    pause_command_visible,
+                    unpause_command_visible,
+                    ..Default::default()
+                },
+                Vec::new(),
+            );
+            let actual = popup
+                .commands
+                .iter()
+                .filter_map(|item| match item {
+                    CommandItem::Builtin(
+                        command @ (SlashCommand::Pause | SlashCommand::Unpause),
+                    ) => Some(*command),
+                    CommandItem::Builtin(_)
+                    | CommandItem::ServiceTier(_)
+                    | CommandItem::Workflow(_) => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected);
+            for command in ["pause", "unpause"] {
+                assert!(
+                    super::super::slash_commands::find_builtin_command(command, Default::default())
+                        .is_some()
+                );
+            }
+        }
+    }
 
     #[test]
     fn unavailable_side_conversation_command_is_shown_only_when_searched() {
@@ -385,7 +462,7 @@ mod tests {
         let matches = popup.filtered_items();
         let has_init = matches.iter().any(|item| match item {
             CommandItem::Builtin(cmd) => cmd.command() == "init",
-            CommandItem::ServiceTier(_) => false,
+            CommandItem::ServiceTier(_) | CommandItem::Workflow(_) => false,
         });
         assert!(
             has_init,
@@ -406,6 +483,9 @@ mod tests {
             Some(CommandItem::ServiceTier(command)) => {
                 panic!("expected init command, got service tier {command:?}")
             }
+            Some(CommandItem::Workflow(command)) => {
+                panic!("expected init, got workflow {command:?}")
+            }
             None => panic!("expected a selected command for exact match"),
         }
     }
@@ -419,6 +499,9 @@ mod tests {
             Some(CommandItem::Builtin(cmd)) => assert_eq!(cmd.command(), "model"),
             Some(CommandItem::ServiceTier(command)) => {
                 panic!("expected model command, got service tier {command:?}")
+            }
+            Some(CommandItem::Workflow(command)) => {
+                panic!("expected model, got workflow {command:?}")
             }
             None => panic!("expected at least one match for '/mo'"),
         }
@@ -513,6 +596,7 @@ mod tests {
             .map(|item| match item {
                 CommandItem::Builtin(cmd) => cmd.command().to_string(),
                 CommandItem::ServiceTier(command) => command.name,
+                CommandItem::Workflow(command) => command.name,
             })
             .collect();
         assert_eq!(
@@ -581,6 +665,7 @@ mod tests {
             .map(|item| match item {
                 CommandItem::Builtin(cmd) => cmd.command().to_string(),
                 CommandItem::ServiceTier(command) => command.name,
+                CommandItem::Workflow(command) => command.name,
             })
             .collect();
         assert!(
@@ -656,6 +741,7 @@ mod tests {
             .map(|item| match item {
                 CommandItem::Builtin(cmd) => cmd.command().to_string(),
                 CommandItem::ServiceTier(command) => command.name,
+                CommandItem::Workflow(command) => command.name,
             })
             .collect();
         assert!(
@@ -675,6 +761,8 @@ mod tests {
                 service_tier_commands_enabled: false,
                 daybreak_command_description: None,
                 goal_command_enabled: false,
+                pause_command_visible: false,
+                unpause_command_visible: false,
                 voice_command_enabled: false,
                 worktrees_enabled: true,
                 windows_degraded_sandbox_active: false,
@@ -702,6 +790,7 @@ mod tests {
             .map(|item| match item {
                 CommandItem::Builtin(cmd) => cmd.command().to_string(),
                 CommandItem::ServiceTier(command) => command.name,
+                CommandItem::Workflow(command) => command.name,
             })
             .collect();
 

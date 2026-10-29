@@ -479,6 +479,12 @@ impl ThreadHistoryBuilder {
     }
 
     fn handle_response_item(&mut self, item: &codex_protocol::models::ResponseItem) {
+        if let Some(input) =
+            crate::protocol::thread_history_projection::project_native_agent_input(item)
+        {
+            self.upsert_item_in_turn_id(&input.turn_id, input.item);
+            return;
+        }
         let codex_protocol::models::ResponseItem::Message {
             role, content, id, ..
         } = item
@@ -536,6 +542,7 @@ impl ThreadHistoryBuilder {
             memory_citation: payload.memory_citation.clone().map(Into::into),
             delivery: payload.delivery,
             questions: payload.questions.clone(),
+            workflow: None,
         });
     }
 
@@ -1944,6 +1951,7 @@ mod tests {
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             }
         );
         assert_eq!(
@@ -1979,6 +1987,7 @@ mod tests {
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             }
         );
     }
@@ -2664,6 +2673,7 @@ mod tests {
                 memory_citation: None,
                 delivery: Some(AgentMessageDelivery::Async),
                 questions: Some(questions),
+                workflow: None,
             }
         );
     }
@@ -2899,6 +2909,7 @@ mod tests {
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             }
         );
 
@@ -2925,6 +2936,7 @@ mod tests {
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             }
         );
     }
@@ -3009,6 +3021,7 @@ mod tests {
                     memory_citation: None,
                     delivery: None,
                     questions: None,
+                    workflow: None,
                 },
             ]
         );
@@ -3030,6 +3043,7 @@ mod tests {
                     memory_citation: None,
                     delivery: None,
                     questions: None,
+                    workflow: None,
                 },
             ]
         );

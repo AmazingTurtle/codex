@@ -20,6 +20,8 @@ use tokio_util::sync::CancellationToken;
 
 #[path = "execution_control/activity.rs"]
 mod activity;
+#[path = "execution_control/clock.rs"]
+mod clock;
 #[path = "execution_control/inference.rs"]
 mod inference;
 #[path = "execution_control/journal.rs"]
@@ -52,9 +54,11 @@ pub(crate) struct TreeExecutionControl {
     storage: Mutex<Option<Storage>>,
     transition: Mutex<()>,
     state: watch::Sender<ExecutionControlState>,
+    clock: clock::ExecutionClock,
     inference_count: AtomicUsize,
     settled: Notify,
     members: std::sync::Mutex<Vec<Weak<crate::session::session::Session>>>,
+    member_revision: watch::Sender<u64>,
     activity_refresh: Mutex<()>,
     last_activity: AtomicBool,
 }
@@ -65,9 +69,11 @@ impl Default for TreeExecutionControl {
             storage: Mutex::new(None),
             transition: Mutex::new(()),
             state: watch::channel(ExecutionControlState::Running).0,
+            clock: Default::default(),
             inference_count: AtomicUsize::new(0),
             settled: Notify::new(),
             members: Default::default(),
+            member_revision: watch::channel(0).0,
             activity_refresh: Mutex::new(()),
             last_activity: AtomicBool::new(false),
         }
@@ -75,6 +81,21 @@ impl Default for TreeExecutionControl {
 }
 
 impl TreeExecutionControl {
+    pub(crate) fn running_time_snapshot(&self) -> clock::ExecutionClockSnapshot {
+        self.clock.snapshot()
+    }
+
+    fn set_state(&self, state: ExecutionControlState) {
+        self.clock.transition(state);
+        self.state.send_replace(state);
+    }
+    pub(crate) fn subscribe_state(&self) -> watch::Receiver<ExecutionControlState> {
+        self.state.subscribe()
+    }
+
+    pub(crate) fn subscribe_members(&self) -> watch::Receiver<u64> {
+        self.member_revision.subscribe()
+    }
     pub(crate) async fn register(&self, session: &Arc<crate::session::session::Session>) {
         let ephemeral = session.get_config().await.ephemeral;
         if let Some(storage) = self.storage.lock().await.as_mut() {
@@ -93,6 +114,8 @@ impl TreeExecutionControl {
         let mut members = self.members.lock().unwrap_or_else(PoisonError::into_inner);
         members.retain(|member| member.strong_count() != 0);
         members.push(Arc::downgrade(session));
+        self.member_revision
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
     pub(crate) fn members(&self) -> Vec<Arc<crate::session::session::Session>> {
@@ -105,7 +128,7 @@ impl TreeExecutionControl {
     }
 
     async fn publish(&self, state: ExecutionControlState) -> Result<()> {
-        self.state.send_replace(state);
+        self.set_state(state);
         self.broadcast_state(state).await
     }
 
@@ -156,7 +179,7 @@ impl TreeExecutionControl {
                 "execution control has another owning root".into(),
             ));
         }
-        self.state.send_replace(if journal.paused {
+        self.set_state(if journal.paused {
             ExecutionControlState::Paused
         } else {
             ExecutionControlState::Running
@@ -278,7 +301,7 @@ impl TreeExecutionControl {
                 storage.path = storage.durable_path.clone();
                 storage.journal = journal;
             }
-            self.state.send_replace(ExecutionControlState::Pausing);
+            self.set_state(ExecutionControlState::Pausing);
         }
         self.publish(ExecutionControlState::Pausing).await?;
         loop {
@@ -467,6 +490,22 @@ impl TreeExecutionControl {
                 .signals
                 .iter()
                 .any(|signal| signal.thread_id == thread_id)
+        })
+    }
+
+    pub(crate) async fn has_delivery(
+        &self,
+        thread_id: ThreadId,
+        id: &codex_protocol::ResponseItemId,
+    ) -> bool {
+        self.storage.lock().await.as_ref().is_some_and(|storage| {
+            storage.journal.signals.iter().any(|signal| {
+                signal.thread_id == thread_id
+                    && signal
+                        .input
+                        .iter()
+                        .any(|input| journal::delivery_id(input) == Some(id))
+            })
         })
     }
 

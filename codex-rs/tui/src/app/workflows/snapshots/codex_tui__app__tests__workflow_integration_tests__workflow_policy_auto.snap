@@ -1,0 +1,13 @@
+---
+source: tui/src/app/workflows/workflow_integration_tests.rs
+assertion_line: 92
+expression: "render_bottom_popup(&app.chat_widget, 96)"
+---
+  Dynamic workflows
+
+
+› 1. Auto (current)  Codex chooses when to use workflows (default)
+  2. Explicit        Use workflows only when you invoke $dynamic-workflow
+  3. Off             Disable dynamic workflows
+
+  enter select · esc back

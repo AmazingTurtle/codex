@@ -1,0 +1,17 @@
+---
+source: tui/src/workflows/actions/actions_tests.rs
+expression: screen
+---
+
+  Actions · Review source
+  Control revision 9 · 2 / 8 starts · 14K / 100K tokens
+
+↑
+  3. Interrupt selected work             Interrupt only the selected workflow work
+  4. Revise workflow                     Stage JavaScript source and arguments before applying
+  5. Apply revision after accepted work  Keep accepted work, then apply the staged revision
+  6. Interrupt and apply revision        Interrupt accepted work and apply the staged revision
+  7. Resume workflow                     Continue the current revision under its remaining budget
+  8. Show result in chat                 Insert the immutable result directly in chat, once
+  9. Revision history                    Inspect revision status, preserved work, and rerun reasons
+› 10. Show in footer                     The workflow stays available in this command center

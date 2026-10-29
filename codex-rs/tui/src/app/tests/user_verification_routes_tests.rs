@@ -244,6 +244,7 @@ async fn inactive_thread_user_verification_preserves_foreground_stream() -> Resu
             turn_id: "turn-foreground".to_string(),
             completed_at_ms: 0,
             item: ThreadItem::AgentMessage {
+                workflow: None,
                 id: "message-foreground".to_string(),
                 text: "The foreground answer continues.".to_string(),
                 phase: None,
@@ -273,16 +274,19 @@ async fn inactive_thread_user_verification_preserves_foreground_stream() -> Resu
                 inline_visualization_context,
                 scrollback_reflow,
                 deferred_history_cell,
+                ..
             } => {
                 completed_messages.push(source.clone());
                 app.handle_consolidate_agent_message(
                     &mut tui,
-                    history_cell::AgentMarkdownCell::new_with_inline_visualizations(
-                        source,
-                        &cwd,
-                        inline_visualization_context,
-                    )
-                    .with_copy_source(copy_source),
+                    Arc::new(
+                        history_cell::AgentMarkdownCell::new_with_inline_visualizations(
+                            source,
+                            &cwd,
+                            inline_visualization_context,
+                        )
+                        .with_copy_source(copy_source),
+                    ),
                     scrollback_reflow,
                     deferred_history_cell,
                 )?;

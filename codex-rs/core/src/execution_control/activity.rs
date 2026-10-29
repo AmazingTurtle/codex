@@ -77,6 +77,9 @@ impl crate::session::session::Session {
         {
             return Ok(true);
         }
-        Ok(false)
+        self.services
+            .workflows
+            .has_pending_work()
+            .map_err(CodexErr::Fatal)
     }
 }

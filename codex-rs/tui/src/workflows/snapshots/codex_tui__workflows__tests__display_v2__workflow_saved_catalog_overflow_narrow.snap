@@ -1,0 +1,18 @@
+---
+source: tui/src/workflows/display_v2_tests.rs
+expression: narrow
+---
+  Saved workflows  Tab / Shift+Tab filt…
+   All 1   Project 1   User 0
+  ──────────────────────────────────────
+  Workflow
+  › Review project · Project
+
+
+
+
+
+
+
+  Esc Runs · 1/3 view · Enter run · ↑/↓
+  catalog limit reached; use /workflows

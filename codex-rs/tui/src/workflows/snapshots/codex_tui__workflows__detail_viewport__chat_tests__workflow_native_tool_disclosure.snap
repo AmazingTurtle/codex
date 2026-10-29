@@ -1,0 +1,29 @@
+---
+source: tui/src/workflows/detail_chat_tests.rs
+expression: "format!(\"Compact\\n{compact}\\n\\nExpanded\\n{expanded}\")"
+---
+Compact
+• Ran cargo check
+  └ line 12
+    line 13
+    line 14
+    + 11 lines (⌃t to expand)
+
+Expanded
+$ cargo check
+line 1
+line 2
+line 3
+line 4
+line 5
+line 6
+line 7
+line 8
+line 9
+line 10
+line 11
+line 12
+line 13
+line 14
+✓ • 12ms
+    − Show less

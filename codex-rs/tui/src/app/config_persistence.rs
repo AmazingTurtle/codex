@@ -1899,6 +1899,7 @@ enabled = false
 
         app.chat_widget
             .handle_thread_session(crate::session_state::ThreadSessionState {
+                timeline: None,
                 daybreak_enabled: false,
                 long_context: false,
                 wake_state: None,

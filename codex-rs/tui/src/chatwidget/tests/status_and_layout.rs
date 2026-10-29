@@ -4430,6 +4430,7 @@ async fn session_configured_clears_goal_status_footer() {
 
     let rollout_file = NamedTempFile::new().unwrap();
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        timeline: None,
         daybreak_enabled: false,
         long_context: false,
         wake_state: None,

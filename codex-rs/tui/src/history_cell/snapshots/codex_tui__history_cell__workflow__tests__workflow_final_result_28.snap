@@ -1,0 +1,21 @@
+---
+source: tui/src/history_cell/workflow_tests.rs
+expression: "lines.iter().map(Line::to_string).collect::<Vec<_>>().join(\"\\n\")"
+---
+• Completed workflow review
+
+Result
+• summary: Ready for
+  **review**
+
+## findings
+
+### 1 · file: src/main.rs
+
+• status: checked
+
+## nested
+
+• items
+    • Read the change ·
+      Verify the result

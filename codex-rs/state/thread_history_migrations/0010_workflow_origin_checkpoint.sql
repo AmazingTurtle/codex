@@ -1,0 +1,1 @@
+ALTER TABLE thread_history_projection_state ADD COLUMN workflow_origin_state TEXT;

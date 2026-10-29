@@ -1,0 +1,17 @@
+---
+source: tui/src/workflows/workflow_tests.rs
+expression: "render(&center, 90, 14)"
+---
+  Saved workflows  Tab / Shift+Tab filter
+   All 1   Project 1   User 0                                     Tab / Shift+Tab filter
+  ──────────────────────────────────────────────────────────────────────────────────────
+  Input · JSON · empty means {}
+  invalid JSON
+
+
+
+
+
+
+  Enter JSON input: expected value at line 1 column 1
+  Esc cancel · Enter run

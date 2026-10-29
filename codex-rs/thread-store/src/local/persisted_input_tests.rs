@@ -82,10 +82,14 @@ async fn persisted_input_lookup_finds_raw_receipts_before_compaction_in_compress
         response("old-input", /*order*/ 7),
     );
     append(&path, /*ordinal*/ 2, mail("old-mail"));
-    append(&path, /*ordinal*/ 3, compaction());
+    append(&path, /*ordinal*/ 3, RolloutItem::EventMsg(serde_json::from_value(json!({
+        "type":"workflow_lifecycle","id":"workflow-ui","ownerThreadId":thread_id,"runId":"run","executionId":"execution","workflowName":"Review","completionMode":"display","sequence":0,"createdAt":1,
+        "kind":{"type":"started","name":"Review","description":"Inspect"}
+    })).unwrap()));
+    append(&path, /*ordinal*/ 4, compaction());
     append(
         &path,
-        /*ordinal*/ 4,
+        /*ordinal*/ 5,
         response("new-input", /*order*/ 8),
     );
     let mut agent_message = ResponseItemEnvelope::from(serde_json::from_value::<ResponseItem>(json!({
@@ -94,7 +98,7 @@ async fn persisted_input_lookup_finds_raw_receipts_before_compaction_in_compress
     agent_message.metadata = Some(serde_json::from_value(json!({"user_input_order":99})).unwrap());
     append(
         &path,
-        /*ordinal*/ 5,
+        /*ordinal*/ 6,
         RolloutItem::ResponseItem(agent_message),
     );
     let store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
@@ -114,6 +118,7 @@ async fn persisted_input_lookup_finds_raw_receipts_before_compaction_in_compress
         ids: vec![
             key("old-input"),
             key("old-mail"),
+            PersistedInputId::WorkflowLifecycle("workflow-ui".into()),
             key("absent"),
             PersistedInputId::UserInputOrder(7),
             PersistedInputId::UserInputOrder(99),
@@ -123,6 +128,7 @@ async fn persisted_input_lookup_finds_raw_receipts_before_compaction_in_compress
     let expected = BTreeSet::from([
         key("old-input"),
         key("old-mail"),
+        PersistedInputId::WorkflowLifecycle("workflow-ui".into()),
         PersistedInputId::UserInputOrder(7),
     ]);
     assert_eq!(
@@ -136,7 +142,7 @@ async fn persisted_input_lookup_finds_raw_receipts_before_compaction_in_compress
     // the actual user-role record proves delivery of that acceptance order.
     append(
         &path,
-        /*ordinal*/ 6,
+        /*ordinal*/ 7,
         response("accepted-after-mail", /*order*/ 99),
     );
     assert_eq!(

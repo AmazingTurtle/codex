@@ -48,6 +48,7 @@ pub(super) struct SlashInput<'a> {
     is_bash_mode: bool,
     command_flags: BuiltinCommandFlags,
     service_tier_commands: &'a [ServiceTierCommand],
+    workflow_commands: &'a [crate::workflows::saved_commands::SavedCommand],
 }
 
 impl<'a> SlashInput<'a> {
@@ -56,12 +57,14 @@ impl<'a> SlashInput<'a> {
         is_bash_mode: bool,
         command_flags: BuiltinCommandFlags,
         service_tier_commands: &'a [ServiceTierCommand],
+        workflow_commands: &'a [crate::workflows::saved_commands::SavedCommand],
     ) -> Self {
         Self {
             enabled,
             is_bash_mode,
             command_flags,
             service_tier_commands,
+            workflow_commands,
         }
     }
 
@@ -166,6 +169,10 @@ impl<'a> SlashInput<'a> {
         }
 
         has_slash_command_prefix(name, self.command_flags, self.service_tier_commands)
+            || self
+                .workflow_commands
+                .iter()
+                .any(|command| command.name.starts_with(name))
     }
 
     pub(super) fn command_popup(&self, filter_text: &str) -> CommandPopup {
@@ -178,19 +185,28 @@ impl<'a> SlashInput<'a> {
                 service_tier_commands_enabled: self.command_flags.service_tier_commands_enabled,
                 daybreak_command_description: self.command_flags.daybreak_command_description,
                 goal_command_enabled: self.command_flags.goal_command_enabled,
+                pause_command_visible: self.command_flags.pause_command_visible,
+                unpause_command_visible: self.command_flags.unpause_command_visible,
                 voice_command_enabled: self.command_flags.voice_command_enabled,
                 worktrees_enabled: self.command_flags.worktrees_enabled,
                 windows_degraded_sandbox_active: self.command_flags.allow_elevate_sandbox,
                 side_conversation_active: self.command_flags.side_conversation_active,
             },
             self.service_tier_commands.to_vec(),
-        );
+        )
+        .with_workflows(self.workflow_commands);
         command_popup.on_composer_text_change(filter_text.to_string());
         command_popup
     }
 
     pub(super) fn command(&self, name: &str) -> Option<SlashCommandItem> {
-        find_slash_command(name, self.command_flags, self.service_tier_commands)
+        find_slash_command(name, self.command_flags, self.service_tier_commands).or_else(|| {
+            self.workflow_commands
+                .iter()
+                .find(|command| command.name == name)
+                .cloned()
+                .map(SlashCommandItem::Workflow)
+        })
     }
 }
 
@@ -208,6 +224,19 @@ pub(super) fn queued_input_action(
 }
 
 impl ChatComposer {
+    pub(crate) fn set_saved_workflow_commands(
+        &mut self,
+        commands: Vec<crate::workflows::saved_commands::SavedCommand>,
+    ) -> bool {
+        if self.saved_workflow_commands != commands {
+            self.update_slash_command_catalog(|composer| {
+                composer.saved_workflow_commands = commands
+            });
+            true
+        } else {
+            false
+        }
+    }
     pub(super) fn builtin_command_flags(&self) -> BuiltinCommandFlags {
         BuiltinCommandFlags {
             collaboration_modes_enabled: self.collaboration_modes_enabled,
@@ -217,6 +246,8 @@ impl ChatComposer {
             service_tier_commands_enabled: self.service_tier_commands_enabled,
             daybreak_command_description: self.popups.daybreak_command_description,
             goal_command_enabled: self.goal_command_enabled,
+            pause_command_visible: self.pause_command_visible,
+            unpause_command_visible: self.unpause_command_visible,
             voice_command_enabled: self.voice_command_enabled,
             worktrees_enabled: self.worktrees_enabled,
             allow_elevate_sandbox: self.windows_degraded_sandbox_active,
@@ -232,6 +263,14 @@ impl ChatComposer {
 
     pub fn set_worktrees_enabled(&mut self, enabled: bool) {
         self.update_slash_command_catalog(|composer| composer.worktrees_enabled = enabled);
+    }
+
+    /// Popup visibility follows authority; manually entered controls still reach the host.
+    pub(crate) fn set_execution_commands(&mut self, pause_visible: bool, unpause_visible: bool) {
+        self.update_slash_command_catalog(|composer| {
+            composer.pause_command_visible = pause_visible;
+            composer.unpause_command_visible = unpause_visible;
+        });
     }
 
     /// Handle key event when the slash-command popup is visible.
@@ -385,11 +424,18 @@ impl ChatComposer {
                                     |(_, args, _)| parent_owned_command_is_allowed(*cmd, args),
                                 )
                             }
-                            CommandItem::ServiceTier(_) => false,
+                            CommandItem::ServiceTier(_) | CommandItem::Workflow(_) => false,
                         };
                         if !command_is_allowed {
                             return (InputResult::ParentOwnedInputBlocked, true);
                         }
+                    }
+                    if matches!(&sel, CommandItem::Workflow(_))
+                        && parse_slash_name(self.draft.textarea.text())
+                            .is_some_and(|(name, _, _)| name == sel.command())
+                        && let Some(result) = self.try_dispatch_slash_command_with_args()
+                    {
+                        return (result, true);
                     }
                     if self
                         .complete_selected_slash_command_preserving_existing_draft_tail_as_inline_args(
@@ -412,6 +458,10 @@ impl ChatComposer {
                             CommandItem::ServiceTier(command) => {
                                 InputResult::ServiceTierCommand(command)
                             }
+                            CommandItem::Workflow(command) => InputResult::WorkflowCommand {
+                                command,
+                                arguments: None,
+                            },
                         },
                         true,
                     );
@@ -427,10 +477,11 @@ impl ChatComposer {
         &mut self,
         selected_cmd: &CommandItem,
     ) -> bool {
-        let CommandItem::Builtin(cmd) = selected_cmd else {
-            return false;
-        };
-        if !cmd.supports_inline_args() {
+        if !match selected_cmd {
+            CommandItem::Builtin(command) => command.supports_inline_args(),
+            CommandItem::Workflow(_) => true,
+            CommandItem::ServiceTier(_) => false,
+        } {
             return false;
         }
 
@@ -450,15 +501,16 @@ impl ChatComposer {
         if rest_after_token_is_empty && (cursor <= 1 || cursor >= command_token_end) {
             return false;
         }
-        let replace_end =
-            if cursor <= 1 || (typed_command_name == cmd.command() && rest_after_token_is_empty) {
-                command_token_end
-            } else {
-                cursor
-            };
+        let replace_end = if cursor <= 1
+            || (typed_command_name == selected_cmd.command() && rest_after_token_is_empty)
+        {
+            command_token_end
+        } else {
+            cursor
+        };
         let tail = &text[replace_end..];
         let tail_starts_with_whitespace = tail.chars().next().is_some_and(char::is_whitespace);
-        let selected_command_text = format!("/{}", cmd.command());
+        let selected_command_text = format!("/{}", selected_cmd.command());
         let replacement = if tail_starts_with_whitespace {
             selected_command_text
         } else {
@@ -657,6 +709,49 @@ mod tests {
         composer.sync_popups();
 
         assert!(matches!(composer.popups.active, ActivePopup::Command(_)));
+    }
+
+    #[test]
+    fn worktree_catalog_refresh_keeps_workflow_selection_and_exposes_available_worktree() {
+        let mut composer = composer_with_text_at_cursor("/work", /*cursor*/ 5);
+        let selected = || {
+            Some(crate::bottom_pane::command_popup::CommandItem::Builtin(
+                SlashCommand::Workflows,
+            ))
+        };
+        let ActivePopup::Command(popup) = &composer.popups.active else {
+            panic!("workflows opens command popup")
+        };
+        assert_eq!(popup.selected_item(), selected());
+        composer.set_worktrees_enabled(/*enabled*/ true);
+        let ActivePopup::Command(popup) = &mut composer.popups.active else {
+            panic!("catalog update retains popup")
+        };
+        assert_eq!(
+            popup.filtered_items(),
+            vec![
+                crate::bottom_pane::command_popup::CommandItem::Builtin(SlashCommand::Worktree),
+                crate::bottom_pane::command_popup::CommandItem::Builtin(SlashCommand::Workflows),
+            ]
+        );
+        assert_eq!(popup.selected_item(), selected());
+        popup.move_up();
+        assert_eq!(
+            popup.selected_item(),
+            Some(crate::bottom_pane::command_popup::CommandItem::Builtin(
+                SlashCommand::Worktree
+            ))
+        );
+        composer.set_worktrees_enabled(/*enabled*/ false);
+        let ActivePopup::Command(popup) = &composer.popups.active else {
+            panic!("workflow suggestion remains")
+        };
+        assert_eq!(
+            popup.filtered_items(),
+            vec![crate::bottom_pane::command_popup::CommandItem::Builtin(
+                SlashCommand::Workflows
+            )]
+        );
     }
 
     #[test]

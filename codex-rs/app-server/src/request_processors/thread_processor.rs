@@ -936,9 +936,17 @@ impl ThreadRequestProcessor {
         &self,
         params: ThreadTurnsListParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.thread_turns_list_response_inner(params)
-            .await
-            .map(|response| Some(response.into()))
+        let thread_id = ThreadId::from_string(&params.thread_id)
+            .map_err(|error| invalid_request(error.to_string()))?;
+        let mut response = self.thread_turns_list_response_inner(params).await?;
+        super::workflow_presentation::turns(
+            &self.config.codex_home,
+            self.thread_store.as_ref(),
+            thread_id,
+            &mut response.data,
+        )
+        .await;
+        Ok(Some(response.into()))
     }
 
     pub(crate) async fn thread_items_list(
@@ -965,7 +973,7 @@ impl ThreadRequestProcessor {
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let thread_id = ThreadId::from_string(&params.thread_id)
             .map_err(|error| invalid_request(format!("invalid thread id: {error}")))?;
-        let page = self
+        let mut page = self
             .thread_store
             .list_timeline(StoreListTimelineParams {
                 thread_id,
@@ -978,6 +986,13 @@ impl ThreadRequestProcessor {
             })
             .await
             .map_err(paginated_history_list_error)?;
+        super::workflow_presentation::timeline(
+            &self.config.codex_home,
+            self.thread_store.as_ref(),
+            thread_id,
+            &mut page.items,
+        )
+        .await;
         Ok(Some(
             ThreadTimelineListResponse {
                 data: page.items,
@@ -1140,9 +1155,10 @@ impl ThreadRequestProcessor {
         Ok(())
     }
 
-    fn listener_task_context(&self) -> ListenerTaskContext {
+    pub(super) fn listener_task_context(&self) -> ListenerTaskContext {
         ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
+            thread_store: Arc::clone(&self.thread_store),
             thread_state_manager: self.thread_state_manager.clone(),
             outgoing: Arc::clone(&self.outgoing),
             pending_thread_unloads: Arc::clone(&self.pending_thread_unloads),
@@ -1275,6 +1291,7 @@ impl ThreadRequestProcessor {
         typesafe_overrides.ephemeral = ephemeral;
         let listener_task_context = ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
+            thread_store: Arc::clone(&self.thread_store),
             thread_state_manager: self.thread_state_manager.clone(),
             outgoing: Arc::clone(&self.outgoing),
             pending_thread_unloads: Arc::clone(&self.pending_thread_unloads),
@@ -3170,6 +3187,13 @@ impl ThreadRequestProcessor {
             thread_status,
             has_live_in_progress_turn,
         );
+        super::workflow_presentation::turns(
+            &self.config.codex_home,
+            self.thread_store.as_ref(),
+            thread_id,
+            &mut thread.turns,
+        )
+        .await;
         Ok(thread)
     }
 
@@ -3275,6 +3299,8 @@ impl ThreadRequestProcessor {
         apply_live_thread_settings(&mut thread, &config_snapshot);
         self.apply_thread_read_store_fields(thread_id, &mut thread, include_turns, loaded_thread)
             .await?;
+        thread.can_accept_direct_input =
+            Some(super::thread_input::can_accept_user_input(loaded_thread).await);
         Ok(thread)
     }
 
@@ -3732,11 +3758,19 @@ impl ThreadRequestProcessor {
                 }
                 err => internal_error(format!("failed to list thread items: {err}")),
             })?;
-        let data = page
+        let mut data = page
             .items
             .into_iter()
             .map(stored_thread_item_to_entry)
             .collect::<Result<Vec<_>, _>>()?;
+
+        super::workflow_presentation::entries(
+            &self.config.codex_home,
+            self.thread_store.as_ref(),
+            thread_id,
+            &mut data,
+        )
+        .await;
 
         Ok(ThreadItemsListResponse {
             data,
@@ -3786,11 +3820,19 @@ impl ThreadRequestProcessor {
                 }
                 err => internal_error(format!("failed to read thread items: {err}")),
             })?;
-        let data = page
+        let mut data = page
             .items
             .into_iter()
             .map(stored_thread_item_to_entry)
             .collect::<Result<Vec<_>, _>>()?;
+
+        super::workflow_presentation::entries(
+            &self.config.codex_home,
+            self.thread_store.as_ref(),
+            thread_id,
+            &mut data,
+        )
+        .await;
 
         Ok(ThreadItemsReadResponse { data })
     }
@@ -4572,6 +4614,22 @@ impl ThreadRequestProcessor {
                 }
 
                 let thread_originator = config_snapshot.originator.clone();
+                super::workflow_presentation::turns(
+                    &self.config.codex_home,
+                    self.thread_store.as_ref(),
+                    thread_id,
+                    &mut thread.turns,
+                )
+                .await;
+                if let Some(page) = &mut initial_turns_page {
+                    super::workflow_presentation::turns(
+                        &self.config.codex_home,
+                        self.thread_store.as_ref(),
+                        thread_id,
+                        &mut page.data,
+                    )
+                    .await;
+                }
                 let response = ThreadResumeResponse {
                     long_context: config_snapshot.long_context,
                     thread,
@@ -4861,10 +4919,8 @@ impl ThreadRequestProcessor {
             thread_summary.session_id = existing_thread.startup_metadata().session_id.to_string();
             thread_summary.thread_source = config_snapshot.thread_source.clone().map(Into::into);
             apply_live_thread_settings(&mut thread_summary, &config_snapshot);
-            thread_summary.can_accept_direct_input = Some(can_accept_direct_input(
-                existing_thread.multi_agent_version(),
-                &config_snapshot.session_source,
-            ));
+            thread_summary.can_accept_direct_input =
+                Some(super::thread_input::can_accept_user_input(&existing_thread).await);
             let instruction_sources = existing_thread.legacy_instruction_sources().await;
 
             let listener_command_tx = {
@@ -5167,10 +5223,7 @@ impl ThreadRequestProcessor {
     ) -> std::result::Result<Thread, String> {
         let config_snapshot = thread.config_snapshot().await;
         let session_id = thread.startup_metadata().session_id.to_string();
-        let can_accept_direct_input = can_accept_direct_input(
-            thread.multi_agent_version(),
-            &config_snapshot.session_source,
-        );
+        let can_accept_direct_input = super::thread_input::can_accept_user_input(thread).await;
         let thread = match thread_history {
             InitialHistory::Resumed(resumed) => {
                 let fallback_provider = config_snapshot.model_provider_id.as_str();
@@ -6441,7 +6494,7 @@ fn deserialize_stored_thread_item(
     })
 }
 
-fn stored_thread_item_to_entry(
+pub(super) fn stored_thread_item_to_entry(
     stored_item: codex_thread_store::StoredThreadItem,
 ) -> Result<ThreadItemEntry, JSONRPCErrorError> {
     let turn_id = stored_item.turn_id.clone();

@@ -6,6 +6,22 @@
 use super::*;
 
 impl ChatComposer {
+    pub(crate) fn workflow_navigation_available(&self) -> bool {
+        let move_down = if self.draft.textarea.is_vim_normal_mode() {
+            &self.vim_normal_keymap.move_down
+        } else {
+            &self.editor_keymap.move_down
+        };
+        move_down.is_pressed(KeyCode::Down.into())
+            && self.has_focus
+            && self.draft.input_enabled
+            && self.slash_commands_enabled()
+            && self.is_empty()
+            && !self.is_in_paste_burst()
+            && !self.popup_active()
+            && !self.draft.textarea.is_vim_operator_pending()
+    }
+
     pub(crate) fn set_agents_navigation_enabled(&mut self, enabled: bool) {
         self.agents_navigation_enabled = enabled;
     }

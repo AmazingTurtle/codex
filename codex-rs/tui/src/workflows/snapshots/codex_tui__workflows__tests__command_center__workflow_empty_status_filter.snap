@@ -1,0 +1,22 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: screen
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt         │  1 Overview   2 Transcript   3 Source
+  No matching workflows             │ Select an agent attempt to inspect its transcript
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+  Esc close · ↑/↓ select · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · f4 tools · Space Actions · ? help

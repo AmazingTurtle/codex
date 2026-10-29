@@ -1,0 +1,28 @@
+---
+source: tui/src/app/tests/workflow_actions.rs
+expression: source
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0               Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt    │  1 Overview   2 Transcript   3 Source
+  Current conversation         │ workflow.meta({name: 'existing-workflow', description: 'Discover
+  › existing-workflow [footer… │ persisted work', phases: []});
+                               │ return {answer: 42};
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+                               │
+  Esc close · ↑/↓ select · Enter Main · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions

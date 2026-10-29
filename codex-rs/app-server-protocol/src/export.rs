@@ -42,6 +42,10 @@ use std::thread;
 #[path = "export_user_verification.rs"]
 mod user_verification;
 
+#[cfg(test)]
+#[path = "export_workflow_tests.rs"]
+mod workflow_tests;
+
 pub(crate) const GENERATED_TS_HEADER: &str = "// GENERATED CODE! DO NOT MODIFY BY HAND!\n\n";
 const IGNORED_DEFINITIONS: &[&str] = &["Option<()>"];
 const JSON_V1_ALLOWLIST: &[&str] = &["InitializeParams", "InitializeResponse"];
@@ -408,7 +412,34 @@ fn filter_experimental_type_fields_ts_contents(
     mut content: String,
     experimental_field_names: &HashSet<String>,
 ) -> String {
-    let Some((open_brace, close_brace)) = type_body_brace_span(&content) else {
+    if let Some((prefix, body, suffix)) = split_type_alias(&content) {
+        // Tagged enums export as a union of object arms. Filter each arm's own fields,
+        // leaving nested payload objects and intersection suffixes intact.
+        let body = split_top_level(&body, '|')
+            .into_iter()
+            .map(|arm| filter_object_fields_ts_contents(arm, experimental_field_names))
+            .collect::<Vec<_>>()
+            .join(" | ");
+        content = format!("{prefix} {body}{suffix}");
+    } else {
+        content = filter_object_fields_ts_contents(content, experimental_field_names);
+    }
+    let import_usage_scope = split_type_alias(&content)
+        .map(|(_, body, _)| body)
+        .unwrap_or_else(|| content.clone());
+    prune_unused_type_imports(content, &import_usage_scope)
+}
+
+fn filter_object_fields_ts_contents(
+    content: String,
+    experimental_field_names: &HashSet<String>,
+) -> String {
+    let span = if content.contains("export interface") {
+        type_body_brace_span(&content)
+    } else {
+        find_top_level_brace_span(&content)
+    };
+    let Some((open_brace, close_brace)) = span else {
         return content;
     };
     let inner = &content[open_brace + 1..close_brace];
@@ -424,11 +455,7 @@ fn filter_experimental_type_fields_ts_contents(
     let new_inner = filtered_fields.join(", ");
     let prefix = &content[..open_brace + 1];
     let suffix = &content[close_brace..];
-    content = format!("{prefix}{new_inner}{suffix}");
-    let import_usage_scope = split_type_alias(&content)
-        .map(|(_, body, _)| body)
-        .unwrap_or_else(|| new_inner.clone());
-    prune_unused_type_imports(content, &import_usage_scope)
+    format!("{prefix}{new_inner}{suffix}")
 }
 
 fn filter_experimental_schema(bundle: &mut Value) -> Result<()> {
@@ -524,6 +551,15 @@ fn remove_property_from_schema(schema: &mut Value, field_name: &str) {
 
     if let Some(inner_schema) = schema.get_mut("schema") {
         remove_property_from_schema(inner_schema, field_name);
+    }
+    // Enum variants and schema composition describe the same object level. Do not
+    // descend into properties/items/defaults: those may contain unrelated user JSON.
+    for keyword in ["anyOf", "oneOf", "allOf"] {
+        if let Some(arms) = schema.get_mut(keyword).and_then(Value::as_array_mut) {
+            for arm in arms {
+                remove_property_from_schema(arm, field_name);
+            }
+        }
     }
 }
 

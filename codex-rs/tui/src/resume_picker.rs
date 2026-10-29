@@ -6934,6 +6934,7 @@ session_picker_view = "dense"
                         }],
                     },
                     ThreadItem::AgentMessage {
+                        workflow: None,
                         id: String::from("agent-1"),
                         text: String::from("hello from assistant"),
                         phase: None,

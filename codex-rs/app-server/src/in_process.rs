@@ -50,6 +50,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+pub use codex_code_mode::CodeModeSessionProvider;
+
 use crate::analytics_utils::analytics_events_client_from_config;
 use crate::config_manager::ConfigManager;
 use crate::error_code::OVERLOADED_ERROR_CODE;
@@ -139,6 +141,8 @@ pub struct InProcessStartArgs {
     pub arg0_paths: Arg0DispatchPaths,
     /// Shared base config used to initialize core components.
     pub config: Arc<Config>,
+    /// Optional runtime provider supplied by the embedder instead of install-path discovery.
+    pub code_mode_session_provider: Option<Arc<dyn CodeModeSessionProvider>>,
     /// CLI config overrides that are already parsed into TOML values.
     pub cli_overrides: Vec<(String, TomlValue)>,
     /// Loader override knobs used by config API paths.
@@ -519,7 +523,7 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                 ))),
                 auth_manager,
                 installation_id,
-                code_mode_session_provider: None,
+                code_mode_session_provider: args.code_mode_session_provider,
                 rpc_transport: AppServerRpcTransport::InProcess,
                 remote_control_handle: None,
                 plugin_startup_tasks: Some(PluginStartupConfig::Current),
@@ -689,11 +693,14 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                     let Some(queued_message) = queued_message else {
                         break;
                     };
-                    let outgoing_message = queued_message.message;
+                    let projected_result = matches!(&queued_message.message,
+                        OutgoingMessage::StableHistory(inner) if matches!(inner.as_ref(),OutgoingMessage::Response(_)))
+                        .then(|| serde_json::to_value(&queued_message.message).map(|mut value|value["result"].take()));
+                    let outgoing_message = queued_message.message.into_original();
                     match outgoing_message {
                         OutgoingMessage::Response(response) => {
                             if let Some(response_tx) = pending_request_responses.remove(&response.id) {
-                                let result = serde_json::to_value(response.result).map_err(|err| {
+                                let result = projected_result.unwrap_or_else(||serde_json::to_value(response.result)).map_err(|err| {
                                     internal_error(format!("failed to serialize response: {err}"))
                                 });
                                 let _ = response_tx.send(result);
@@ -774,6 +781,7 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                                 }
                             }
                         }
+                        OutgoingMessage::StableHistory(_) => unreachable!("serialization views were unwrapped above"),
                     }
                     if let Some(write_complete_tx) = queued_message.write_complete_tx {
                         let _ = write_complete_tx.send(());
@@ -876,6 +884,7 @@ mod tests {
             .expect("state db should initialize for in-process test");
         let args = InProcessStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
+            code_mode_session_provider: None,
             config,
             cli_overrides: Vec::new(),
             loader_overrides: LoaderOverrides::default(),
@@ -1087,6 +1096,7 @@ mod tests {
                     memory_citation: None,
                     delivery: Some(AgentMessageDelivery::Async),
                     questions: None,
+                    workflow: None,
                 },
                 thread_id: "thread-1".to_string(),
                 turn_id: "turn-1".to_string(),

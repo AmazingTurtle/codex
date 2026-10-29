@@ -695,6 +695,7 @@ async fn start_in_process_client(
 ) -> std::io::Result<InProcessClientHandle> {
     in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
+        code_mode_session_provider: None,
         config,
         cli_overrides: Vec::new(),
         loader_overrides,

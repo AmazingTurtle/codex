@@ -1,0 +1,12 @@
+---
+source: tui/src/app/workflows/workflow_integration_tests.rs
+expression: "render_bottom_popup(&app.chat_widget,\n100).replace(&root.to_string(), \"ROOT_THREAD\")"
+---
+  Pause entire conversation?
+  Pause “Review change”, including its agents and workflows.
+
+
+› 1. Cancel
+  2. Pause conversation
+
+  enter select · esc back

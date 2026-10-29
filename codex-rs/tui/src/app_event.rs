@@ -329,6 +329,7 @@ pub(crate) enum AppEvent {
     CloseMisalignmentReview,
     /// Open the live command center for recent and locally retained root sessions.
     OpenAgentsOverview,
+    Workflow(crate::workflows::WorkflowEvent),
     ShowMoreAgentsOverview,
     /// Create an empty thread from the command center.
     NewAgentsOverviewSession {
@@ -544,6 +545,12 @@ pub(crate) enum AppEvent {
         thread_id: ThreadId,
         cursor: String,
         result: Result<ThreadItemsListResponse, String>,
+    },
+    OlderWorkflowTimelineLoaded {
+        thread_id: ThreadId,
+        cursor: Option<String>,
+        request_id: uuid::Uuid,
+        result: Result<codex_app_server_protocol::ThreadTimelineListResponse, String>,
     },
 
     /// Open the filename prompt for an on-demand Markdown transcript export.
@@ -1268,6 +1275,7 @@ pub(crate) enum AppEvent {
 
     /// Finish buffering initial resume replay after all replay events have been queued.
     EndInitialHistoryReplayBuffer,
+    ApplyWorkflowFinal(codex_app_server_protocol::WorkflowAgentMessageProvenance),
 
     /// Replace the contiguous run of streaming `AgentMessageCell`s at the end of
     /// the transcript with a single `AgentMarkdownCell` that stores the raw
@@ -1282,6 +1290,7 @@ pub(crate) enum AppEvent {
     /// `deferred_history_cell` lets callers add the final stream tail to the
     /// transcript without first writing its provisional render to scrollback.
     ConsolidateAgentMessage {
+        identity: Option<crate::history_cell::NativeMessageIdentity>,
         source: String,
         copy_source: Option<String>,
         cwd: PathBuf,

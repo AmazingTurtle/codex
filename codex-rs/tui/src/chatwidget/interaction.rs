@@ -96,6 +96,9 @@ impl ChatWidget {
         key_event: KeyEvent,
         activation_key: Option<crate::key_hint::KeyBinding>,
     ) -> KeyEventAction {
+        if self.bottom_pane.handle_workflow_navigation(key_event) {
+            return KeyEventAction::None;
+        }
         if self.handle_quick_dial_menu(key_event) {
             return KeyEventAction::None;
         }

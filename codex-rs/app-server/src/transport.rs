@@ -148,10 +148,10 @@ async fn send_message_to_connection(
         warn!("dropping message for disconnected connection: {connection_id:?}");
         return false;
     };
-    let message = filter_outgoing_message_for_connection(connection_state, message);
     if should_skip_notification_for_connection(connection_state, &message) {
         return false;
     }
+    let message = filter_outgoing_message_for_connection(connection_state, message);
 
     let writer = connection_state.writer.clone();
     let queued_message = QueuedOutgoingMessage {
@@ -198,7 +198,8 @@ fn filter_outgoing_message_for_connection(
                 params,
             })
         }
-        _ => message,
+        message if !experimental_api_enabled => message.without_workflow_presentation(),
+        message => message,
     }
 }
 

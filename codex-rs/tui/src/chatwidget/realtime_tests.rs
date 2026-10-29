@@ -82,6 +82,7 @@ fn user_item(text: &str) -> ThreadItem {
 
 fn agent_item(item_id: &str, text: &str, phase: Option<MessagePhase>) -> ThreadItem {
     ThreadItem::AgentMessage {
+        workflow: None,
         id: item_id.to_string(),
         text: text.to_string(),
         phase,

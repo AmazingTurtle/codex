@@ -1,0 +1,20 @@
+---
+source: tui/src/workflows/actions/actions_tests.rs
+expression: rendered
+---
+
+  Revise workflow
+  Stage first. The preview identifies preserved work and reruns; the existing budget remains
+
+› workflow.meta({name:'audit',description:'Review source',phases:[]});
+  return workflow.args;
+
+
+
+
+
+
+
+
+
+  enter arguments · esc back

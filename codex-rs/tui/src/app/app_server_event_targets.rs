@@ -46,15 +46,20 @@ pub(super) fn server_notification_thread_target(
     notification: &ServerNotification,
 ) -> ServerNotificationThreadTarget {
     let thread_id = match notification {
+        ServerNotification::WorkflowLifecycleChanged(notification) => {
+            Some(notification.thread_id.as_str())
+        }
         ServerNotification::Error(notification) => Some(notification.thread_id.as_str()),
         ServerNotification::ThreadStarted(notification) => Some(notification.thread.id.as_str()),
         ServerNotification::ThreadStatusChanged(notification) => {
             Some(notification.thread_id.as_str())
         }
-        ServerNotification::ThreadWakeStateChanged(notification) => {
+        ServerNotification::WorkflowUpdated(notification) => Some(notification.thread_id.as_str()),
+        ServerNotification::WorkflowProgress(notification) => Some(notification.thread_id.as_str()),
+        ServerNotification::ThreadExecutionControlChanged(notification) => {
             Some(notification.thread_id.as_str())
         }
-        ServerNotification::ThreadExecutionControlChanged(notification) => {
+        ServerNotification::ThreadWakeStateChanged(notification) => {
             Some(notification.thread_id.as_str())
         }
         ServerNotification::ThreadReverted(notification) => Some(notification.thread_id.as_str()),

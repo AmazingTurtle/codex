@@ -1,0 +1,12 @@
+---
+source: tui/src/app/workflows/workflow_integration_tests.rs
+expression: "render_bottom_popup(&app.chat_widget, 96)"
+---
+  Workflow scope
+
+
+› 1. Current conversation (current)
+  2. Current project
+  3. All conversations
+
+  enter select · esc back

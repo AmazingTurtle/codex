@@ -111,6 +111,8 @@ impl PendingGuardianReviewStatus {
 
 #[derive(Debug)]
 pub(super) struct StatusState {
+    pub(super) execution: Option<codex_protocol::protocol::ExecutionControlState>,
+    pub(super) can_pause: bool,
     pub(super) wake_state: Option<codex_app_server_protocol::ThreadWakeState>,
     /// Only the active reasoning item may update the streamed heading.
     pub(super) reasoning_item_id: Option<String>,
@@ -143,6 +145,8 @@ pub(super) struct StatusState {
 impl Default for StatusState {
     fn default() -> Self {
         Self {
+            execution: None,
+            can_pause: false,
             wake_state: None,
             reasoning_item_id: None,
             reasoning_resume_turn_id: None,

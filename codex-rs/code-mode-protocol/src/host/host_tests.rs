@@ -246,6 +246,7 @@ fn open_session_serializes_optional_cell_execution_limits() {
         HostRequest::OpenSession {
             session_id: session_id(),
             cell_execution_limits: Some(WireSessionCellExecutionLimits {
+                profile: Default::default(),
                 max_yield_time_ms: Some(250),
                 max_heap_size_bytes: Some(16 * 1024 * 1024),
             }),
@@ -264,10 +265,12 @@ fn open_session_serializes_optional_cell_execution_limits() {
 #[test]
 fn session_cell_execution_limits_convert_between_domain_and_wire() {
     let domain_limits = CodeModeSessionCellExecutionLimits {
+        profile: crate::CodeModeCellExecutionProfile::Workflow,
         max_yield_time_ms: Some(250),
         max_heap_size_bytes: Some(16_usize * 1024 * 1024),
     };
     let wire_limits = WireSessionCellExecutionLimits {
+        profile: crate::CodeModeCellExecutionProfile::Workflow,
         max_yield_time_ms: Some(250),
         max_heap_size_bytes: Some(16_u64 * 1024 * 1024),
     };
@@ -288,6 +291,7 @@ fn session_cell_execution_limits_convert_between_domain_and_wire() {
 #[test]
 fn session_cell_execution_limits_reject_heap_sizes_that_exceed_usize() {
     let wire_limits = WireSessionCellExecutionLimits {
+        profile: Default::default(),
         max_yield_time_ms: None,
         max_heap_size_bytes: Some(u64::from(u32::MAX) + 1),
     };

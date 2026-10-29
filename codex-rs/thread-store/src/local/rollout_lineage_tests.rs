@@ -83,18 +83,21 @@ async fn resolves_nested_lineage_with_empty_intermediate_segments() {
         vec![
             RolloutLineageSegment {
                 rollout_id: root,
+                owner_thread_id: root,
                 rollout_path: root_path.clone(),
                 start_ordinal: 1,
                 end: Some(root_end),
             },
             RolloutLineageSegment {
                 rollout_id: middle,
+                owner_thread_id: middle,
                 rollout_path: middle_path.clone(),
                 start_ordinal: 5,
                 end: Some(middle_end),
             },
             RolloutLineageSegment {
                 rollout_id: child,
+                owner_thread_id: child,
                 rollout_path: child_path,
                 start_ordinal: 6,
                 end: None,
@@ -167,17 +170,106 @@ async fn resolves_lineage_at_explicit_history_position() {
         vec![
             RolloutLineageSegment {
                 rollout_id: root,
+                owner_thread_id: root,
                 rollout_path: root_path.clone(),
                 start_ordinal: 1,
                 end: Some(root_end),
             },
             RolloutLineageSegment {
                 rollout_id: child,
+                owner_thread_id: child,
                 rollout_path: child_path.clone(),
                 start_ordinal: 5,
                 end: Some(end),
             },
         ]
+    );
+}
+
+#[tokio::test]
+async fn replacement_ancestor_owner_is_bound_to_its_canonical_filename() {
+    let home = TempDir::new().expect("temp dir");
+    let store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+    let owner = ThreadId::new();
+    let physical = ThreadId::new();
+    let child = ThreadId::new();
+    let original_path = write_rollout(
+        home.path(),
+        owner,
+        /*history_base*/ None,
+        /*next_ordinal*/ 3,
+    );
+    let replacement_path = original_path.with_file_name(format!(
+        "rollout-2026-07-16T00-00-00-{owner}_{physical}.jsonl"
+    ));
+    fs::rename(original_path, &replacement_path).unwrap();
+    write_rollout(
+        home.path(),
+        child,
+        Some(history_position(
+            &replacement_path,
+            physical,
+            /*end_ordinal_exclusive*/ 3,
+        )),
+        /*next_ordinal*/ 2,
+    );
+    let lineage = store
+        .resolve_rollout_lineage(child, /*initial_path*/ None)
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            lineage.segments[0].rollout_id,
+            lineage.segments[0].owner_thread_id
+        ),
+        (physical, owner),
+        "a legitimate replacement ancestor keeps its logical owner"
+    );
+
+    let foreign = ThreadId::new();
+    let mut lines = fs::read_to_string(&replacement_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    lines[0]["payload"]["id"] = serde_json::json!(foreign);
+    lines[0]["payload"]["session_id"] = serde_json::json!(foreign);
+    let forged = serde_json::from_value(serde_json::json!({
+        "id":"foreign-report","ownerThreadId":foreign,"runId":"run","executionId":"execution",
+        "workflowName":"Foreign report","completionMode":"display","sequence":0,"createdAt":1,
+        "kind":{"type":"started","name":"Foreign report","description":"An altered header must not authorize this fact"}
+    })).unwrap();
+    lines[1] = serde_json::from_str(&rollout_line(
+        1,
+        RolloutItem::EventMsg(codex_protocol::protocol::EventMsg::WorkflowLifecycle(
+            forged,
+        )),
+    ))
+    .unwrap();
+    let bytes = format!(
+        "{}\n",
+        lines
+            .iter()
+            .map(serde_json::Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    fs::write(&replacement_path, &bytes).unwrap();
+    write_rollout(
+        home.path(),
+        child,
+        Some(history_position(
+            &replacement_path,
+            physical,
+            /*end_ordinal_exclusive*/ 3,
+        )),
+        /*next_ordinal*/ 2,
+    );
+    assert_invalid_lineage(&store, child, "source rollout belongs to another thread").await;
+    assert_eq!(
+        fs::read_to_string(&replacement_path).unwrap(),
+        bytes,
+        "rejection must not rewrite the ancestor rollout"
     );
 }
 

@@ -465,6 +465,15 @@ impl App {
         if self.reject_pending_permission_root_switch() {
             return Ok(AppRunControl::Continue);
         }
+        if let Err(error) = self
+            .refresh_cached_thread_timeline(app_server, root_thread_id)
+            .await
+        {
+            self.add_agents_overview_error(format!(
+                "Failed to refresh conversation history: {error}"
+            ));
+            return Ok(AppRunControl::Continue);
+        }
         if startup_draft.is_none() {
             loading::draw(tui)?;
         }

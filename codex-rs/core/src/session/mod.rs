@@ -1,4 +1,9 @@
 mod execution_control;
+mod model_response_counts;
+pub(crate) use model_response_counts::ModelResponseCounts;
+mod token_usage_observer;
+pub(crate) use token_usage_observer::PendingWorkflowCancellation;
+pub(crate) use token_usage_observer::WorkflowUsageSnapshot;
 pub(crate) mod startup;
 
 use crate::PromptCacheKey;
@@ -2532,6 +2537,14 @@ impl Session {
 
     /// Persist the event to rollout and send it to clients.
     pub(crate) async fn send_event(&self, turn_context: &TurnContext, msg: EventMsg) {
+        if matches!(&msg, EventMsg::TurnStarted(_)) {
+            self.record_workflow_usage_turn(turn_context).await;
+        }
+        if matches!(&msg, EventMsg::TurnComplete(_))
+            || matches!(&msg, EventMsg::TurnAborted(event) if !matches!(event.reason, codex_protocol::protocol::TurnAbortReason::Interrupted | codex_protocol::protocol::TurnAbortReason::BudgetLimited))
+        {
+            self.seal_workflow_usage(turn_context).await;
+        }
         let legacy_source = msg.clone();
         if let EventMsg::Error(error) = &legacy_source
             && error
@@ -2794,7 +2807,7 @@ impl Session {
         self.deliver_event_raw(event).await;
     }
 
-    async fn deliver_event_raw(&self, event: Event) {
+    pub(crate) async fn deliver_event_raw(&self, event: Event) {
         if let Some(parent_tx) = self.parent_observer_event_tx.get() {
             let forwarded = match &event.msg {
                 EventMsg::RawResponseItem(item) => {
@@ -3985,7 +3998,7 @@ impl Session {
 
     /// Prepares a candidate step without replacing the active turn's retained context.
     /// The caller must retain it explicitly if it is selected for execution.
-    async fn capture_speculative_step_context(
+    pub(crate) async fn capture_speculative_step_context(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         cancellation_token: &CancellationToken,
@@ -5229,17 +5242,25 @@ impl Session {
         let Some(usage) = usage else {
             return;
         };
-        let record = self.state.lock().await.record_token_usage(
-            self.thread_id,
-            &turn_context.sub_id,
-            self.session_id(),
-            turn_context
-                .turn_metadata_state
-                .root_turn_id()
-                .unwrap_or_else(|| turn_context.sub_id.clone()),
-            response_id.to_string(),
-            usage,
-        );
+        let record = {
+            let mut state = self.state.lock().await;
+            let record = state.record_token_usage(
+                self.thread_id,
+                &turn_context.sub_id,
+                self.session_id(),
+                turn_context
+                    .turn_metadata_state
+                    .root_turn_id()
+                    .unwrap_or_else(|| turn_context.sub_id.clone()),
+                response_id.to_string(),
+                usage,
+            );
+            self.services
+                .thread_extension_data
+                .get_or_init(token_usage_observer::OwnTokenUsageWatch::default)
+                .publish(record.clone());
+            record
+        };
         self.persist_rollout_items(&[RolloutItem::TokenUsageRecord(record)])
             .await;
     }

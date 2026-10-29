@@ -546,8 +546,122 @@ client_request_definitions! {
         response: v2::UserVerificationCancelResponse,
     },
 
-    /// NEW APIs
     // Thread lifecycle
+    #[experimental("workflow/control")]
+    WorkflowControl => "workflow/control" {
+        params:v2::WorkflowControlParams,
+        serialization:thread_id(params.thread_id),
+        response:v2::WorkflowControlResponse,
+    },
+    #[experimental("workflow/control/list")]
+    WorkflowControlList => "workflow/control/list" {
+        params:v2::WorkflowControlListParams,
+        serialization:None,
+        response:v2::WorkflowControlListResponse,
+    },
+    #[experimental("workflow/revision/stage")]
+    WorkflowRevisionStage => "workflow/revision/stage" {
+        params:v2::WorkflowRevisionStageParams,
+        serialization:thread_id(params.thread_id),
+        response:v2::WorkflowRevisionStageResponse,
+    },
+    #[experimental("workflow/revision/apply")]
+    WorkflowRevisionApply => "workflow/revision/apply" {
+        params:v2::WorkflowRevisionApplyParams,
+        serialization:thread_id(params.thread_id),
+        response:v2::WorkflowRevisionApplyResponse,
+    },
+    #[experimental("workflow/revision/resume")]
+    WorkflowRevisionResume => "workflow/revision/resume" {
+        params:v2::WorkflowRevisionResumeParams,
+        serialization:thread_id(params.thread_id),
+        response:v2::WorkflowRevisionResumeResponse,
+    },
+    #[experimental("workflow/revision/list")]
+    WorkflowRevisionList => "workflow/revision/list" {
+        params:v2::WorkflowRevisionListParams,
+        serialization:None,
+        response:v2::WorkflowRevisionListResponse,
+    },
+    #[experimental("workflow/execution/read")]
+    WorkflowExecutionRead => "workflow/execution/read" {
+        params:v2::WorkflowExecutionReadParams,
+        serialization:None,
+        response:v2::WorkflowExecutionReadResponse,
+    },
+    #[experimental("workflow/result/display")]
+    WorkflowResultDisplay => "workflow/result/display" {
+        params:v2::WorkflowResultDisplayParams,
+        serialization:thread_id(params.thread_id),
+        response:v2::WorkflowResultDisplayResponse,
+    },
+    #[experimental("workflow/transcript/list")]
+    WorkflowTranscriptList => "workflow/transcript/list" {
+        params:v2::WorkflowTranscriptListParams,
+        serialization:None,
+        response:v2::WorkflowTranscriptListResponse,
+    },
+    #[experimental("workflow/start")]
+    /// EXPERIMENTAL - Start a durable JavaScript workflow on a loaded conversation.
+    WorkflowStart => "workflow/start" {
+        params: v2::WorkflowStartParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::WorkflowStartResponse,
+    },
+    #[experimental("workflow/list")]
+    WorkflowList => "workflow/list" {
+        params: v2::WorkflowListParams,
+        serialization: None,
+        response: v2::WorkflowListResponse,
+    },
+    #[experimental("workflow/read")]
+    WorkflowRead => "workflow/read" {
+        params: v2::WorkflowReadParams,
+        serialization: None,
+        response: v2::WorkflowReadResponse,
+    },
+    #[experimental("workflow/stop")]
+    WorkflowStop => "workflow/stop" {
+        params: v2::WorkflowStopParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::WorkflowStopResponse,
+    },
+    #[experimental("workflow/retry")]
+    WorkflowRetry => "workflow/retry" {
+        params: v2::WorkflowRetryParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::WorkflowRetryResponse,
+    },
+    #[experimental("workflow/recover")]
+    WorkflowRecover => "workflow/recover" {
+        params: v2::WorkflowRecoverParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::WorkflowRecoverResponse,
+    },
+    #[experimental("workflow/save")]
+    WorkflowSave => "workflow/save" {
+        params: v2::WorkflowSaveParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::WorkflowSaveResponse,
+    },
+    #[experimental("workflow/saved/list")]
+    WorkflowSavedList => "workflow/saved/list" {
+        params: v2::WorkflowSavedListParams,
+        serialization: None,
+        response: v2::WorkflowSavedListResponse,
+    },
+    #[experimental("workflow/saved/read")]
+    WorkflowSavedRead => "workflow/saved/read" {
+        params: v2::WorkflowSavedReadParams,
+        serialization: None,
+        response: v2::WorkflowSavedReadResponse,
+    },
+    #[experimental("workflow/saved/delete")]
+    WorkflowSavedDelete => "workflow/saved/delete" {
+        params: v2::WorkflowSavedDeleteParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::WorkflowSavedDeleteResponse,
+    },
     ThreadPause => "thread/pause" {
         params: v2::ThreadPauseParams,
         serialization: thread_id(params.thread_id),
@@ -2026,6 +2140,12 @@ server_notification_definitions! {
     Error => "error" (v2::ErrorNotification),
     ThreadStarted => "thread/started" (v2::ThreadStartedNotification),
     ThreadStatusChanged => "thread/status/changed" (v2::ThreadStatusChangedNotification),
+    #[experimental("workflow/updated")]
+    WorkflowUpdated => "workflow/updated" (v2::WorkflowUpdatedNotification),
+    #[experimental("workflow/progress")]
+    WorkflowProgress => "workflow/progress" (v2::WorkflowProgressNotification),
+    #[experimental("workflow/lifecycle/changed")]
+    WorkflowLifecycleChanged => "workflow/lifecycle/changed" (v2::WorkflowLifecycleChangedNotification),
     ThreadExecutionControlChanged => "thread/executionControl/changed" (v2::ThreadExecutionControlChangedNotification),
     #[experimental("thread/readState/changed")]
     ThreadReadStateChanged => "thread/readState/changed" (v2::ThreadReadStateChangedNotification),

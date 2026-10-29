@@ -526,6 +526,8 @@ pub struct ConfigToml {
     // Injects known feature keys into the schema and forbids unknown keys.
     #[schemars(schema_with = "crate::schema::features_schema")]
     pub features: Option<FeaturesToml>,
+    /// Limits for newly launched dynamic workflows.
+    pub dynamic_workflows: Option<crate::DynamicWorkflowsConfig>,
 
     /// Suppress warnings about unstable (under development) features.
     pub suppress_unstable_features_warning: Option<bool>,

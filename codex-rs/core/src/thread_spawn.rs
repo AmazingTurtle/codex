@@ -27,11 +27,22 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use codex_utils_absolute_path::AbsolutePathBuf;
+
+mod workspace;
+
+pub(crate) struct ThreadSpawnWorkspace {
+    pub cwd: AbsolutePathBuf,
+    pub root: AbsolutePathBuf,
+    pub source_root: AbsolutePathBuf,
+    pub logical_source_root: AbsolutePathBuf,
+}
 
 /// Child creation options; omitted overrides retain native MAv2 inheritance and role rules.
 pub(crate) struct ThreadSpawnRequest {
     /// Cancels only native pre-admission waits; accepted children retain normal ownership.
     pub admission_cancellation: Option<tokio_util::sync::CancellationToken>,
+    pub admission_control: Option<crate::agent::types::AgentAdmissionControl>,
     pub task_name: String,
     /// Explicit encoding: hosts normally provide plaintext; native tools can forward ciphertext.
     pub message: AgentMessage,
@@ -40,6 +51,9 @@ pub(crate) struct ThreadSpawnRequest {
     pub agent_type: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    pub final_output_json_schema: Option<serde_json::Value>,
+    /// A host-prepared checkout; omitted by ordinary native spawn tools.
+    pub workspace: Option<ThreadSpawnWorkspace>,
 }
 
 /// Accepted child and its effective configuration. Acceptance does not mean the turn completed.
@@ -67,15 +81,20 @@ pub(crate) async fn spawn(
     let turn = &step_context.turn;
     let ThreadSpawnRequest {
         admission_cancellation,
+        admission_control,
         task_name,
         message,
         fork_mode,
         agent_type,
         model,
         reasoning_effort,
+        final_output_json_schema,
+        workspace,
     } = request;
     let message_text = match &message {
-        AgentMessage::Plaintext(text) | AgentMessage::Encrypted(text) => text,
+        AgentMessage::Plaintext(text)
+        | AgentMessage::WorkflowTask(text)
+        | AgentMessage::Encrypted(text) => text,
     };
     if message_text.trim().is_empty() {
         return Err(ThreadSpawnError::Preparation(
@@ -99,13 +118,29 @@ pub(crate) async fn spawn(
     )
     .await
     .map_err(ThreadSpawnError::Preparation)?;
-    let config = prepared.config;
+    let mut config = prepared.config;
+    let mut environments = step_context.inherited_environments.clone();
+    if let Some(workspace) = workspace {
+        workspace::apply(&mut config, &mut environments, &workspace)?;
+    }
     let task_name = turn
         .session_source
         .get_agent_path()
         .unwrap_or_else(AgentPath::root)
         .join(&task_name)
         .map_err(ThreadSpawnError::Preparation)?;
+    if let AgentMessage::WorkflowTask(payload) = &message {
+        crate::workflows::validate_workflow_task(
+            payload,
+            &turn
+                .session_source
+                .get_agent_path()
+                .unwrap_or_else(AgentPath::root),
+            &task_name,
+            config.multi_agent_v2.tool_namespace.as_deref(),
+        )
+        .map_err(ThreadSpawnError::Preparation)?;
+    }
     let spawn_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: session.thread_id,
         depth: next_thread_spawn_depth(&turn.session_source),
@@ -150,13 +185,15 @@ pub(crate) async fn spawn(
             source: spawn_source,
             options: SpawnAgentOptions {
                 admission_cancellation,
+                admission_control,
+                final_output_json_schema,
                 fork_parent_spawn_call_id: fork_mode.as_ref().map(|_| call_id.to_string()),
                 fork_mode,
                 parent_thread_id: Some(session.thread_id),
                 parent_turn_id: Some(turn.sub_id.clone()),
                 root_turn_id: turn.turn_metadata_state.root_turn_id(),
                 turn_trigger: turn.turn_metadata_state.current_turn_trigger(),
-                environments: Some(step_context.inherited_environments.clone()),
+                environments: Some(environments),
                 disabled_plugin_ids: Some(turn.disabled_plugin_ids.clone()),
                 multi_agent_v2_usage_hints,
                 cyber_access_program: turn.cyber_access_program,

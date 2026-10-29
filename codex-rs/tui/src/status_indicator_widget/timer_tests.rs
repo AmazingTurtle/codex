@@ -32,3 +32,41 @@ fn pauses_and_resumes_without_counting_wait_time() {
         Duration::ZERO
     );
 }
+
+#[test]
+fn execution_and_modal_pauses_keep_phase_clock_frozen() {
+    let start = Instant::now();
+    let mut timer = StatusTimer {
+        last_resume_at: start,
+        display_started_at: Some(start + Duration::from_secs(2)),
+        ..Default::default()
+    };
+    timer.pause_at(start + Duration::from_secs(5));
+    timer.set_execution_paused(/*paused*/ true, start + Duration::from_secs(6));
+    timer.resume_at(start + Duration::from_secs(9));
+    assert_eq!(
+        timer.displayed_elapsed_at(start + Duration::from_secs(20)),
+        Duration::from_secs(3)
+    );
+    assert_eq!(
+        timer.elapsed_at(start + Duration::from_secs(20)),
+        Duration::from_secs(5)
+    );
+    timer.set_execution_paused(/*paused*/ false, start + Duration::from_secs(20));
+    assert_eq!(
+        timer.displayed_elapsed_at(start + Duration::from_secs(24)),
+        Duration::from_secs(7)
+    );
+    timer.set_execution_paused(/*paused*/ true, start + Duration::from_secs(25));
+    timer.pause_at(start + Duration::from_secs(26));
+    timer.set_execution_paused(/*paused*/ false, start + Duration::from_secs(28));
+    assert_eq!(
+        timer.displayed_elapsed_at(start + Duration::from_secs(35)),
+        Duration::from_secs(8)
+    );
+    timer.resume_at(start + Duration::from_secs(35));
+    assert_eq!(
+        timer.displayed_elapsed_at(start + Duration::from_secs(37)),
+        Duration::from_secs(10)
+    );
+}

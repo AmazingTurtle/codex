@@ -28,8 +28,15 @@ use ratatui::style::Stylize as _;
 mod activity_pages;
 mod computer_groups;
 mod exploration_groups;
+mod live_command;
 mod other_items;
+pub(crate) use live_command::LiveCommandCell;
 pub(crate) mod tools;
+mod voice_visibility;
+
+pub(crate) use voice_visibility::hide_private_items_after_voice_handoff;
+pub(crate) use voice_visibility::hide_private_timeline_items;
+pub(crate) use voice_visibility::is_voice_handoff_item;
 
 pub(crate) use activity_pages::fold_trailing_activity_details;
 pub(crate) use activity_pages::is_hidden_activity_detail;
@@ -140,6 +147,40 @@ pub(crate) fn thread_items_to_transcript_cells(
     let tool_call_display = config.map_or(ToolCallDisplay::default(), |config| {
         config.tui_tool_call_display
     });
+    project_items(
+        thread_id,
+        cwd,
+        items,
+        raw_reasoning_visibility,
+        config,
+        ProjectionOptions {
+            tool_call_display,
+            source: ProjectionSource::History,
+        },
+    )
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProjectionSource {
+    History,
+    Live,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ProjectionOptions {
+    pub(crate) tool_call_display: ToolCallDisplay,
+    pub(crate) source: ProjectionSource,
+}
+
+pub(crate) fn project_items(
+    thread_id: Option<ThreadId>,
+    cwd: &AbsolutePathBuf,
+    items: impl IntoIterator<Item = ThreadItem>,
+    raw_reasoning_visibility: RawReasoningVisibility,
+    config: Option<&Config>,
+    options: ProjectionOptions,
+) -> TranscriptCells {
+    let tool_call_display = options.tool_call_display;
     let inline_visualization_context = config.and_then(|config| {
         thread_id.and_then(|thread_id| InlineVisualizationContext::from_config(config, thread_id))
     });
@@ -151,6 +192,13 @@ pub(crate) fn thread_items_to_transcript_cells(
     let mut cells: TranscriptCells = Vec::new();
     let mut pending = None;
     for item in items {
+        if options.source == ProjectionSource::Live
+            && let Some(cell) = tools::live_tool_cell(&item, tool_call_display)
+        {
+            PendingActivity::flush(&mut pending, &mut cells);
+            cells.push(cell);
+            continue;
+        }
         if matches!(item, ThreadItem::Reasoning { .. }) && pending.is_some() {
             let reasoning_cells = item_to_cells(
                 item,
@@ -299,14 +347,31 @@ fn item_to_cells(
                 remote_image_urls: item.image_urls(),
             }));
         }
-        ThreadItem::AgentMessage { text, .. } => {
+        ThreadItem::AgentMessage {
+            id, text, workflow, ..
+        } => {
             let parsed = parse_assistant_markdown(&text, cwd.as_path());
             if !parsed.visible_markdown.trim().is_empty() {
-                cells.push(Arc::new(AgentMarkdownCell::new_with_inline_visualizations(
+                let native = AgentMarkdownCell::new_with_inline_visualizations(
                     parsed.visible_markdown,
                     cwd.as_path(),
                     inline_visualization_context,
-                )));
+                )
+                .with_copy_source(workflow.as_ref().map(|_| text));
+                if let Some(proof) = workflow.filter(|proof| proof.item_id == id) {
+                    let cell = crate::history_cell::WorkflowMessageCell::new(
+                        crate::history_cell::NativeMessageIdentity {
+                            thread_id: proof.child_thread_id.clone(),
+                            turn_id: proof.turn_id.clone(),
+                            item_id: id,
+                        },
+                        native,
+                    );
+                    cell.apply(&proof);
+                    cells.push(Arc::new(cell));
+                } else {
+                    cells.push(Arc::new(native));
+                }
             }
         }
         ThreadItem::FunctionCallOutput {

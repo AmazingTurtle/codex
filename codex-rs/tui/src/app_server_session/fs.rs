@@ -36,6 +36,36 @@ pub(crate) struct AppServerFileSystem {
 }
 
 impl AppServerFileSystem {
+    pub(crate) async fn fs_watch_path(&self, watch_id: &str, path: &AppServerPath) -> Result<()> {
+        self.request_fs_path::<serde_json::Value>(
+            "fs/watch",
+            path,
+            |request_id, path| ClientRequest::FsWatch {
+                request_id,
+                params: codex_app_server_protocol::FsWatchParams {
+                    watch_id: watch_id.into(),
+                    path,
+                },
+            },
+            || json!({"watchId":watch_id,"path":path.as_str()}),
+        )
+        .await
+        .map(drop)
+    }
+
+    pub(crate) async fn fs_unwatch(&self, watch_id: String) -> Result<()> {
+        self.request_handle
+            .request_typed::<codex_app_server_protocol::FsUnwatchResponse>(
+                ClientRequest::FsUnwatch {
+                    request_id: RequestId::String(format!("tui-fs-{}", Uuid::new_v4())),
+                    params: codex_app_server_protocol::FsUnwatchParams { watch_id },
+                },
+            )
+            .await
+            .map(drop)
+            .map_err(Into::into)
+    }
+
     pub(crate) async fn fs_create_directory_all_path(&self, path: &AppServerPath) -> Result<()> {
         self.request_fs_path::<FsCreateDirectoryResponse>(
             "fs/createDirectory",

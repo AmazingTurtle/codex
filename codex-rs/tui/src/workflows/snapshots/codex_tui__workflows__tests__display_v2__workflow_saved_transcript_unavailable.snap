@@ -1,0 +1,22 @@
+---
+source: tui/src/workflows/display_v2_tests.rs
+expression: unavailable
+---
+  Saved workflows  Tab / Shift+Tab filter
+   All 2   Project 1   User 0                                                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow                          │  1 Overview   2 Unavailable   3 Source
+  › Review project [read-only] · P… │ Saved scripts have no transcript. Choose a workflow run to inspect its agents.
+    Another saved script            │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+  Esc Runs · 1/3 view · read-only · ↑/↓ move

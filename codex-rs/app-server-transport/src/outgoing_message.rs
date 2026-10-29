@@ -8,6 +8,9 @@ use codex_app_server_protocol::ServerRequest;
 use serde::Serialize;
 use tokio::sync::oneshot;
 
+#[path = "history_presentation.rs"]
+mod history_presentation;
+
 /// Stable identifier for a transport connection.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ConnectionId(pub u64);
@@ -29,6 +32,32 @@ pub enum OutgoingMessage {
     AppServerNotification(ServerNotificationEnvelope),
     Response(OutgoingResponse),
     Error(OutgoingError),
+    /// A connection-specific view of native history without experimental workflow
+    /// presentation fields. The original typed payload remains available internally.
+    StableHistory(
+        #[serde(serialize_with = "history_presentation::serialize")] Box<OutgoingMessage>,
+    ),
+}
+
+impl OutgoingMessage {
+    pub fn without_workflow_presentation(mut self) -> Self {
+        if matches!(self, Self::StableHistory(_)) {
+            return self;
+        }
+        if history_presentation::clear(&mut self) {
+            Self::StableHistory(Box::new(self))
+        } else {
+            self
+        }
+    }
+
+    /// Unwraps a serialization view for consumers that handle typed notifications.
+    pub fn into_original(self) -> Self {
+        match self {
+            Self::StableHistory(message) => message.into_original(),
+            message => message,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

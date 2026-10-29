@@ -230,6 +230,16 @@ async fn reconnect_daemon_command_center_after_socket_replacement_without_a_conv
                         "thread/list" => Some(json!({"result": {"data": [], "nextCursor": null}})),
                         "thread/turns/list" => Some(json!({"result": {"data": [], "nextCursor": null}})),
                         "thread/goal/get" => Some(json!({"result": {"goal": null}})),
+                        "thread/timeline/list" => {
+                            let mut threads=vec![selected,added,child];
+                            threads.extend(previous_thread);
+                            Some(super::disconnect::legacy_timeline_unsupported_response(&request,&threads))
+                        }
+                        "thread/executionControl/read" | "workflow/list" | "workflow/saved/list" => {
+                            let mut roots = vec![selected, added];
+                            roots.extend(previous_thread);
+                            Some(super::disconnect::workflow_discovery_response(&request, &roots))
+                        }
                         "thread/read" if request.params.as_ref().unwrap()["threadId"] == child.to_string() => Some(json!({"result": {"thread": child_thread}})),
                         "thread/read" if previous_thread.is_some_and(|id| request.params.as_ref().unwrap()["threadId"] == id.to_string()) => Some(if changed_child_permissions && child_opened {
                             let mut thread = restored_previous.clone().unwrap();

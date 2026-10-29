@@ -1,0 +1,19 @@
+---
+source: tui/src/workflows/actions/actions_tests.rs
+expression: "render(&picker, 100, 24)"
+---
+
+  Actions · Review source
+  Control revision 9 · 2 / 8 starts · 14K / 100K tokens
+
+
+› 1. Guide active agent                  Send guidance to the current accepted agent turn
+      Edit queued prompt (disabled)      Replace a prompt that has not started (disabled: The
+                                         selected step has already started)
+  2. Skip step                           Replace the selected step with null or a JSON value
+  3. Interrupt selected work             Interrupt only the selected workflow work
+  4. Revise workflow                     Stage JavaScript source and arguments before applying
+  5. Apply revision after accepted work  Keep accepted work, then apply the staged revision
+  6. Interrupt and apply revision        Interrupt accepted work and apply the staged revision
+  7. Resume workflow                     Continue the current revision under its remaining budget
+↓

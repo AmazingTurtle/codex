@@ -661,6 +661,11 @@ impl App {
                     tracing::warn!(%thread_id, error = %err, "failed to load older transcript history");
                 }
             }
+            AppEvent::OlderWorkflowTimelineLoaded { thread_id, cursor, request_id, result } => {
+                if let Err(error) = self.handle_older_workflow_timeline(tui, app_server, thread_id, &cursor, request_id, result).await {
+                    self.chat_widget.add_error_message(format!("Could not load older workflow history: {error}"));
+                }
+            }
             AppEvent::OpenWarnings => self.chat_widget.open_warnings(&self.transcript_cells),
             AppEvent::UpdateWarnings { transcript, dismissed, kept } => {
                 if !Arc::ptr_eq(&transcript, &self.chat_widget.warning_display_state.transcript) {
@@ -1109,6 +1114,7 @@ impl App {
                     .ok_or_else(|| color_eyre::eyre::eyre!("reverted thread is no longer available"))?
                     .store.lock().await.session.clone()
                     .ok_or_else(|| color_eyre::eyre::eyre!("reverted thread has no session"))?;
+                session.timeline = app_server.timeline_snapshot(thread_id);
                 session.rollout_path = reverted.thread.path.clone();
                 if self.primary_thread_id == Some(thread_id) {
                     self.primary_session_configured = Some(session.clone());
@@ -1192,6 +1198,7 @@ impl App {
                 self.finish_initial_history_replay_buffer(tui);
             }
             AppEvent::ConsolidateAgentMessage {
+                identity,
                 source,
                 copy_source,
                 cwd,
@@ -1199,14 +1206,28 @@ impl App {
                 scrollback_reflow,
                 deferred_history_cell,
             } => {
+                let native = history_cell::AgentMarkdownCell::new_with_inline_visualizations(source, &cwd, inline_visualization_context).with_copy_source(copy_source);
+                let source = Arc::from(self.chat_widget.identify_agent_message(native, identity));
                 self.handle_consolidate_agent_message(
                     tui,
-                    history_cell::AgentMarkdownCell::new_with_inline_visualizations(source, &cwd, inline_visualization_context).with_copy_source(copy_source),
+                    source,
                     scrollback_reflow,
                     deferred_history_cell,
                 )?;
                 self.chat_widget.note_stream_consolidation_completed();
                 self.insert_pending_usage_output_after_stream_shutdown(tui);
+            }
+            AppEvent::ApplyWorkflowFinal(proof) => {
+                if self.chat_widget.thread_id().map(|id|id.to_string()).as_deref() == Some(proof.child_thread_id.as_str()) {
+                    let mut changed = false;
+                    for cell in self.transcript_cells.iter().filter_map(|cell|cell.as_any().downcast_ref::<history_cell::WorkflowMessageCell>()) {
+                        changed |= cell.apply(&proof);
+                    }
+                    if changed {
+                        self.backtrack_render_pending = true;
+                        tui.frame_requester().schedule_frame();
+                    }
+                }
             }
             AppEvent::ConsolidateProposedPlan(source) => {
                 let end = self.transcript_cells.len();
@@ -3190,6 +3211,10 @@ impl App {
                 }
             }
             AppEvent::OpenAgentsOverview => self.open_agents_overview(app_server),
+            AppEvent::Workflow(event) => {
+                self.handle_workflow_event(app_server, event).await;
+                tui.frame_requester().schedule_frame();
+            }
             AppEvent::ShowMoreAgentsOverview => self.show_more_agents_overview(app_server),
             AppEvent::NewAgentsOverviewSession { cwd } => {
                 return Box::pin(self.new_agents_overview_session(tui, app_server, cwd)).await;

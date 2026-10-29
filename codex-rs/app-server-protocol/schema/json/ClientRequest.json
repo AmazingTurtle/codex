@@ -6412,6 +6412,333 @@
         "mode"
       ],
       "type": "object"
+    },
+    "WorkflowCompletionMode": {
+      "enum": [
+        "display",
+        "continue"
+      ],
+      "type": "string"
+    },
+    "WorkflowControlOperation": {
+      "oneOf": [
+        {
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "guide"
+              ],
+              "title": "GuideWorkflowControlOperationType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "message",
+            "type"
+          ],
+          "title": "GuideWorkflowControlOperation",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "prompt": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "editQueued"
+              ],
+              "title": "EditQueuedWorkflowControlOperationType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt",
+            "type"
+          ],
+          "title": "EditQueuedWorkflowControlOperation",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "replacement": {
+              "$ref": "#/definitions/WorkflowResult"
+            },
+            "type": {
+              "enum": [
+                "skip"
+              ],
+              "title": "SkipWorkflowControlOperationType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "replacement",
+            "type"
+          ],
+          "title": "SkipWorkflowControlOperation",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "interrupt"
+              ],
+              "title": "InterruptWorkflowControlOperationType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "InterruptWorkflowControlOperation",
+          "type": "object"
+        }
+      ]
+    },
+    "WorkflowControlTarget": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "run"
+              ],
+              "title": "RunWorkflowControlTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "RunWorkflowControlTarget",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "phase"
+              ],
+              "title": "PhaseWorkflowControlTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "type"
+          ],
+          "title": "PhaseWorkflowControlTarget",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "expectedAttemptId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "expectedTurnId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "logicalId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "step"
+              ],
+              "title": "StepWorkflowControlTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "logicalId",
+            "type"
+          ],
+          "title": "StepWorkflowControlTarget",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "futureStep"
+              ],
+              "title": "FutureStepWorkflowControlTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "scope",
+            "type"
+          ],
+          "title": "FutureStepWorkflowControlTarget",
+          "type": "object"
+        }
+      ]
+    },
+    "WorkflowListScope": {
+      "enum": [
+        "current",
+        "project",
+        "all"
+      ],
+      "type": "string"
+    },
+    "WorkflowResult": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "absent"
+              ],
+              "title": "AbsentWorkflowResultType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "AbsentWorkflowResult",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "value"
+              ],
+              "title": "ValueWorkflowResultType",
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "title": "ValueWorkflowResult",
+          "type": "object"
+        }
+      ]
+    },
+    "WorkflowRevisionApplyMode": {
+      "enum": [
+        "drainAccepted",
+        "interruptAndApply"
+      ],
+      "type": "string"
+    },
+    "WorkflowScope": {
+      "enum": [
+        "project",
+        "user"
+      ],
+      "type": "string"
+    },
+    "WorkflowTranscriptTarget": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "run"
+              ],
+              "title": "RunWorkflowTranscriptTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "RunWorkflowTranscriptTarget",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "phase": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "phase"
+              ],
+              "title": "PhaseWorkflowTranscriptTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "phase",
+            "type"
+          ],
+          "title": "PhaseWorkflowTranscriptTarget",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "stepId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "step"
+              ],
+              "title": "StepWorkflowTranscriptTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "stepId",
+            "type"
+          ],
+          "title": "StepWorkflowTranscriptTarget",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "attemptId": {
+              "type": "string"
+            },
+            "stepId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "attempt"
+              ],
+              "title": "AttemptWorkflowTranscriptTargetType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attemptId",
+            "stepId",
+            "type"
+          ],
+          "title": "AttemptWorkflowTranscriptTarget",
+          "type": "object"
+        }
+      ]
     }
   },
   "description": "Request from the client to the server.",
@@ -6441,7 +6768,6 @@
       "type": "object"
     },
     {
-      "description": "NEW APIs",
       "properties": {
         "id": {
           "$ref": "#/definitions/RequestId"

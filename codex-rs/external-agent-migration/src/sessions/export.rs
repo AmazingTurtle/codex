@@ -266,6 +266,7 @@ mod tests {
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             }
         );
     }
@@ -300,6 +301,7 @@ mod tests {
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             })
         );
         let last_turn_complete = imported

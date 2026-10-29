@@ -1,6 +1,6 @@
 //! Older page completion preserves answer order, navigation intent, and pending request ownership.
 
-use super::session_lifecycle_requests::start_recording_app_server;
+use super::session_lifecycle_requests::start_recording_item_pagination_app_server;
 use super::*;
 use crate::pager_overlay::TranscriptHistoryState;
 use app_test_support::create_fake_paginated_rollout;
@@ -127,12 +127,8 @@ async fn older_pagination_completion_footers_follow_answers_without_overlap_dupl
 -> Result<()> {
     let (mut app, _codex_home, thread_id) =
         completed_history_app(&["Oldest", "Middle", "Newest"]).await?;
-    let (mut app_server, _requests, proxy) = start_recording_app_server(
-        &app.config,
-        /*blocked_thread_list*/ None,
-        /*failed_thread_name*/ None,
-    )
-    .await?;
+    let (mut app_server, _requests, proxy) =
+        start_recording_item_pagination_app_server(&app.config).await?;
     let started = app_server
         .resume_thread(
             &app.local_settings,
@@ -194,12 +190,8 @@ async fn beginning_navigation_holds_the_view_until_the_last_page_arrives() -> Re
     for initial_scroll in [0, -1] {
         let (mut app, _codex_home, thread_id) =
             completed_history_app(&["Oldest", "Middle", "Newest"]).await?;
-        let (mut app_server, _requests, proxy) = start_recording_app_server(
-            &app.config,
-            /*blocked_thread_list*/ None,
-            /*failed_thread_name*/ None,
-        )
-        .await?;
+        let (mut app_server, _requests, proxy) =
+            start_recording_item_pagination_app_server(&app.config).await?;
         let started = app_server
             .resume_thread(
                 &app.local_settings,
@@ -314,12 +306,8 @@ async fn returning_to_latest_retains_pending_pages_without_continuing_to_the_beg
 -> Result<()> {
     let (mut app, _codex_home, thread_id) =
         completed_history_app(&["Oldest", "Middle", "Newest"]).await?;
-    let (mut app_server, _requests, proxy) = start_recording_app_server(
-        &app.config,
-        /*blocked_thread_list*/ None,
-        /*failed_thread_name*/ None,
-    )
-    .await?;
+    let (mut app_server, _requests, proxy) =
+        start_recording_item_pagination_app_server(&app.config).await?;
     let started = app_server
         .resume_thread(
             &app.local_settings,
@@ -395,12 +383,8 @@ async fn stale_history_completions_preserve_the_current_request_and_failure_can_
 {
     let (mut app, _codex_home, thread_id) =
         completed_history_app(&["Oldest", "Middle", "Newest"]).await?;
-    let (mut app_server, _requests, proxy) = start_recording_app_server(
-        &app.config,
-        /*blocked_thread_list*/ None,
-        /*failed_thread_name*/ None,
-    )
-    .await?;
+    let (mut app_server, _requests, proxy) =
+        start_recording_item_pagination_app_server(&app.config).await?;
     let started = app_server
         .resume_thread(
             &app.local_settings,

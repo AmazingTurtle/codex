@@ -16,6 +16,8 @@ use codex_app_server_protocol::ThreadItemsListResponse;
 
 #[path = "history_completion.rs"]
 mod completion;
+#[path = "workflow_history_pagination.rs"]
+mod workflow;
 
 impl App {
     /// Start one bounded page request shared by scrollback refill and the transcript overlay.
@@ -24,6 +26,9 @@ impl App {
         app_server: &mut AppServerSession,
         thread_id: ThreadId,
     ) -> bool {
+        if app_server.timeline_entries(thread_id).is_some() {
+            return self.request_older_workflow_timeline(app_server, thread_id);
+        }
         let Some(cursor) = app_server.begin_older_history_page(thread_id) else {
             return false;
         };
@@ -215,7 +220,7 @@ impl App {
     }
 
     /// Project successful turn completion metadata after the corresponding page's final item.
-    fn project_older_history_cells(
+    pub(super) fn project_older_history_cells(
         &mut self,
         items: Vec<ThreadItem>,
         turns: &[Turn],

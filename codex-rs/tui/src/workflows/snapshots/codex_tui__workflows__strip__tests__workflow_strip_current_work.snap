@@ -1,0 +1,9 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "rows.join(\"\\n\")"
+---
+  Paused audit · [■■■■□□□□] 1/2 phases · Verify · Paused · in 312K · out 86K · 28m 57s · 3 agents used · ↓ open
+  Inspect source · [■■■■□□□□] 1/2 phases · Verify · in 312K · out 86K · 28m 57s · 3 agents used
+  Prepare checks · [□□□□□□□□] 0/2 phases · Pending · in ? · out ? · 0ms · 0 agents used
+  Newest report · [■■■■■■■■] 2/2 phases · Verify · Completed · in 312K · out 86K · 28m 57s · 3 agents used
+  … +1 workflow · ↓ open

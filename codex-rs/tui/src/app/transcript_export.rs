@@ -267,7 +267,11 @@ fn render_markdown_transcript(cells: &[Arc<dyn HistoryCell>]) -> Result<String, 
         }
         let (heading, indent) = if cell.as_any().is::<UserHistoryCell>() {
             ("User", false)
-        } else if cell.as_any().is::<AgentMarkdownCell>() {
+        } else if cell.as_any().is::<AgentMarkdownCell>()
+            || cell
+                .as_any()
+                .is::<crate::history_cell::WorkflowMessageCell>()
+        {
             ("Assistant", false)
         } else if cell.as_any().is::<ProposedPlanCell>() {
             ("Plan", false)

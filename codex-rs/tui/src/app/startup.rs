@@ -1034,6 +1034,7 @@ See the Codex keymap documentation for supported actions and examples."
             thread_event_listener_tasks: HashMap::new(),
             agent_navigation: AgentNavigationState::default(),
             agents_overview,
+            workflows: Default::default(),
             side_threads: HashMap::new(),
             abandoned_side_threads: HashSet::new(),
             active_thread_id: None,
@@ -1149,6 +1150,7 @@ See the Codex keymap documentation for supported actions and examples."
             {
                 return shutdown_on_startup_error(app_server, &mut other_backends, err).await;
             }
+            app.discover_workflows_after_attach(&app_server);
         }
         if !start_in_agents_overview
             && !pending_startup_thread_start

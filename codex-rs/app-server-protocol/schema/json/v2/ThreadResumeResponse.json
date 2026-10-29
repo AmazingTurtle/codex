@@ -3207,6 +3207,59 @@
           "type": "object"
         }
       ]
+    },
+    "WorkflowAgentMessageFormat": {
+      "oneOf": [
+        {
+          "description": "A typed string result remains ordinary Markdown, even if it resembles JSON.",
+          "enum": [
+            "text"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The original final message was verified against a typed non-string JSON result.",
+          "enum": [
+            "json"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "WorkflowAgentMessageProvenance": {
+      "properties": {
+        "attemptId": {
+          "type": "string"
+        },
+        "childThreadId": {
+          "type": "string"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/definitions/WorkflowAgentMessageFormat"
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attemptId",
+        "childThreadId",
+        "executionId",
+        "format",
+        "itemId",
+        "runId",
+        "turnId"
+      ],
+      "type": "object"
     }
   },
   "properties": {

@@ -26,6 +26,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
+#[path = "workflow_skill_tests.rs"]
+mod workflow_skill_tests;
+
 #[derive(Default)]
 struct TestPluginSkillSnapshotCache {
     snapshots: Mutex<HashMap<PluginSkillRoot, LoadedSkillRoot>>,

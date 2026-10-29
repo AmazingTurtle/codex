@@ -31,7 +31,12 @@ impl TranscriptView {
             _guard: guard,
             response: latest.and_then(|index| {
                 let cell = &cells[index];
-                let text = if cell.as_any().is::<AgentMarkdownCell>() {
+                let text = if cell.as_any().is::<AgentMarkdownCell>()
+                    || cell
+                        .as_any()
+                        .downcast_ref::<crate::history_cell::WorkflowMessageCell>()
+                        .is_some_and(|cell| !cell.is_structured())
+                {
                     // Raw lines retain this cell's visible Markdown after hidden directives
                     // were removed during consolidation, independently of the latest cache.
                     let markdown = cell
@@ -323,7 +328,11 @@ impl TranscriptView {
 }
 
 fn is_response(cell: &Arc<dyn HistoryCell>) -> bool {
-    cell.as_any().is::<AgentMarkdownCell>() || cell.as_any().is::<ProposedPlanCell>()
+    cell.as_any().is::<AgentMarkdownCell>()
+        || cell
+            .as_any()
+            .is::<crate::history_cell::WorkflowMessageCell>()
+        || cell.as_any().is::<ProposedPlanCell>()
 }
 
 fn user_ranges(text: &str, message: &str) -> Vec<(Range<usize>, &'static str, Option<String>)> {

@@ -24,6 +24,72 @@ use codex_protocol::mcp::CallToolResult;
 use codex_protocol::parse_command::ParsedCommand;
 use ratatui::style::Stylize as _;
 use ratatui::text::Line;
+use std::sync::Arc;
+
+pub(crate) fn command_execution_command_and_parsed(
+    command: &str,
+    actions: &[codex_app_server_protocol::CommandAction],
+) -> (Vec<String>, Vec<ParsedCommand>) {
+    (
+        crate::exec_command::split_command_string(command),
+        actions
+            .iter()
+            .cloned()
+            .map(codex_app_server_protocol::CommandAction::into_core)
+            .collect(),
+    )
+}
+
+/// Live inspectors reuse the native active cell constructors without starting a task or clock.
+pub(crate) fn live_tool_cell(
+    item: &ThreadItem,
+    display: ToolCallDisplay,
+) -> Option<Arc<dyn crate::history_cell::HistoryCell>> {
+    match item {
+        ThreadItem::CommandExecution {
+            id,
+            command,
+            command_actions,
+            source,
+            status: CommandExecutionStatus::InProgress,
+            aggregated_output,
+            ..
+        } => {
+            let (command, parsed) = command_execution_command_and_parsed(command, command_actions);
+            let mut cell = new_active_exec_command_with_display(
+                id.clone(),
+                command,
+                parsed,
+                *source,
+                /*interaction_input*/ None,
+                /*animations_enabled*/ false,
+                display,
+            );
+            if let Some(output) = aggregated_output {
+                cell.append_output(id, output);
+            }
+            Some(Arc::new(cell))
+        }
+        ThreadItem::McpToolCall {
+            id,
+            server,
+            tool,
+            arguments,
+            status: McpToolCallStatus::InProgress,
+            ..
+        } => Some(Arc::new(new_active_mcp_tool_call_with_display(
+            id.clone(),
+            McpInvocation {
+                server: server.clone(),
+                tool: tool.clone(),
+                arguments: Some(arguments.clone()),
+            },
+            /*animations_enabled*/ false,
+            display,
+        ))),
+        _ => None,
+    }
+}
 
 /// Preserve status and output when replay cannot reconstruct a rich completed tool cell.
 /// Declined commands never ran, and historical terminal interactions do not carry stdin details.

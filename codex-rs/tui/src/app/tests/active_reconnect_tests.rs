@@ -156,8 +156,10 @@ async fn reconnect_restores_history_permissions_and_resumes_unsent_input() -> Re
                         Some(json!({"result": result}))
                     }
                     "thread/read" => Some(json!({"result": {"thread": thread}})),
+                    "thread/timeline/list" => Some(super::disconnect::legacy_timeline_unsupported_response(&request,&[id])),
                     "thread/list" | "thread/loaded/list" => Some(json!({"result": {"data": [], "nextCursor": null}})),
                     "thread/goal/get" => Some(json!({"result": {"goal": null}})),
+                    "thread/executionControl/read" | "workflow/list" | "workflow/saved/list" => Some(super::disconnect::workflow_discovery_response(&request, &[id])),
                     "turn/start" => {
                         assert!(!edit_offline);
                         let params = request.params.as_ref().unwrap();
@@ -552,6 +554,7 @@ async fn reconnect_reconciles_offscreen_pending_profile_before_restoring_permiss
                         "reasoningEffort": null}})
                 }
                 "thread/read" => json!({"result": {"thread": thread(primary)}}),
+                "thread/timeline/list" => super::disconnect::legacy_timeline_unsupported_response(&request,&[primary,displayed]),
                 "turn/start" => {
                     let params = request.params.as_ref().unwrap();
                     assert_eq!(params["permissions"], serde_json::Value::Null);
@@ -562,6 +565,7 @@ async fn reconnect_reconciles_offscreen_pending_profile_before_restoring_permiss
                 "thread/list" | "thread/loaded/list" =>
                     json!({"result": {"data": [], "nextCursor": null}}),
                 "thread/goal/get" => json!({"result": {"goal": null}}),
+                "thread/executionControl/read" | "workflow/list" | "workflow/saved/list" => super::disconnect::workflow_discovery_response(&request, &[primary]),
                 method => panic!("unexpected reconnect request: {method}"),
             }))
         })

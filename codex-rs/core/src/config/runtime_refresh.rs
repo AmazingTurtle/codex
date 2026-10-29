@@ -31,6 +31,7 @@ pub(crate) enum RuntimeConfigRefresh {
 #[serde(default)]
 struct McpRefreshToml {
     features: Option<FeaturesToml>,
+    dynamic_workflows: Option<codex_config::DynamicWorkflowsConfig>,
     plugins: codex_config::types::PluginsConfigToml,
 }
 
@@ -133,6 +134,21 @@ impl Config {
             .features
             .refresh_mcp_features(&features)
             .map_err(std::io::Error::other)?;
+        if !matches!(scope, RuntimeConfigRefresh::Mcp) {
+            config.dynamic_workflows = cfg.dynamic_workflows.clone().unwrap_or_default();
+            config
+                .features
+                .set_enabled(
+                    Feature::DynamicWorkflows,
+                    features.enabled(Feature::DynamicWorkflows),
+                )
+                .map_err(std::io::Error::other)?;
+            config.dynamic_workflows_mode =
+                super::dynamic_workflows::resolve_dynamic_workflows_mode(
+                    cfg.features.as_ref(),
+                    &config.features,
+                );
+        }
         config.mcp_servers =
             constrain_mcp_servers(servers, layers.requirements().mcp_servers.as_ref())
                 .map_err(std::io::Error::other)?;

@@ -1,0 +1,16 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: page
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt         │  1 Overview   2 Transcript   3 Source
+      Review file 6 · Running       │ Review file 12
+      Review file 7 · Running       │
+      Review file 8 · Running       │ Prompt
+      Review file 9 · Running       │ Prompt line 0
+      Review file 10 · Running      │ Prompt line 1
+      Review file 11 · Running      │ Prompt line 2
+  ›   Review file 12 · Running      │ Prompt line 3
+  Esc close · ↑/↓ select · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

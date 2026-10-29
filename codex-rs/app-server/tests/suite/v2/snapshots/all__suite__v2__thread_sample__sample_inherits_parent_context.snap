@@ -45,6 +45,7 @@ Settings:
         ### Skill roots
         - `r0` = `<SKILLS_ROOT>/.system`
         ### Available skills
+        - dynamic-workflow: Author and manage agent workflows for independent work, result-driven decisions, ver...elegation rules. (file: r0/dynamic-workflow/SKILL.md) [hash=1442a9f1c32a082d]
         - imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as...ctly in HTML/CSS/canvas. (file: r0/imagegen/SKILL.md) [hash=dcbada3f7f876b5c]
         - openai-docs: Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, ...merely mention Codex. (file: r0/openai-docs/SKILL.md) [hash=daf7d1f4fd2d2abe]
         - skill-creator: Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources. (file: r0/skill-creator/SKILL.md)
@@ -106,6 +107,7 @@ Settings: same as window 1
         ### Skill roots
         - `r0` = `<SKILLS_ROOT>/.system`
         ### Available skills
+        - dynamic-workflow: Author and manage agent workflows for independent work, result-driven decisions, ver...elegation rules. (file: r0/dynamic-workflow/SKILL.md) [hash=1442a9f1c32a082d]
         - imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as...ctly in HTML/CSS/canvas. (file: r0/imagegen/SKILL.md) [hash=dcbada3f7f876b5c]
         - openai-docs: Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, ...merely mention Codex. (file: r0/openai-docs/SKILL.md) [hash=daf7d1f4fd2d2abe]
         - skill-creator: Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources. (file: r0/skill-creator/SKILL.md)
@@ -166,6 +168,7 @@ Settings: same as window 1
         ### Skill roots
         - `r0` = `<SKILLS_ROOT>/.system`
         ### Available skills
+        - dynamic-workflow: Author and manage agent workflows for independent work, result-driven decisions, ver...elegation rules. (file: r0/dynamic-workflow/SKILL.md) [hash=1442a9f1c32a082d]
         - imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as...ctly in HTML/CSS/canvas. (file: r0/imagegen/SKILL.md) [hash=dcbada3f7f876b5c]
         - openai-docs: Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, ...merely mention Codex. (file: r0/openai-docs/SKILL.md) [hash=daf7d1f4fd2d2abe]
         - skill-creator: Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources. (file: r0/skill-creator/SKILL.md)

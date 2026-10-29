@@ -1,0 +1,26 @@
+---
+source: tui/src/structured_value_tests.rs
+expression: "text(render_value(&value, 18))"
+---
+## results
+
+### 1 · language:
+Python
+
+• value: 610
+
+### 2 · language:
+Rust
+
+• value: 610
+
+### 3 · language:
+JavaScript
+
+• value: 610
+
+## matrix
+
+1. 1 · 2
+2. 3 · 4
+3. []

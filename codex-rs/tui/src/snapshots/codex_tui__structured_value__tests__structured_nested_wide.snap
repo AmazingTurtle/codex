@@ -1,0 +1,16 @@
+---
+source: tui/src/structured_value_tests.rs
+expression: wide
+---
+• summary: Audit complete
+
+## report
+
+• checks
+    • 1 · name: Build
+        • detail · message: **Ready** for release
+            • warnings (relative JSON Pointer paths)
+                • /0: One warning
+                • /1: Two warnings
+
+• owner · name: 日本語 · notes: First paragraph ⏎  ⏎ Second paragraph

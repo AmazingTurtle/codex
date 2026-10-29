@@ -1,0 +1,5 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "rendered[0]"
+---
+  Stored run · Completed · ?/3 · ↓ open

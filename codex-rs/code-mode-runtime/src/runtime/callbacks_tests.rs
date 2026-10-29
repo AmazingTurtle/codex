@@ -106,9 +106,11 @@ clearTimeout(earlyTimer); setTimeout(() => {}, 60000);
                 description: String::new(),
                 kind: CodeModeToolKind::Function,
             }],
+            codex_code_mode_protocol::CodeModeCellExecutionProfile::General,
         )
         .expect("install globals");
         scope.set_slot(RuntimeState {
+            profile: Default::default(),
             event_tx,
             pending_tool_calls: HashMap::new(),
             pending_timeouts: HashMap::new(),

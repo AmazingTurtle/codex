@@ -6822,6 +6822,313 @@ class WindowsWorldWritableWarningNotification(BaseModel):
     sample_paths: Annotated[list[str], Field(alias="samplePaths")]
 
 
+class WorkflowAdmissionStatus(Enum):
+    not_requested = "notRequested"
+    reserved = "reserved"
+    accepted = "accepted"
+    rejected = "rejected"
+    uncertain = "uncertain"
+
+
+class WorkflowAgentMessageFormat(Enum):
+    text = "text"
+    json = "json"
+
+
+class WorkflowAgentMessageProvenance(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    attempt_id: Annotated[str, Field(alias="attemptId")]
+    child_thread_id: Annotated[str, Field(alias="childThreadId")]
+    execution_id: Annotated[str, Field(alias="executionId")]
+    format: WorkflowAgentMessageFormat
+    item_id: Annotated[str, Field(alias="itemId")]
+    run_id: Annotated[str, Field(alias="runId")]
+    turn_id: Annotated[str, Field(alias="turnId")]
+
+
+class WorkflowCompletionMode(Enum):
+    display = "display"
+    continue_ = "continue"
+
+
+class WorkflowControlActiveTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    attempt_id: Annotated[str, Field(alias="attemptId")]
+    logical_id: Annotated[str, Field(alias="logicalId")]
+    turn_id: Annotated[str, Field(alias="turnId")]
+
+
+class WorkflowControlCommandStatus(Enum):
+    pending = "pending"
+    applied = "applied"
+    rejected = "rejected"
+    blocked = "blocked"
+
+
+class GuideWorkflowControlOperation(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    message: str
+    type: Annotated[Literal["guide"], Field(title="GuideWorkflowControlOperationType")]
+
+
+class EditQueuedWorkflowControlOperation(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    prompt: str
+    type: Annotated[Literal["editQueued"], Field(title="EditQueuedWorkflowControlOperationType")]
+
+
+class InterruptWorkflowControlOperation(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    type: Annotated[Literal["interrupt"], Field(title="InterruptWorkflowControlOperationType")]
+
+
+class RunWorkflowControlTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    type: Annotated[Literal["run"], Field(title="RunWorkflowControlTargetType")]
+
+
+class PhaseWorkflowControlTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    title: str
+    type: Annotated[Literal["phase"], Field(title="PhaseWorkflowControlTargetType")]
+
+
+class StepWorkflowControlTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    expected_attempt_id: Annotated[str | None, Field(alias="expectedAttemptId")] = None
+    expected_turn_id: Annotated[str | None, Field(alias="expectedTurnId")] = None
+    logical_id: Annotated[str, Field(alias="logicalId")]
+    type: Annotated[Literal["step"], Field(title="StepWorkflowControlTargetType")]
+
+
+class FutureStepWorkflowControlTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    key: str
+    scope: str
+    type: Annotated[Literal["futureStep"], Field(title="FutureStepWorkflowControlTargetType")]
+
+
+class WorkflowControlTarget(
+    RootModel[
+        RunWorkflowControlTarget
+        | PhaseWorkflowControlTarget
+        | StepWorkflowControlTarget
+        | FutureStepWorkflowControlTarget
+    ]
+):
+    root: (
+        RunWorkflowControlTarget
+        | PhaseWorkflowControlTarget
+        | StepWorkflowControlTarget
+        | FutureStepWorkflowControlTarget
+    )
+
+
+class StartedWorkflowLifecycleKind(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    description: str
+    name: str
+    type: Annotated[Literal["started"], Field(title="StartedWorkflowLifecycleKindType")]
+
+
+class WorkflowListScope(Enum):
+    current = "current"
+    project = "project"
+    all = "all"
+
+
+class WorkflowLog(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    created_at: Annotated[int, Field(alias="createdAt")]
+    message: str
+    phase: str | None = None
+    sequence: Annotated[int, Field(ge=0)]
+
+
+class WorkflowPhaseDefinition(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    title: str
+
+
+class WorkflowPhaseStatus(Enum):
+    pending = "pending"
+    active = "active"
+    completed = "completed"
+    skipped = "skipped"
+    failed = "failed"
+
+
+class AbsentWorkflowResult(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    type: Annotated[Literal["absent"], Field(title="AbsentWorkflowResultType")]
+
+
+class ValueWorkflowResult(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    type: Annotated[Literal["value"], Field(title="ValueWorkflowResultType")]
+    value: Any
+
+
+class WorkflowResult(RootModel[AbsentWorkflowResult | ValueWorkflowResult]):
+    root: AbsentWorkflowResult | ValueWorkflowResult
+
+
+class WorkflowRevisionApplyMode(Enum):
+    drain_accepted = "drainAccepted"
+    interrupt_and_apply = "interruptAndApply"
+
+
+class WorkflowRevisionStatus(Enum):
+    draft = "draft"
+    fencing = "fencing"
+    draining = "draining"
+    ready = "ready"
+    active = "active"
+    superseded = "superseded"
+    blocked = "blocked"
+
+
+class WorkflowRunLimits(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    max_agents: Annotated[int, Field(alias="maxAgents", ge=0)]
+    max_tokens: Annotated[int | None, Field(alias="maxTokens", ge=0)] = None
+
+
+class WorkflowScope(Enum):
+    project = "project"
+    user = "user"
+
+
+class WorkflowStatus(Enum):
+    pending = "pending"
+    running = "running"
+    succeeded = "succeeded"
+    failed = "failed"
+    stopped = "stopped"
+    interrupted = "interrupted"
+
+
+class WorkflowStepControlOutcome(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    command_id: Annotated[str, Field(alias="commandId")]
+    replacement: WorkflowResult
+    revision_id: Annotated[str, Field(alias="revisionId")]
+
+
+class WorkflowStepDisposition(Enum):
+    native = "native"
+    skipped = "skipped"
+
+
+class WorkflowTokenUsage(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    cached_input_tokens: Annotated[
+        int,
+        Field(
+            alias="cachedInputTokens",
+            description="Included in inputTokens; it must not be added to input a second time.",
+            ge=0,
+        ),
+    ]
+    input_tokens: Annotated[int, Field(alias="inputTokens", ge=0)]
+    output_tokens: Annotated[int, Field(alias="outputTokens", ge=0)]
+    total_tokens: Annotated[int, Field(alias="totalTokens", ge=0)]
+
+
+class ValueWorkflowTranscriptResult(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    type: Annotated[Literal["value"], Field(title="ValueWorkflowTranscriptResultType")]
+    value: Any
+
+
+class WorkflowTranscriptResult(RootModel[ValueWorkflowTranscriptResult]):
+    root: ValueWorkflowTranscriptResult
+
+
+class RunWorkflowTranscriptTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    type: Annotated[Literal["run"], Field(title="RunWorkflowTranscriptTargetType")]
+
+
+class PhaseWorkflowTranscriptTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    phase: str
+    type: Annotated[Literal["phase"], Field(title="PhaseWorkflowTranscriptTargetType")]
+
+
+class StepWorkflowTranscriptTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    step_id: Annotated[str, Field(alias="stepId")]
+    type: Annotated[Literal["step"], Field(title="StepWorkflowTranscriptTargetType")]
+
+
+class AttemptWorkflowTranscriptTarget(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    attempt_id: Annotated[str, Field(alias="attemptId")]
+    step_id: Annotated[str, Field(alias="stepId")]
+    type: Annotated[Literal["attempt"], Field(title="AttemptWorkflowTranscriptTargetType")]
+
+
+class WorkflowTranscriptTarget(
+    RootModel[
+        RunWorkflowTranscriptTarget
+        | PhaseWorkflowTranscriptTarget
+        | StepWorkflowTranscriptTarget
+        | AttemptWorkflowTranscriptTarget
+    ]
+):
+    root: (
+        RunWorkflowTranscriptTarget
+        | PhaseWorkflowTranscriptTarget
+        | StepWorkflowTranscriptTarget
+        | AttemptWorkflowTranscriptTarget
+    )
+
+
 class WorkspaceMessageType(Enum):
     headline = "headline"
     announcement = "announcement"
@@ -10879,6 +11186,195 @@ class WindowsSandboxSetupCompletedNotification(BaseModel):
     success: bool
 
 
+class SkipWorkflowControlOperation(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    replacement: WorkflowResult
+    type: Annotated[Literal["skip"], Field(title="SkipWorkflowControlOperationType")]
+
+
+class WorkflowControlOperation(
+    RootModel[
+        GuideWorkflowControlOperation
+        | EditQueuedWorkflowControlOperation
+        | SkipWorkflowControlOperation
+        | InterruptWorkflowControlOperation
+    ]
+):
+    root: (
+        GuideWorkflowControlOperation
+        | EditQueuedWorkflowControlOperation
+        | SkipWorkflowControlOperation
+        | InterruptWorkflowControlOperation
+    )
+
+
+class WorkflowControlState(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    active_revision_id: Annotated[str, Field(alias="activeRevisionId")]
+    control_revision: Annotated[int, Field(alias="controlRevision", ge=0)]
+    pending_revision_id: Annotated[str | None, Field(alias="pendingRevisionId")] = None
+    status: WorkflowRevisionStatus
+
+
+class StepSkippedWorkflowLifecycleKind(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    command_id: str
+    label: str
+    logical_id: str
+    phase: str | None = None
+    result: WorkflowResult
+    step_id: str
+    type: Annotated[Literal["stepSkipped"], Field(title="StepSkippedWorkflowLifecycleKindType")]
+
+
+class StepCompletedWorkflowLifecycleKind(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    active_duration_ms: Annotated[int | None, Field(ge=0)] = None
+    attempt_id: str
+    child_thread_id: str
+    error: str | None = None
+    final_turn_id: str | None = None
+    label: str
+    owned_turn_ids: list[str]
+    phase: str | None = None
+    reasoning_effort: str | None = None
+    resolved_model: str | None = None
+    result: WorkflowResult
+    status: WorkflowStatus
+    step_id: str
+    type: Annotated[Literal["stepCompleted"], Field(title="StepCompletedWorkflowLifecycleKindType")]
+
+
+class ResultShownWorkflowLifecycleKind(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    error: str | None = None
+    name: str
+    result: WorkflowResult
+    status: WorkflowStatus
+    type: Annotated[Literal["resultShown"], Field(title="ResultShownWorkflowLifecycleKindType")]
+
+
+class WorkflowMetadata(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    description: str
+    name: str
+    phases: list[WorkflowPhaseDefinition]
+
+
+class WorkflowMetrics(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    active_duration_ms: Annotated[int | None, Field(alias="activeDurationMs", ge=0)] = None
+    agents_used: Annotated[int | None, Field(alias="agentsUsed", ge=0)] = None
+    model_turns: Annotated[
+        int | None,
+        Field(
+            alias="modelTurns",
+            description="Unique usage-bearing model responses; null means the count is unknown.",
+            ge=0,
+        ),
+    ] = None
+    usage: Annotated[
+        WorkflowTokenUsage | None,
+        Field(
+            description="Null means no reported usage checkpoint is available; zero is an observed zero."
+        ),
+    ] = None
+    usage_complete: Annotated[bool, Field(alias="usageComplete")]
+    usage_incomplete_reason: Annotated[str | None, Field(alias="usageIncompleteReason")] = None
+    wall_duration_ms: Annotated[int | None, Field(alias="wallDurationMs", ge=0)] = None
+
+
+class WorkflowPhaseProgress(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    completed_at: Annotated[int | None, Field(alias="completedAt")] = None
+    metrics: Annotated[WorkflowMetrics | None, Field(validate_default=True)] = {
+        "activeDurationMs": None,
+        "agentsUsed": None,
+        "modelTurns": None,
+        "usage": None,
+        "usageComplete": False,
+        "usageIncompleteReason": None,
+        "wallDurationMs": None,
+    }
+    status: WorkflowPhaseStatus
+    steps_completed: Annotated[int, Field(alias="stepsCompleted", ge=0)]
+    steps_discovered: Annotated[int, Field(alias="stepsDiscovered", ge=0)]
+    title: str
+    updated_at: Annotated[int | None, Field(alias="updatedAt")] = None
+
+
+class WorkflowRevision(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    created_at: Annotated[int, Field(alias="createdAt")]
+    error: str | None = None
+    execution_ids: Annotated[list[str], Field(alias="executionIds")]
+    id: str
+    input: Any
+    invalidation_reason: Annotated[str, Field(alias="invalidationReason")]
+    metadata: WorkflowMetadata
+    mode: WorkflowRevisionApplyMode | None = None
+    number: Annotated[int, Field(ge=0)]
+    parent_id: Annotated[str | None, Field(alias="parentId")] = None
+    reusable_statements: Annotated[int, Field(alias="reusableStatements", ge=0)]
+    source: str
+    statement_count: Annotated[int, Field(alias="statementCount", ge=0)]
+    status: WorkflowRevisionStatus
+
+
+class WorkflowSummary(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    accepted_starts: Annotated[int | None, Field(alias="acceptedStarts", ge=0)] = 0
+    created_at: Annotated[int, Field(alias="createdAt")]
+    execution_id: Annotated[str | None, Field(alias="executionId")] = ""
+    format_version: Annotated[int | None, Field(alias="formatVersion", ge=0)] = 1
+    id: str
+    limits: Annotated[WorkflowRunLimits | None, Field(validate_default=True)] = {
+        "maxAgents": 32,
+        "maxTokens": None,
+    }
+    metadata: WorkflowMetadata | None = None
+    metrics: Annotated[WorkflowMetrics | None, Field(validate_default=True)] = {
+        "activeDurationMs": None,
+        "agentsUsed": None,
+        "modelTurns": None,
+        "usage": None,
+        "usageComplete": False,
+        "usageIncompleteReason": None,
+        "wallDurationMs": None,
+    }
+    owner_thread_id: Annotated[str, Field(alias="ownerThreadId")]
+    phase: str | None = None
+    phase_count: Annotated[int, Field(alias="phaseCount", ge=0)]
+    phase_progress: Annotated[
+        list[WorkflowPhaseProgress] | None, Field(alias="phaseProgress", validate_default=True)
+    ] = []
+    project_root: Annotated[LegacyAppPathString | None, Field(alias="projectRoot")] = None
+    read_only: Annotated[bool | None, Field(alias="readOnly")] = True
+    status: WorkflowStatus
+    step_count: Annotated[int, Field(alias="stepCount", ge=0)]
+    updated_at: Annotated[int, Field(alias="updatedAt")]
+
+
 class WorkspaceMessage(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -11650,6 +12146,33 @@ class ResponseItem(
     )
 
 
+class SavedWorkflow(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    format_version: Annotated[int | None, Field(alias="formatVersion", ge=0)] = 1
+    id: str
+    metadata: WorkflowMetadata | None = None
+    name: str
+    read_only: Annotated[bool | None, Field(alias="readOnly")] = True
+    read_only_reason: Annotated[str | None, Field(alias="readOnlyReason")] = None
+    scope: WorkflowScope
+    source: str
+
+
+class SavedWorkflowSummary(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    format_version: Annotated[int | None, Field(alias="formatVersion", ge=0)] = 1
+    id: str
+    metadata: WorkflowMetadata | None = None
+    name: str
+    read_only: Annotated[bool | None, Field(alias="readOnly")] = True
+    read_only_reason: Annotated[str | None, Field(alias="readOnlyReason")] = None
+    scope: WorkflowScope
+
+
 class ErrorServerNotification(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -12048,23 +12571,6 @@ class TurnCompletedThreadTimelineEntry(BaseModel):
     type: Annotated[Literal["turnCompleted"], Field(title="TurnCompletedThreadTimelineEntryType")]
 
 
-class ThreadTimelineEntry(
-    RootModel[
-        ItemThreadTimelineEntry
-        | RealtimeThreadTimelineEntry
-        | TurnStartedThreadTimelineEntry
-        | TurnCompletedThreadTimelineEntry
-    ]
-):
-    root: Annotated[
-        ItemThreadTimelineEntry
-        | RealtimeThreadTimelineEntry
-        | TurnStartedThreadTimelineEntry
-        | TurnCompletedThreadTimelineEntry,
-        Field(description="EXPERIMENTAL - one item or turn boundary in canonical rollout order."),
-    ]
-
-
 class Turn(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -12155,6 +12661,176 @@ class TurnsPage(BaseModel):
     backwards_cursor: Annotated[str | None, Field(alias="backwardsCursor")] = None
     data: list[Turn]
     next_cursor: Annotated[str | None, Field(alias="nextCursor")] = None
+
+
+class WorkflowAttempt(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    admission: WorkflowAdmissionStatus | None = "notRequested"
+    child_thread_id: Annotated[str | None, Field(alias="childThreadId")] = None
+    completed_at: Annotated[int | None, Field(alias="completedAt")] = None
+    error: str | None = None
+    execution_id: Annotated[
+        str | None,
+        Field(
+            alias="executionId",
+            description="The execution that originally admitted this attempt; empty for older records.",
+        ),
+    ] = ""
+    final_turn_id: Annotated[str | None, Field(alias="finalTurnId")] = None
+    id: str
+    metrics: Annotated[WorkflowMetrics | None, Field(validate_default=True)] = {
+        "activeDurationMs": None,
+        "agentsUsed": None,
+        "modelTurns": None,
+        "usage": None,
+        "usageComplete": False,
+        "usageIncompleteReason": None,
+        "wallDurationMs": None,
+    }
+    owned_turn_ids: Annotated[list[str] | None, Field(alias="ownedTurnIds")] = []
+    reasoning_effort: Annotated[str | None, Field(alias="reasoningEffort")] = None
+    resolved_model: Annotated[str | None, Field(alias="resolvedModel")] = None
+    status: WorkflowStatus
+    updated_at: Annotated[int | None, Field(alias="updatedAt")] = None
+    usage: Any | None = None
+
+
+class WorkflowControlCommand(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    control_revision: Annotated[int, Field(alias="controlRevision", ge=0)]
+    created_at: Annotated[int, Field(alias="createdAt")]
+    error: str | None = None
+    id: str
+    operation: WorkflowControlOperation
+    revision_id: Annotated[str, Field(alias="revisionId")]
+    status: WorkflowControlCommandStatus
+    target: WorkflowControlTarget
+
+
+class WorkflowExecutionSnapshot(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    completion_mode: Annotated[WorkflowCompletionMode, Field(alias="completionMode")]
+    created_at: Annotated[int, Field(alias="createdAt")]
+    error: str | None = None
+    execution_id: Annotated[str, Field(alias="executionId")]
+    input: Any
+    metadata: WorkflowMetadata | None = None
+    metrics: WorkflowMetrics
+    partial: bool
+    result: WorkflowResult
+    revision_id: Annotated[str | None, Field(alias="revisionId")] = None
+    run_id: Annotated[str, Field(alias="runId")]
+    source: str
+    status: WorkflowStatus
+
+
+class CompletedWorkflowLifecycleKind(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    error: str | None = None
+    metrics: WorkflowMetrics
+    name: str
+    result: WorkflowResult
+    status: WorkflowStatus
+    type: Annotated[Literal["completed"], Field(title="CompletedWorkflowLifecycleKindType")]
+
+
+class InterruptedWorkflowLifecycleKind(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    metrics: WorkflowMetrics
+    name: str
+    native_settled: bool
+    reason: str
+    type: Annotated[Literal["interrupted"], Field(title="InterruptedWorkflowLifecycleKindType")]
+
+
+class WorkflowLifecycleKind(
+    RootModel[
+        StartedWorkflowLifecycleKind
+        | StepSkippedWorkflowLifecycleKind
+        | StepCompletedWorkflowLifecycleKind
+        | CompletedWorkflowLifecycleKind
+        | InterruptedWorkflowLifecycleKind
+        | ResultShownWorkflowLifecycleKind
+    ]
+):
+    root: (
+        StartedWorkflowLifecycleKind
+        | StepSkippedWorkflowLifecycleKind
+        | StepCompletedWorkflowLifecycleKind
+        | CompletedWorkflowLifecycleKind
+        | InterruptedWorkflowLifecycleKind
+        | ResultShownWorkflowLifecycleKind
+    )
+
+
+class WorkflowProgressNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    thread_id: Annotated[str, Field(alias="threadId")]
+    workflow: WorkflowSummary
+
+
+class WorkflowStep(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    attempts: list[WorkflowAttempt]
+    completed_at: Annotated[int | None, Field(alias="completedAt")] = None
+    control_outcome: Annotated[WorkflowStepControlOutcome | None, Field(alias="controlOutcome")] = (
+        None
+    )
+    disposition: WorkflowStepDisposition | None = "native"
+    effective_options: Annotated[Any | None, Field(alias="effectiveOptions")] = None
+    id: str
+    key: str | None = None
+    label: str | None = ""
+    logical_id: Annotated[str | None, Field(alias="logicalId")] = ""
+    metrics: Annotated[WorkflowMetrics | None, Field(validate_default=True)] = {
+        "activeDurationMs": None,
+        "agentsUsed": None,
+        "modelTurns": None,
+        "usage": None,
+        "usageComplete": False,
+        "usageIncompleteReason": None,
+        "wallDurationMs": None,
+    }
+    options: Any
+    phase: str | None = None
+    result: Any | None = None
+    scope: str | None = ""
+    updated_at: Annotated[int | None, Field(alias="updatedAt")] = None
+
+
+class WorkflowTranscriptGroup(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    attempt_id: Annotated[str, Field(alias="attemptId")]
+    child_thread_id: Annotated[str, Field(alias="childThreadId")]
+    cwd: AbsolutePathBuf
+    execution_id: Annotated[str, Field(alias="executionId")]
+    final_item_id: Annotated[str | None, Field(alias="finalItemId")] = None
+    final_result: Annotated[WorkflowTranscriptResult | None, Field(alias="finalResult")] = None
+    final_turn_id: Annotated[str | None, Field(alias="finalTurnId")] = None
+    items: list[ThreadItemEntry]
+    label: str
+    owned_turn_ids: Annotated[list[str], Field(alias="ownedTurnIds")]
+    phase: str | None = None
+    reasoning_effort: Annotated[str | None, Field(alias="reasoningEffort")] = None
+    resolved_model: Annotated[str | None, Field(alias="resolvedModel")] = None
+    run_id: Annotated[str, Field(alias="runId")]
+    step_id: Annotated[str, Field(alias="stepId")]
 
 
 class AccountModelsReadManyResponse(BaseModel):
@@ -12507,6 +13183,23 @@ class ReviewStartResponse(BaseModel):
         ),
     ]
     turn: Turn
+
+
+class WorkflowProgressServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["workflow/progress"], Field(title="Workflow/progressNotificationMethod")
+    ]
+    params: WorkflowProgressNotification
 
 
 class TurnStartedServerNotification(BaseModel):
@@ -13086,6 +13779,70 @@ class TurnStartParams(BaseModel):
     ] = None
 
 
+class WorkflowLifecycleEvent(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    completion_mode: Annotated[WorkflowCompletionMode, Field(alias="completionMode")]
+    created_at: Annotated[int, Field(alias="createdAt")]
+    execution_id: Annotated[str, Field(alias="executionId")]
+    id: str
+    kind: WorkflowLifecycleKind
+    owner_thread_id: Annotated[str, Field(alias="ownerThreadId")]
+    run_id: Annotated[str, Field(alias="runId")]
+    sequence: Annotated[int, Field(ge=0)]
+    workflow_name: Annotated[str, Field(alias="workflowName")]
+
+
+class WorkflowRun(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    accepted_starts: Annotated[int | None, Field(alias="acceptedStarts", ge=0)] = 0
+    created_at: Annotated[int, Field(alias="createdAt")]
+    error: str | None = None
+    execution_id: Annotated[str | None, Field(alias="executionId")] = ""
+    format_version: Annotated[int | None, Field(alias="formatVersion", ge=0)] = 1
+    id: str
+    input: Any
+    limits: Annotated[WorkflowRunLimits | None, Field(validate_default=True)] = {
+        "maxAgents": 32,
+        "maxTokens": None,
+    }
+    logs: Annotated[list[WorkflowLog] | None, Field(validate_default=True)] = []
+    metadata: WorkflowMetadata | None = None
+    metrics: Annotated[WorkflowMetrics | None, Field(validate_default=True)] = {
+        "activeDurationMs": None,
+        "agentsUsed": None,
+        "modelTurns": None,
+        "usage": None,
+        "usageComplete": False,
+        "usageIncompleteReason": None,
+        "wallDurationMs": None,
+    }
+    owner_thread_id: Annotated[str, Field(alias="ownerThreadId")]
+    phase: str | None = None
+    phase_progress: Annotated[
+        list[WorkflowPhaseProgress] | None, Field(alias="phaseProgress", validate_default=True)
+    ] = []
+    phases: list[str]
+    project_root: Annotated[LegacyAppPathString | None, Field(alias="projectRoot")] = None
+    read_only: Annotated[bool | None, Field(alias="readOnly")] = True
+    result: Any | None = None
+    source: str
+    status: WorkflowStatus
+    steps: dict[str, WorkflowStep]
+    updated_at: Annotated[int, Field(alias="updatedAt")]
+
+
+class WorkflowUpdatedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    thread_id: Annotated[str, Field(alias="threadId")]
+    workflow: WorkflowRun
+
+
 class AccountRateLimitsReadManyResponse(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -13499,6 +14256,23 @@ class ThreadStartedServerNotification(BaseModel):
     params: ThreadStartedNotification
 
 
+class WorkflowUpdatedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["workflow/updated"], Field(title="Workflow/updatedNotificationMethod")
+    ]
+    params: WorkflowUpdatedNotification
+
+
 class ItemAutoApprovalReviewStartedServerNotification(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -13535,11 +14309,71 @@ class ItemAutoApprovalReviewCompletedServerNotification(BaseModel):
     params: ItemGuardianApprovalReviewCompletedNotification
 
 
+class WorkflowThreadTimelineEntry(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    event: WorkflowLifecycleEvent
+    position: Annotated[int, Field(ge=0)]
+    type: Annotated[Literal["workflow"], Field(title="WorkflowThreadTimelineEntryType")]
+
+
+class ThreadTimelineEntry(
+    RootModel[
+        WorkflowThreadTimelineEntry
+        | ItemThreadTimelineEntry
+        | RealtimeThreadTimelineEntry
+        | TurnStartedThreadTimelineEntry
+        | TurnCompletedThreadTimelineEntry
+    ]
+):
+    root: Annotated[
+        WorkflowThreadTimelineEntry
+        | ItemThreadTimelineEntry
+        | RealtimeThreadTimelineEntry
+        | TurnStartedThreadTimelineEntry
+        | TurnCompletedThreadTimelineEntry,
+        Field(description="EXPERIMENTAL - one item or turn boundary in canonical rollout order."),
+    ]
+
+
+class WorkflowLifecycleChangedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    event: WorkflowLifecycleEvent
+    final_message: Annotated[WorkflowAgentMessageProvenance | None, Field(alias="finalMessage")] = (
+        None
+    )
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class WorkflowLifecycleChangedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["workflow/lifecycle/changed"],
+        Field(title="Workflow/lifecycle/changedNotificationMethod"),
+    ]
+    params: WorkflowLifecycleChangedNotification
+
+
 class ServerNotification(
     RootModel[
         ErrorServerNotification
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
+        | WorkflowUpdatedServerNotification
+        | WorkflowProgressServerNotification
+        | WorkflowLifecycleChangedServerNotification
         | ThreadExecutionControlChangedServerNotification
         | ThreadReadStateChangedServerNotification
         | ThreadWakeStateChangedServerNotification
@@ -13630,6 +14464,9 @@ class ServerNotification(
         ErrorServerNotification
         | ThreadStartedServerNotification
         | ThreadStatusChangedServerNotification
+        | WorkflowUpdatedServerNotification
+        | WorkflowProgressServerNotification
+        | WorkflowLifecycleChangedServerNotification
         | ThreadExecutionControlChangedServerNotification
         | ThreadReadStateChangedServerNotification
         | ThreadWakeStateChangedServerNotification

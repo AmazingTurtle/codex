@@ -16,8 +16,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=f8330bfeeb167abe):
-        - namespace/functions; hash=1f0692ef0e003f6e
+00:additional_tools/developer (3; hash=056782b22b52f229):
+        - namespace/functions; hash=bd673c0ff0e07735
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -49,12 +49,18 @@ Settings:
     - Relevance: Determine what a plugin can help with from explicit user mention or from the plugin-associa..., MCP tools, and apps exposed elsewhere in this turn. [hash=620459a4e7b590f0]
     - Missing/blocked: If the user requests a plugin that does not have relevant callable capabilities for t..., say so briefly and continue with the best fallback. [hash=746b0469a8f6cb3e]
 
-02:message/developer[2]:
-    [01] <permissions instructions>
+02:message/developer[3]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <permissions instructions>
         Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `danger-full-access`...ll commands are permitted. Network access is enabled. [hash=c134061cebb94a1b]
         Approval policy is currently never. Do not provide the `sandbox_permissions` for any reason, commands will be rejected.
         </permissions instructions>
-    [02] <collaboration_mode># Collaboration Mode: Default
+    [03] <collaboration_mode># Collaboration Mode: Default
 
         You are now in Default mode. Any previous instructions for other modes (e.g. Plan mode) are no longer active.
 

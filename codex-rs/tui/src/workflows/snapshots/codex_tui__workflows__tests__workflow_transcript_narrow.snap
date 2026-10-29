@@ -1,0 +1,14 @@
+---
+source: tui/src/workflows/workflow_tests.rs
+expression: "render(&center, 42, 10)"
+---
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 1     ›
+  ──────────────────────────────────────
+   1 Overview   2 Transcript   3 Source
+  • ## Actual transcript
+
+    Shared history renderer.
+
+  Esc list · Enter chat · 1/2/3 view
+  j↑ k↓ · PgUp/PgDn ends · f4 tools

@@ -209,6 +209,11 @@ pub enum TurnInputMode {
     /// Start an internal continuation when idle.
     /// Reject if another task has started since the expected previous turn.
     ContinueIfIdle { expected_previous_turn_id: String },
+    /// A task-bound continuation also expires when its producer generation is interrupted.
+    ContinueIfIdleAtGeneration {
+        expected_previous_turn_id: String,
+        expected_wake_generation: u64,
+    },
     /// Steer only if this exact turn is active.
     Steer { expected_turn_id: String },
 }

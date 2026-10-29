@@ -19,6 +19,9 @@ impl CustomPromptView {
         if let Some(context) = &self.context_label {
             lines.push(Line::from(context.as_str().fg(accent_color())));
         }
+        if let Some(error) = &self.validation_error {
+            lines.push(Line::from(error.as_str().red()));
+        }
         Paragraph::new(lines).wrap(Wrap { trim: false })
     }
 

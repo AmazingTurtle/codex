@@ -1,0 +1,22 @@
+---
+source: tui/src/workflows/display_v2_tests.rs
+expression: source
+---
+  Saved workflows  Tab / Shift+Tab filter
+   All 2   Project 1   User 0                                                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow                          │  1 Overview   2 Unavailable   3 Source
+  › Review project [read-only] · P… │ // Inspect this legacy script
+    Another saved script            │ // source line 0
+                                    │ // source line 1
+                                    │ // source line 2
+                                    │ // source line 3
+                                    │ // source line 4
+                                    │ // source line 5
+                                    │ // source line 6
+                                    │ // source line 7
+                                    │ // source line 8
+                                    │ // source line 9
+                                    │ // source line 10
+                                    │ // source line 11
+  Esc Runs · 1/3 view · read-only · ↑/↓ move

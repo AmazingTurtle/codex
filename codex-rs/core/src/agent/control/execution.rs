@@ -13,11 +13,13 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use tokio::sync::Notify;
 
 #[derive(Default)]
 pub(super) struct AgentExecutionLimiter {
     active: AtomicUsize,
     max_threads: OnceLock<usize>,
+    capacity_changed: Notify,
 }
 
 struct LocalExecutionPermit {
@@ -27,6 +29,28 @@ struct LocalExecutionPermit {
 impl Drop for LocalExecutionPermit {
     fn drop(&mut self) {
         self.limiter.active.fetch_sub(1, Ordering::AcqRel);
+        self.limiter.capacity_changed.notify_waiters();
+    }
+}
+
+impl super::runtime::LocalAgentRuntime {
+    pub(crate) fn workflow_has_capacity(&self) -> bool {
+        self.agent_execution_limiter.has_capacity()
+    }
+
+    pub(crate) async fn wait_for_workflow_capacity(&self) -> CodexResult<()> {
+        loop {
+            let changed = self.agent_execution_limiter.capacity_changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if self.agent_execution_limiter.has_capacity() {
+                return Ok(());
+            }
+            tokio::select! {
+                _ = changed => {}
+                _ = self.shutdown.cancelled() => return Err(CodexErr::InvalidRequest("agent tree is shutting down".into())),
+            }
+        }
     }
 }
 

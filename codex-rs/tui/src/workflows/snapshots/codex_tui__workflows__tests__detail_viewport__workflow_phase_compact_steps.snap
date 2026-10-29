@@ -1,0 +1,24 @@
+---
+source: tui/src/workflows/detail_viewport_tests.rs
+expression: wide
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                                                                               Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt      Model / reasoning    │  1 Overview   2 Transcript   3 Source
+  Current conversation                                │ Review
+    Review changes · Running                          │ Status: Active
+  ›   Review · Active                                 │
+      review · Running           gpt-review / high    │ Step                      Model               Reasoning   Prompt                                               Status
+                                                      │ Inspect source            gpt-review          high        Inspect source and report a concise actionable rev…  Running
+                                                      │ Check tests               Unknown             Unknown     Check the changed tests                              Discovered
+                                                      │
+                                                      │
+                                                      │
+                                                      │
+                                                      │
+                                                      │
+                                                      │
+                                                      │
+                                                      │
+  Esc close · ↑/↓ select · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

@@ -49,6 +49,7 @@ members = [
     "core-plugins",
     "diagnostics",
     "direct-tool-timing",
+    "dynamic-workflows",
     "guardian-context",
     "hooks",
     "history",
@@ -225,6 +226,7 @@ codex-core-api = { path = "core-api" }
 codex-core-plugin-common = { path = "core-plugin-common" }
 codex-core-plugins = { path = "core-plugins" }
 codex-diagnostics = { path = "diagnostics" }
+codex-dynamic-workflows = { path = "dynamic-workflows" }
 codex-exec = { path = "exec" }
 codex-file-system = { path = "file-system" }
 codex-exec-server-protocol = { path = "exec-server-protocol" }
@@ -410,6 +412,7 @@ insta = "1.46.3"
 inventory = "0.3.19"
 itertools = "0.14.0"
 jsonptr = { version = "0.7.1", default-features = false }
+jsonschema = { version = "=0.54.0", default-features = false }
 jsonwebtoken = "9.3.1"
 keyring = { version = "3.6", default-features = false }
 landlock = "0.4.4"
@@ -543,6 +546,7 @@ tonic = { version = "0.14.3", default-features = false, features = ["channel", "
 tonic-prost = "0.14.3"
 tree-sitter = "0.25.10"
 tree-sitter-bash = "0.25"
+tree-sitter-javascript = "=0.25.0"
 tree-sitter-powershell = "=0.26.4"
 ts-rs = "11"
 tungstenite = { version = "0.27.0", features = ["deflate", "proxy"] }

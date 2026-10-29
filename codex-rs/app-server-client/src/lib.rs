@@ -39,6 +39,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub use codex_app_server::app_server_control_socket_path;
+pub use codex_app_server::in_process::CodeModeSessionProvider;
 pub use codex_app_server::in_process::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY;
 pub use codex_app_server::in_process::EmbeddedNetworkPolicy;
 pub use codex_app_server::in_process::InProcessServerEvent;
@@ -210,6 +211,8 @@ pub struct InProcessClientStartArgs {
     pub arg0_paths: Arg0DispatchPaths,
     /// Shared config used to initialize app-server runtime.
     pub config: Arc<Config>,
+    /// Optional runtime provider supplied by the embedder instead of install-path discovery.
+    pub code_mode_session_provider: Option<Arc<dyn CodeModeSessionProvider>>,
     /// CLI config overrides that are already parsed into TOML values.
     pub cli_overrides: Vec<(String, TomlValue)>,
     /// Loader override knobs used by config API paths.
@@ -278,6 +281,7 @@ impl InProcessClientStartArgs {
         let initialize = self.initialize_params();
         InProcessStartArgs {
             arg0_paths: self.arg0_paths,
+            code_mode_session_provider: self.code_mode_session_provider,
             config: self.config,
             cli_overrides: self.cli_overrides,
             loader_overrides: self.loader_overrides,
@@ -949,6 +953,7 @@ mod tests {
             .expect("state db should initialize for in-process test");
         let client = InProcessAppServerClient::start(InProcessClientStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
+            code_mode_session_provider: None,
             config,
             cli_overrides: Vec::new(),
             loader_overrides: LoaderOverrides::default(),
@@ -1145,6 +1150,7 @@ mod tests {
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             },
         })
     }
@@ -2175,6 +2181,7 @@ mod tests {
 
         let runtime_args = InProcessClientStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
+            code_mode_session_provider: None,
             config: config.clone(),
             cli_overrides: Vec::new(),
             loader_overrides: LoaderOverrides::default(),

@@ -62,6 +62,7 @@ pub(super) async fn find(
         ThreadHistoryMode::Legacy => RolloutLineage {
             segments: vec![RolloutLineageSegment {
                 rollout_id: resolved.rollout_id,
+                owner_thread_id: params.thread_id,
                 rollout_path: resolved.path,
                 start_ordinal: 1,
                 end: None,

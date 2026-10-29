@@ -180,6 +180,10 @@ mod turn_steer;
 mod view_image;
 mod web_search;
 mod windows_sandbox_setup;
+#[path = "workflow_revision.rs"]
+mod workflow_revision;
+mod workflow_transcript;
+mod workflows;
 mod workspace_routing;
 
 mod user_verification;

@@ -23,6 +23,7 @@ fn completed(thread: &str) -> ServerNotification {
         turn_id: "turn".into(),
         completed_at_ms: 0,
         item: ThreadItem::AgentMessage {
+            workflow: None,
             id: "answer".into(),
             text: "Final **answer**".into(),
             phase: None,
@@ -246,6 +247,7 @@ fn evicted_voice_delegation_marker_still_suppresses_private_replay() {
         turn_id: "voice-turn".into(),
         completed_at_ms: 0,
         item: ThreadItem::AgentMessage {
+            workflow: None,
             id: "reasoning".into(),
             text: "[ANALYSIS] private".into(),
             phase: None,
@@ -372,6 +374,7 @@ fn saved_voice_turn_suppresses_reasoning_without_hiding_typed_reasoning() {
 #[test]
 fn snapshot_keeps_typed_output_before_voice_handoff_in_the_same_turn() {
     let commentary = |id: &str, text: &str| ThreadItem::AgentMessage {
+        workflow: None,
         id: id.into(),
         text: text.into(),
         phase: Some(codex_protocol::models::MessagePhase::Commentary),
@@ -401,7 +404,7 @@ fn snapshot_keeps_typed_output_before_voice_handoff_in_the_same_turn() {
         completed_at: None,
         duration_ms: None,
     }]);
-    for item in [typed.clone(), marker.clone(), private] {
+    for item in [typed.clone(), marker.clone(), private.clone()] {
         store.push_notification(ServerNotification::ItemCompleted(
             ItemCompletedNotification {
                 thread_id: "thread".into(),
@@ -411,8 +414,39 @@ fn snapshot_keeps_typed_output_before_voice_handoff_in_the_same_turn() {
             },
         ));
     }
+    let mut session = test_thread_session(ThreadId::new(), test_path_buf("/tmp/project"));
+    session.timeline = Some(crate::session_state::TimelineHistorySnapshot::Available(
+        [typed.clone(), marker.clone(), private]
+            .into_iter()
+            .enumerate()
+            .map(
+                |(position, item)| codex_app_server_protocol::ThreadTimelineEntry::Item {
+                    position: position as u64,
+                    turn_id: "shared".into(),
+                    item: Box::new(item),
+                },
+            )
+            .collect(),
+    ));
+    store.session = Some(session);
     let snapshot = store.snapshot();
     assert_eq!(snapshot.turns[0].items, vec![typed.clone(), marker]);
+    let Some(crate::session_state::TimelineHistorySnapshot::Available(entries)) =
+        &snapshot.session.as_ref().unwrap().timeline
+    else {
+        panic!("the warm snapshot retains canonical history");
+    };
+    assert_eq!(
+        entries
+            .iter()
+            .filter_map(|entry| match entry {
+                codex_app_server_protocol::ThreadTimelineEntry::Item { item, .. } =>
+                    Some(item.id()),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec!["typed", "voice"]
+    );
     let completed = snapshot
         .events
         .into_iter()
@@ -430,6 +464,7 @@ fn snapshot_keeps_typed_output_before_voice_handoff_in_the_same_turn() {
 #[test]
 fn snapshot_keeps_typed_item_completed_after_voice_handoff() {
     let typed = ThreadItem::AgentMessage {
+        workflow: None,
         id: "typed".into(),
         text: "Typed commentary completed late".into(),
         phase: Some(codex_protocol::models::MessagePhase::Commentary),
@@ -438,6 +473,7 @@ fn snapshot_keeps_typed_item_completed_after_voice_handoff() {
         delivery: None,
     };
     let private = ThreadItem::AgentMessage {
+        workflow: None,
         id: "private".into(),
         text: "Voice-private commentary".into(),
         phase: Some(codex_protocol::models::MessagePhase::Commentary),
@@ -556,6 +592,7 @@ async fn evicted_voice_marker_survives_widget_snapshot_for_late_reasoning() {
             turn_id: "voice-turn".into(),
             completed_at_ms: 0,
             item: ThreadItem::AgentMessage {
+                workflow: None,
                 id: "private-commentary".into(),
                 text: "[COMMENTARY] private after switch".into(),
                 phase: None,

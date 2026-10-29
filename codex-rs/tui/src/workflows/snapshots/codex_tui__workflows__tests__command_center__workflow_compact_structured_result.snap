@@ -1,0 +1,34 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: wide
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                                       Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt               │  1 Overview   2 Transcript   3 Source
+  Current conversation                    │ Review changes
+  › Review changes · Running              │ Status: Running
+      review · Running                    │ Review project changes
+                                          │
+                                          │ Input
+                                          │ • n: 15 · convention: fib(0)=0, fib(1)=1 · literal: *literal* | [link](not-a-url)
+                                          │
+                                          │ Result
+                                          │ ## results
+                                          │
+                                          │ ### 1 · language: Python
+                                          │
+                                          │ • value: 610
+                                          │
+                                          │ ### 2 · language: Rust
+                                          │
+                                          │ • value: 610
+                                          │
+                                          │ ### 3 · language: JavaScript
+                                          │
+                                          │ • value: 610
+                                          │
+                                          │
+                                          │
+                                          │
+  Esc close · ↑/↓ select · Enter Main · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

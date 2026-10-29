@@ -6,8 +6,8 @@ Scenario: A worker inherits the parent prefix unchanged and receives its own ins
 
 ## Window 1
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=4ad1a2b080ad21b8):
-        - namespace/functions; hash=55c9185c158a7d74
+00:additional_tools/developer (2; hash=070851e3bfce1adf):
+        - namespace/functions; hash=41e6157e2d19e123
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -20,9 +20,15 @@ Scenario: A worker inherits the parent prefix unchanged and receives its own ins
           - function/wait_agent
 01:message/developer:
     <MODEL_INSTRUCTIONS>
-02:message/developer[2]:
+02:message/developer[3]:
     [01] Coordinate the investigation.
-    [02] <PERMISSIONS_INSTRUCTIONS>
+    [02] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [03] <PERMISSIONS_INSTRUCTIONS>
 03:message/developer:
     You are /root. Coordinate the investigation.
 04:message/developer:
@@ -46,8 +52,8 @@ Scenario: A worker inherits the parent prefix unchanged and receives its own ins
 
 ## Window 2 (after request 3: input diverged at item 12)
 -- request 4 (turn) --
-00:additional_tools/developer (2; hash=4ad1a2b080ad21b8):
-        - namespace/functions; hash=55c9185c158a7d74
+00:additional_tools/developer (2; hash=070851e3bfce1adf):
+        - namespace/functions; hash=41e6157e2d19e123
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -60,9 +66,15 @@ Scenario: A worker inherits the parent prefix unchanged and receives its own ins
           - function/wait_agent
 01:message/developer:
     <MODEL_INSTRUCTIONS>
-02:message/developer[2]:
+02:message/developer[3]:
     [01] Coordinate the investigation.
-    [02] <PERMISSIONS_INSTRUCTIONS>
+    [02] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [03] <PERMISSIONS_INSTRUCTIONS>
 03:message/developer:
     You are /root. Coordinate the investigation.
 04:message/developer:

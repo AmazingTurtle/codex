@@ -47,6 +47,10 @@ pub enum SlashCommand {
     Voice,
     Goal,
     Agents,
+    Workflows,
+    DynamicWorkflows,
+    Pause,
+    Unpause,
     Side,
     Btw,
     Copy,
@@ -146,6 +150,10 @@ impl SlashCommand {
             SlashCommand::Voice => "start or stop voice; use /voice settings to choose a voice",
             SlashCommand::Goal => "set or view the goal for a long-running task",
             SlashCommand::Agents => "open the agent command center",
+            SlashCommand::Workflows => "open the workflow command center",
+            SlashCommand::DynamicWorkflows => "choose Auto, Explicit, or Off for dynamic workflows",
+            SlashCommand::Pause => "pause the conversation",
+            SlashCommand::Unpause => "resume the conversation",
             SlashCommand::MultiAgents => "switch between this session's subagents",
             SlashCommand::Side | SlashCommand::Btw => {
                 "start a side conversation in an ephemeral fork"
@@ -212,6 +220,9 @@ impl SlashCommand {
             self,
             SlashCommand::Copy
                 | SlashCommand::Agents
+                | SlashCommand::Workflows
+                | SlashCommand::Pause
+                | SlashCommand::Unpause
                 | SlashCommand::Export
                 | SlashCommand::Raw
                 | SlashCommand::Diff
@@ -239,6 +250,8 @@ impl SlashCommand {
                 | SlashCommand::Clear
                 | SlashCommand::Resume
                 | SlashCommand::Agents
+                | SlashCommand::Workflows
+                | SlashCommand::DynamicWorkflows
                 | SlashCommand::MultiAgents
                 | SlashCommand::Quit
                 | SlashCommand::Exit
@@ -317,7 +330,12 @@ impl SlashCommand {
             | SlashCommand::Btw => true,
             SlashCommand::Rollout => true,
             SlashCommand::TestApproval => true,
-            SlashCommand::Agents | SlashCommand::MultiAgents => true,
+            SlashCommand::Agents
+            | SlashCommand::MultiAgents
+            | SlashCommand::Workflows
+            | SlashCommand::DynamicWorkflows
+            | SlashCommand::Pause
+            | SlashCommand::Unpause => true,
             SlashCommand::Config | SlashCommand::Theme | SlashCommand::Pets => false,
         }
     }

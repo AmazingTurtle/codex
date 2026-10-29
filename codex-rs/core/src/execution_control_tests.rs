@@ -232,6 +232,10 @@ async fn concurrent_terminal_delivery_retries_keep_one_durable_signal() -> anyho
     let control = TreeExecutionControl::default();
     control.initialize(home.path(), root).await?;
     let signal = QueuedSignal::new(root, vec![completion()]);
+    let TurnInput::ResponseItem(item) = &signal.input[0] else {
+        panic!("expected response item")
+    };
+    let id = item.item.id().expect("stable signal ID").clone();
     let mut retry = signal.clone();
     if let TurnInput::ResponseItem(item) = &mut retry.input[0]
         && let ResponseItem::FunctionCallOutput { output, .. } = &mut item.item
@@ -251,6 +255,7 @@ async fn concurrent_terminal_delivery_retries_keep_one_durable_signal() -> anyho
             .count(),
         1
     );
+    assert!(control.has_delivery(root, &id).await);
     let recovered = TreeExecutionControl::default();
     recovered.initialize(home.path(), root).await?;
     let delivered = recovered.take_signals(root).await?;

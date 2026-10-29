@@ -281,6 +281,60 @@ fn rendered_mermaid_copies_source() {
 }
 
 #[test]
+fn identified_native_copy_keeps_ordinary_cleanup_and_proven_json_source() {
+    let source = "Done\n\n:codex-followup[Next **step**]{prompt=\"Hidden prompt\"}\n\n::git-stage{cwd=\"/repo\"}";
+    let visible =
+        crate::git_action_directives::parse_assistant_markdown(source, Path::new("/repo"))
+            .visible_markdown;
+    let native = || {
+        AgentMarkdownCell::new(visible.clone(), Path::new("/repo"))
+            .with_copy_source(Some(source.into()))
+    };
+    let identity = crate::history_cell::NativeMessageIdentity {
+        thread_id: "worker".into(),
+        turn_id: "owned".into(),
+        item_id: "final".into(),
+    };
+    let mut copied = Vec::new();
+    for cell in [
+        Arc::new(native()) as Arc<dyn HistoryCell>,
+        Arc::new(crate::history_cell::WorkflowMessageCell::new(
+            identity.clone(),
+            native(),
+        )),
+    ] {
+        let cells = vec![cell];
+        let mut view = TranscriptView::default();
+        render(&mut view, &cells, /*width*/ 60, /*height*/ 12);
+        view.begin_copy_mode(&cells, /*guard*/ None);
+        copied.push(payload(&mut view, &cells));
+    }
+    assert_eq!(copied[0], copied[1]);
+    assert!(!copied[1].contains("git-stage") && !copied[1].contains("Hidden prompt"));
+    let raw = "{\"ok\":true}";
+    let cell = crate::history_cell::WorkflowMessageCell::new(
+        identity,
+        AgentMarkdownCell::new(raw.into(), Path::new("/repo")),
+    );
+    assert!(
+        cell.apply(&codex_app_server_protocol::WorkflowAgentMessageProvenance {
+            run_id: "run".into(),
+            execution_id: "execution".into(),
+            attempt_id: "attempt".into(),
+            child_thread_id: "worker".into(),
+            turn_id: "owned".into(),
+            item_id: "final".into(),
+            format: codex_app_server_protocol::WorkflowAgentMessageFormat::Json
+        })
+    );
+    let cells = vec![Arc::new(cell) as Arc<dyn HistoryCell>];
+    let mut view = TranscriptView::default();
+    render(&mut view, &cells, /*width*/ 60, /*height*/ 8);
+    view.begin_copy_mode(&cells, /*guard*/ None);
+    assert_eq!(payload(&mut view, &cells), raw);
+}
+
+#[test]
 fn copy_source_survives_raw_rich_rendering_and_whitespace_normalization() {
     let source = "Before\r\n\r\n```sh\r\necho x  \r\n  \r\n```\r\n\r\n> **quote**\r\n";
     let displayed = crate::git_action_directives::parse_assistant_markdown(source, Path::new("/"))

@@ -42,6 +42,10 @@ pub(crate) use timer::StatusTimer;
 mod summary_shimmer;
 use summary_shimmer::summary_shimmer;
 
+#[cfg(test)]
+#[path = "status_indicator_widget/execution_tests.rs"]
+mod execution_tests;
+
 pub(crate) const STATUS_DETAILS_DEFAULT_MAX_LINES: usize = 3;
 const DETAILS_PREFIX: &str = "  └ ";
 
@@ -63,6 +67,7 @@ pub(crate) struct StatusIndicatorWidget {
     /// Hook activity may move below the status row when it cannot fit in full.
     hook_status_message: Option<String>,
     show_interrupt_hint: bool,
+    execution_state: Option<codex_protocol::protocol::ExecutionControlState>,
     interrupt_binding: Option<ShortcutHint>,
 
     app_event_tx: AppEventSender,
@@ -103,6 +108,7 @@ impl StatusIndicatorWidget {
             inline_message: None,
             hook_status_message: None,
             show_interrupt_hint: true,
+            execution_state: None,
             interrupt_binding: Some(key_hint::plain(KeyCode::Esc).into()),
             app_event_tx,
             frame_requester,
@@ -175,6 +181,13 @@ impl StatusIndicatorWidget {
         self.show_interrupt_hint = visible;
     }
 
+    pub(crate) fn set_execution_state(
+        &mut self,
+        state: Option<codex_protocol::protocol::ExecutionControlState>,
+    ) {
+        self.execution_state = state;
+    }
+
     pub(crate) fn set_interrupt_binding(&mut self, binding: Option<ShortcutHint>) {
         self.interrupt_binding = binding;
     }
@@ -227,15 +240,18 @@ impl StatusIndicator<'_> {
     fn lines(&self, width: u16) -> Vec<Line<'static>> {
         let row = self.row;
         let now = Instant::now();
-        let elapsed_duration = self.timer.display_started_at.map_or_else(
-            || self.timer.elapsed_at(now),
-            |started_at| now.saturating_duration_since(started_at),
-        );
+        let elapsed_duration = self.timer.displayed_elapsed_at(now);
         let pretty_elapsed = fmt_elapsed_compact(elapsed_duration.as_secs());
+        let execution_header = match row.execution_state {
+            Some(codex_protocol::protocol::ExecutionControlState::Pausing) => Some("Pausing"),
+            Some(codex_protocol::protocol::ExecutionControlState::Paused) => Some("Paused"),
+            Some(codex_protocol::protocol::ExecutionControlState::Running) | None => None,
+        };
+        let animations_enabled = row.animations_enabled && execution_header.is_none();
         let progress =
-            MotionMode::from_animations_enabled(row.animations_enabled && row.effects.progress);
+            MotionMode::from_animations_enabled(animations_enabled && row.effects.progress);
         let shimmer =
-            MotionMode::from_animations_enabled(row.animations_enabled && row.effects.shimmer);
+            MotionMode::from_animations_enabled(animations_enabled && row.effects.shimmer);
 
         let mut spans = Vec::with_capacity(5);
         if let Some(indicator) = activity_indicator(
@@ -247,7 +263,7 @@ impl StatusIndicator<'_> {
             spans.push(" ".into());
         }
         spans.extend(summary_shimmer(
-            &row.header,
+            execution_header.unwrap_or(&row.header),
             now.saturating_duration_since(row.header_started_at),
             shimmer,
         ));
@@ -279,6 +295,7 @@ impl StatusIndicator<'_> {
         )];
         let mut elapsed_hint = vec![Span::from("  ").dim()];
         if row.show_interrupt_hint
+            && execution_header.is_none()
             && let Some(interrupt_binding) = row.interrupt_binding
         {
             elapsed_hint.push(format!("({pretty_elapsed} • ").dim());
@@ -306,7 +323,9 @@ impl Renderable for StatusIndicator<'_> {
         if area.is_empty() {
             return;
         }
-        if self.row.animations_enabled || self.timer.display_started_at.is_some() {
+        if !self.timer.is_paused
+            && (self.row.animations_enabled || self.timer.display_started_at.is_some())
+        {
             let interval_ms = if self.row.animations_enabled
                 && (self.row.effects.progress || self.row.effects.shimmer)
             {

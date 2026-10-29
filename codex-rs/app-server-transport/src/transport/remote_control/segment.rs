@@ -311,7 +311,7 @@ pub(super) fn split_server_envelope_for_transport(
             let ServerEvent::ServerMessage { message } = envelope.event else {
                 unreachable!("server message variant checked above");
             };
-            let OutgoingMessage::Response(response) = *message else {
+            let OutgoingMessage::Response(response) = message.into_original() else {
                 return Err(err);
             };
             return Ok(vec![ServerEnvelope {

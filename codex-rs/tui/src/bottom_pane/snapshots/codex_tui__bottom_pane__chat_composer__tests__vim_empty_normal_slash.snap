@@ -2,11 +2,11 @@
 source: tui/src/bottom_pane/chat_composer.rs
 expression: terminal.backend()
 ---
-"› /model          choose what model and reasoning effort to "
-"                  use                                       "
-"  /presets        run or save reusable prompts and slash    "
-"                  commands                                  "
-"  /account        switch or manage ChatGPT accounts         "
+"› /model              choose what model and reasoning effort"
+"                      to use                                "
+"  /presets            run or save reusable prompts and slash"
+"                      commands                              "
+"  /account            switch or manage ChatGPT accounts     "
 "                                                            "
 "› /                                                         "
 "                                                            "

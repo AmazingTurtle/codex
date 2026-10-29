@@ -12,6 +12,7 @@ fn completed_turn(duration_ms: Option<i64>, completed_at: Option<i64>) -> AppSer
     AppServerTurn {
         completed_at,
         items: vec![AppServerThreadItem::AgentMessage {
+            workflow: None,
             id: "answer-1".to_string(),
             text: "The change is ready.".to_string(),
             phase: Some(MessagePhase::FinalAnswer),

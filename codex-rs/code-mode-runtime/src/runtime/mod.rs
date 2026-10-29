@@ -4,6 +4,7 @@ mod globals;
 mod module_loader;
 mod timers;
 mod value;
+mod workflow_scope;
 
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
@@ -73,6 +74,7 @@ pub(crate) enum RuntimeEvent {
 pub(crate) fn spawn_runtime(
     stored_values: HashMap<String, Arc<JsonValue>>,
     request: ExecuteRequest,
+    profile: codex_code_mode_protocol::CodeModeCellExecutionProfile,
     event_tx: mpsc::UnboundedSender<RuntimeEvent>,
     pending_mode: PendingRuntimeMode,
     task_failure_handler: Option<TaskFailureHandler>,
@@ -101,6 +103,7 @@ pub(crate) fn spawn_runtime(
         })
         .collect::<Vec<_>>();
     let config = RuntimeConfig {
+        profile,
         tool_call_id: request.tool_call_id,
         enabled_tools,
         source: request.source,
@@ -144,6 +147,7 @@ fn spawn_supervised_runtime_thread(
 
 #[derive(Clone)]
 struct RuntimeConfig {
+    profile: codex_code_mode_protocol::CodeModeCellExecutionProfile,
     tool_call_id: String,
     enabled_tools: Vec<EnabledToolMetadata>,
     source: String,
@@ -157,6 +161,7 @@ struct ToolCallbackMetadata {
 }
 
 pub(super) struct RuntimeState {
+    profile: codex_code_mode_protocol::CodeModeCellExecutionProfile,
     event_tx: mpsc::UnboundedSender<RuntimeEvent>,
     pending_tool_calls: HashMap<String, v8::Global<v8::PromiseResolver>>,
     pending_timeouts: HashMap<u64, timers::ScheduledTimeout>,
@@ -195,12 +200,14 @@ fn run_runtime(
     let context = v8::Context::new(scope, Default::default());
     let scope = &mut v8::ContextScope::new(scope, context);
 
-    if let Err(error_text) = globals::install_globals(scope, &config.enabled_tools) {
+    if let Err(error_text) = globals::install_globals(scope, &config.enabled_tools, config.profile)
+    {
         send_result(&event_tx, HashMap::new(), Some(error_text));
         return;
     }
 
     scope.set_slot(RuntimeState {
+        profile: config.profile,
         event_tx: event_tx.clone(),
         pending_tool_calls: HashMap::new(),
         pending_timeouts: HashMap::new(),
@@ -441,6 +448,7 @@ text("continued after cancellation");
             let (_runtime_tx, _runtime_control_tx, runtime_terminate_handle) = spawn_runtime(
                 HashMap::new(),
                 execute_request(source),
+                codex_code_mode_protocol::CodeModeCellExecutionProfile::General,
                 event_tx,
                 PendingRuntimeMode::Continue,
                 /*task_failure_handler*/ None,
@@ -492,6 +500,7 @@ text("after");
 await new Promise(() => {});
 "#,
             ),
+            codex_code_mode_protocol::CodeModeCellExecutionProfile::General,
             event_tx,
             PendingRuntimeMode::PauseUntilResumed,
             /*task_failure_handler*/ None,
@@ -562,6 +571,7 @@ text("done");
 setTimeout(() => text("late"), 3_600_000);
 "#,
             ),
+            codex_code_mode_protocol::CodeModeCellExecutionProfile::General,
             event_tx,
             PendingRuntimeMode::Continue,
             /*task_failure_handler*/ None,

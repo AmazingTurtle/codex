@@ -160,6 +160,14 @@ pub(super) fn dynamic_import_callback<'s>(
     let specifier = specifier.to_rust_string_lossy(scope);
     let resolver = v8::PromiseResolver::new(scope)?;
 
+    if scope.get_slot::<RuntimeState>().is_some_and(|state| {
+        state.profile == codex_code_mode_protocol::CodeModeCellExecutionProfile::Workflow
+    }) {
+        let error = v8::String::new(scope, "workflow scripts cannot load modules")?;
+        resolver.reject(scope, error.into());
+        return Some(resolver.get_promise(scope));
+    }
+
     match resolve_module(scope, &specifier) {
         Some(module) => {
             if module.get_status() == v8::ModuleStatus::Uninstantiated

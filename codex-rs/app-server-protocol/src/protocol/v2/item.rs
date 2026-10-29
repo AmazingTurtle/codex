@@ -262,6 +262,9 @@ pub enum ThreadItem {
         delivery: Option<AgentMessageDelivery>,
         #[serde(default)]
         questions: Option<Vec<AsyncUserInputQuestion>>,
+        /// EXPERIMENTAL - exact persisted workflow final-message presentation proof.
+        #[serde(default)]
+        workflow: Option<super::WorkflowAgentMessageProvenance>,
     },
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
@@ -903,6 +906,7 @@ impl From<CoreTurnItem> for ThreadItem {
                     memory_citation: agent.memory_citation.map(Into::into),
                     delivery: agent.delivery,
                     questions: agent.questions,
+                    workflow: None,
                 }
             }
             CoreTurnItem::FunctionCallOutput(output) => ThreadItem::FunctionCallOutput {

@@ -82,6 +82,7 @@ pub(crate) fn submitted(result: &InputResult) {
         | InputResult::ParentOwnedInputBlocked
         | InputResult::Command(_)
         | InputResult::ServiceTierCommand(_)
+        | InputResult::WorkflowCommand { .. }
         | InputResult::CommandWithArgs(..) => return,
     };
     let _ = DRAFT.try_with(|draft| {

@@ -1,4 +1,6 @@
 use crate::outgoing_message::ConnectionId;
+#[path = "thread_state_live.rs"]
+mod live;
 use crate::outgoing_message::ConnectionRequestId;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ThreadGoal;
@@ -115,6 +117,7 @@ pub(crate) struct ThreadState {
     last_thread_settings: Option<ThreadSettings>,
     listener_command_tx: Option<mpsc::UnboundedSender<ThreadListenerCommand>>,
     current_turn_history: ThreadHistoryBuilder,
+    active_items: live::ActiveItems,
     listener_thread: Option<Weak<CodexThread>>,
     watch_registration: WatchRegistration,
 }
@@ -153,6 +156,7 @@ impl ThreadState {
         self.shutdown_drain_waiter = None;
         self.listener_command_tx = None;
         self.current_turn_history.reset();
+        self.active_items.reset();
         self.listener_thread = None;
         self.watch_registration = WatchRegistration::default();
     }
@@ -168,7 +172,19 @@ impl ThreadState {
     }
 
     pub(crate) fn active_turn_snapshot(&self) -> Option<Turn> {
-        self.current_turn_history.active_turn_snapshot()
+        let snapshot = self.current_turn_history.active_turn_snapshot()?;
+        Some(
+            self.active_items
+                .merge(snapshot.clone())
+                .unwrap_or(snapshot),
+        )
+    }
+
+    pub(crate) fn inspection_active_turn_snapshot(&self) -> Result<Option<live::Snapshot>, String> {
+        self.current_turn_history
+            .active_turn_snapshot()
+            .map(|turn| self.active_items.snapshot(turn))
+            .transpose()
     }
 
     /// Returns the same turn ID as `active_turn_snapshot` without cloning its items.
@@ -180,6 +196,9 @@ impl ThreadState {
         &self,
         items_view: TurnItemsView,
     ) -> Option<Turn> {
+        if matches!(items_view, TurnItemsView::Full) {
+            return self.active_turn_snapshot();
+        }
         self.current_turn_history
             .active_turn_snapshot_with_items_view(items_view)
     }
@@ -199,6 +218,7 @@ impl ThreadState {
     }
 
     pub(crate) fn track_current_turn_event(&mut self, event_turn_id: &str, event: &EventMsg) {
+        self.active_items.observe(event_turn_id, event);
         if let EventMsg::TurnStarted(payload) = event {
             self.turn_summary.started_at = payload.started_at;
         }
@@ -261,6 +281,10 @@ pub(crate) async fn resolve_server_request_on_thread_listener(
 }
 
 #[cfg(test)]
+#[path = "thread_state_inspection_tests.rs"]
+mod inspection_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use codex_app_server_protocol::ApprovalsReviewer;
@@ -320,7 +344,7 @@ mod tests {
 
 struct ThreadEntry {
     state: Arc<Mutex<ThreadState>>,
-    connection_ids: HashSet<ConnectionId>,
+    connection_ids: HashMap<ConnectionId, SubscriptionPurpose>,
     has_connections_watcher: watch::Sender<bool>,
 }
 
@@ -328,7 +352,7 @@ impl Default for ThreadEntry {
     fn default() -> Self {
         Self {
             state: Arc::new(Mutex::new(ThreadState::default())),
-            connection_ids: HashSet::new(),
+            connection_ids: HashMap::new(),
             has_connections_watcher: watch::channel(false).0,
         }
     }
@@ -338,10 +362,24 @@ impl ThreadEntry {
     fn update_has_connections(&self) {
         let _ = self.has_connections_watcher.send_if_modified(|current| {
             let prev = *current;
-            *current = !self.connection_ids.is_empty();
+            *current = self
+                .connection_ids
+                .values()
+                .any(|purpose| *purpose == SubscriptionPurpose::Conversation);
             prev != *current
         });
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SubscriptionPurpose {
+    Conversation,
+    WorkflowInspection,
+}
+
+enum UnsubscribePurpose {
+    Any,
+    WorkflowInspection,
 }
 
 #[derive(Default)]
@@ -406,7 +444,7 @@ impl ThreadStateManager {
             .threads
             .get(&thread_id)?
             .connection_ids
-            .iter()
+            .keys()
             .filter_map(|connection_id| {
                 state
                     .live_connections
@@ -439,7 +477,7 @@ impl ThreadStateManager {
         state
             .threads
             .get(&thread_id)
-            .map(|thread_entry| thread_entry.connection_ids.iter().copied().collect())
+            .map(|thread_entry| thread_entry.connection_ids.keys().copied().collect())
             .unwrap_or_default()
     }
 
@@ -520,12 +558,25 @@ impl ThreadStateManager {
         let mut state = self.state.lock().await;
         if thread_state.listener_generation != generation
             || !state.threads.get(&thread_id).is_some_and(|entry| {
-                Arc::ptr_eq(&entry.state, expected) && entry.connection_ids.is_empty()
+                Arc::ptr_eq(&entry.state, expected)
+                    && !entry
+                        .connection_ids
+                        .values()
+                        .any(|purpose| *purpose == SubscriptionPurpose::Conversation)
             })
         {
             return false;
         }
-        state.threads.remove(&thread_id);
+        if let Some(entry) = state.threads.remove(&thread_id) {
+            for connection in entry.connection_ids.keys() {
+                if let Some(threads) = state.thread_ids_by_connection.get_mut(connection) {
+                    threads.remove(&thread_id);
+                    if threads.is_empty() {
+                        state.thread_ids_by_connection.remove(connection);
+                    }
+                }
+            }
+        }
         self.unregister_listener_command_tx(thread_id);
         thread_state.clear_listener();
         true
@@ -560,9 +611,40 @@ impl ThreadStateManager {
         thread_id: ThreadId,
         connection_id: ConnectionId,
     ) -> bool {
+        self.remove_subscription(thread_id, connection_id, UnsubscribePurpose::Any)
+            .await
+    }
+
+    pub(crate) async fn unsubscribe_workflow_inspection(
+        &self,
+        thread_id: ThreadId,
+        connection_id: ConnectionId,
+    ) -> bool {
+        self.remove_subscription(
+            thread_id,
+            connection_id,
+            UnsubscribePurpose::WorkflowInspection,
+        )
+        .await
+    }
+
+    async fn remove_subscription(
+        &self,
+        thread_id: ThreadId,
+        connection_id: ConnectionId,
+        purpose: UnsubscribePurpose,
+    ) -> bool {
         {
             let mut state = self.state.lock().await;
             if !state.threads.contains_key(&thread_id) {
+                return false;
+            }
+            if matches!(purpose, UnsubscribePurpose::WorkflowInspection)
+                && !state.threads.get(&thread_id).is_some_and(|entry| {
+                    entry.connection_ids.get(&connection_id)
+                        == Some(&SubscriptionPurpose::WorkflowInspection)
+                })
+            {
                 return false;
             }
 
@@ -605,6 +687,36 @@ impl ThreadStateManager {
         connection_id: ConnectionId,
         experimental_raw_events: bool,
     ) -> Option<Arc<Mutex<ThreadState>>> {
+        self.ensure_connection_subscription(
+            thread_id,
+            connection_id,
+            experimental_raw_events,
+            SubscriptionPurpose::Conversation,
+        )
+        .await
+    }
+
+    pub(crate) async fn try_ensure_workflow_inspection(
+        &self,
+        thread_id: ThreadId,
+        connection_id: ConnectionId,
+    ) -> Option<Arc<Mutex<ThreadState>>> {
+        self.ensure_connection_subscription(
+            thread_id,
+            connection_id,
+            /*experimental_raw_events*/ false,
+            SubscriptionPurpose::WorkflowInspection,
+        )
+        .await
+    }
+
+    async fn ensure_connection_subscription(
+        &self,
+        thread_id: ThreadId,
+        connection_id: ConnectionId,
+        experimental_raw_events: bool,
+        purpose: SubscriptionPurpose,
+    ) -> Option<Arc<Mutex<ThreadState>>> {
         let thread_state = {
             let mut state = self.state.lock().await;
             if !state.live_connections.contains_key(&connection_id) {
@@ -616,7 +728,15 @@ impl ThreadStateManager {
                 .or_default()
                 .insert(thread_id);
             let thread_entry = state.threads.entry(thread_id).or_default();
-            thread_entry.connection_ids.insert(connection_id);
+            thread_entry
+                .connection_ids
+                .entry(connection_id)
+                .and_modify(|existing| {
+                    if purpose == SubscriptionPurpose::Conversation {
+                        *existing = purpose;
+                    }
+                })
+                .or_insert(purpose);
             thread_entry.update_has_connections();
             thread_entry.state.clone()
         };
@@ -644,7 +764,9 @@ impl ThreadStateManager {
             .or_default()
             .insert(thread_id);
         let thread_entry = state.threads.entry(thread_id).or_default();
-        thread_entry.connection_ids.insert(connection_id);
+        thread_entry
+            .connection_ids
+            .insert(connection_id, SubscriptionPurpose::Conversation);
         thread_entry.update_has_connections();
         true
     }

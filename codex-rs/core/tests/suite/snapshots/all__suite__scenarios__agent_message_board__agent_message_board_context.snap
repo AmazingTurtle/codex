@@ -8,8 +8,14 @@ Scenario: An active agent describes a channel, lists it, posts a shared decision
 -- request 1 (request) --
 00:message/developer:
     <MODEL_INSTRUCTIONS>
-01:message/developer:
-    <PERMISSIONS_INSTRUCTIONS>
+01:message/developer[2]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <PERMISSIONS_INSTRUCTIONS>
 02:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 

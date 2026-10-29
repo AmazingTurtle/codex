@@ -127,6 +127,7 @@ async fn handle_spawn_agent(
         &call_id,
         ThreadSpawnRequest {
             admission_cancellation: None,
+            admission_control: None,
             task_name: args.task_name,
             message: agent_message_from_tool(
                 message,
@@ -137,6 +138,8 @@ async fn handle_spawn_agent(
             agent_type: args.agent_type.clone(),
             model: args.model,
             reasoning_effort: args.reasoning_effort,
+            final_output_json_schema: None,
+            workspace: None,
         },
     )
     .await

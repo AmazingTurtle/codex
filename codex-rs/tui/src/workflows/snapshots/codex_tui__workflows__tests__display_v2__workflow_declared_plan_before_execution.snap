@@ -1,0 +1,30 @@
+---
+source: tui/src/workflows/display_v2_tests.rs
+expression: planned
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                                       Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt               │  1 Overview   2 Transcript   3 Source
+  Current conversation                    │ audit
+  › audit · Pending                       │ Status: Pending
+      Inspect · Planned                   │ Agent starts: 0/4
+      Verify · Planned                    │ Audit the project before release
+                                          │ Tokens: ? in, ? out (? model turns)
+                                          │ Active time: 0ms
+                                          │
+                                          │ Phases
+                                          │ Inspect: Planned
+                                          │ Verify: Planned
+                                          │
+                                          │ Input
+                                          │ • target: src
+                                          │
+                                          │ Log
+                                          │ #1: Audit accepted
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+  Esc close · ↑/↓ select · Enter Main · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

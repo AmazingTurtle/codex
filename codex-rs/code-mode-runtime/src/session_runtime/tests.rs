@@ -150,6 +150,7 @@ async fn termination_rejects_a_waiting_store_commit_before_the_next_cell_can_loa
     let reader = runtime
         .execute(
             CreateCellRequest {
+                profile: Default::default(),
                 tool_call_id: "reader".to_string(),
                 enabled_tools: Vec::new(),
                 source: r#"text(String(load("candidate")));"#.to_string(),
@@ -174,6 +175,7 @@ async fn termination_rejects_a_waiting_store_commit_before_the_next_cell_can_loa
 
 fn execute_request(source: &str) -> CreateCellRequest {
     CreateCellRequest {
+        profile: Default::default(),
         tool_call_id: "call-1".to_string(),
         enabled_tools: Vec::new(),
         source: source.to_string(),

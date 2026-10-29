@@ -1,0 +1,9 @@
+---
+source: tui/src/structured_value_tests.rs
+expression: rendered
+---
+• 1
+    • a
+        • b
+            • c (relative JSON Pointer paths)
+                • /~0~1/: evidence\u001b[31m

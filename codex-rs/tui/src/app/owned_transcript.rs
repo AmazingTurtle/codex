@@ -195,7 +195,9 @@ impl App {
             });
         let dashboard_visible = chat_widget
             .selected_index_for_present_view(AGENTS_OVERVIEW_VIEW_ID)
-            .is_some();
+            .is_some()
+            || chat_widget.active_view_is(crate::workflows::CENTER_ID)
+            || chat_widget.active_view_is(crate::workflows::actions::INSPECTION_ID);
         let bottom_height = if dashboard_visible {
             screen_size.height
         } else {

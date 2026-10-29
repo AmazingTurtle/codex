@@ -15,6 +15,7 @@ use codex_code_mode_protocol::EnabledToolMetadata;
 pub(super) fn install_globals(
     scope: &mut v8::PinScope<'_, '_>,
     enabled_tools: &[EnabledToolMetadata],
+    profile: codex_code_mode_protocol::CodeModeCellExecutionProfile,
 ) -> Result<(), String> {
     let global = scope.get_current_context().global(scope);
     delete_global(scope, global, "console")?;
@@ -49,6 +50,9 @@ pub(super) fn install_globals(
     set_global(scope, global, "notify", notify.into())?;
     set_global(scope, global, "yield_control", yield_control.into())?;
     set_global(scope, global, "exit", exit.into())?;
+    if profile == codex_code_mode_protocol::CodeModeCellExecutionProfile::Workflow {
+        super::workflow_scope::install(scope)?;
+    }
 
     let source = v8::String::new(scope, include_str!("settled.js"))
         .ok_or_else(|| "failed to allocate settlement helpers".to_string())?;
@@ -104,7 +108,7 @@ fn build_all_tools_value<'s>(
     Ok(array.into())
 }
 
-fn helper_function<'s, F>(
+pub(super) fn helper_function<'s, F>(
     scope: &mut v8::PinScope<'s, '_>,
     name: &str,
     callback: F,
@@ -136,7 +140,7 @@ fn tool_function<'s>(
         .ok_or_else(|| "failed to create tool function".to_string())
 }
 
-fn set_global<'s>(
+pub(super) fn set_global<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     global: v8::Local<'s, v8::Object>,
     name: &str,

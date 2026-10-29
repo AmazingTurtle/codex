@@ -72,7 +72,7 @@ impl InProcessCodeModeSession {
         let started = self
             .runtime
             .execute(
-                runtime_request(request),
+                runtime_request(request, self.cell_execution_limits.profile),
                 runtime::ObserveMode::YieldAfter(self.resolve_yield_timeout(yield_time_ms))
                     .with_yield_signal(preempt.unwrap_or_default()),
                 Arc::new(ProtocolDelegate { delegate }),
@@ -101,7 +101,7 @@ impl InProcessCodeModeSession {
         let started = self
             .runtime
             .execute(
-                runtime_request(request),
+                runtime_request(request, self.cell_execution_limits.profile),
                 runtime::ObserveMode::PendingFrontier,
                 Arc::new(ProtocolDelegate { delegate }),
             )
@@ -311,8 +311,12 @@ impl runtime::SessionRuntimeDelegate for ProtocolDelegate {
     }
 }
 
-fn runtime_request(request: ExecuteRequest) -> runtime::CreateCellRequest {
+fn runtime_request(
+    request: ExecuteRequest,
+    profile: codex_code_mode_protocol::CodeModeCellExecutionProfile,
+) -> runtime::CreateCellRequest {
     runtime::CreateCellRequest {
+        profile,
         tool_call_id: request.tool_call_id,
         enabled_tools: request
             .enabled_tools

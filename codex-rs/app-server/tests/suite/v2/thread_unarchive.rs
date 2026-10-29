@@ -294,6 +294,7 @@ async fn thread_unarchive_preserves_pathless_store_metadata() -> Result<()> {
         .await?;
     let client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
+        code_mode_session_provider: None,
         config: Arc::new(config),
         cli_overrides: Vec::new(),
         loader_overrides,

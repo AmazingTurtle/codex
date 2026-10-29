@@ -740,11 +740,20 @@ impl LocalAgentControl {
             if admission_cancellation.is_cancelled() {
                 return Err(CodexErr::TurnAborted);
             }
+            if let Some(control) = &options.admission_control {
+                (control.check)().await?;
+                if admission_cancellation.is_cancelled() {
+                    return Err(CodexErr::TurnAborted);
+                }
+            }
             match self.runtime.admit_start() {
                 Err(_) if self.runtime.execution_control.is_paused() => continue,
                 result => break result?,
             }
         };
+        if let Some(control) = &options.admission_control {
+            (control.admitted)()?;
+        }
         let spawn_started_at = Instant::now();
         let state = self.runtime.upgrade()?;
         // Resolve the parent before inheriting settings or copying attachments.
@@ -992,6 +1001,7 @@ impl LocalAgentControl {
         };
 
         let start_options = TurnStartOptions {
+            final_output_json_schema: options.final_output_json_schema,
             parent_turn_id: options.parent_turn_id,
             turn_trigger: options.turn_trigger,
             root_turn_id: options.root_turn_id,

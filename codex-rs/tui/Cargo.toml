@@ -173,6 +173,8 @@ arboard = { workspace = true }
 
 
 [dev-dependencies]
+codex-code-mode = { workspace = true }
+codex-dynamic-workflows = { workspace = true }
 app_test_support = { workspace = true }
 codex-mcp = { workspace = true }
 codex-protocol-test-support = { workspace = true }

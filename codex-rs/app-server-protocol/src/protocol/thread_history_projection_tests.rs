@@ -23,6 +23,40 @@ use crate::protocol::v2::ThreadItem;
 use crate::protocol::v2::TurnError;
 
 #[test]
+fn native_task_projection_preserves_real_identity_and_turn_without_a_human_submission() {
+    let item:codex_protocol::models::ResponseItem=serde_json::from_value(serde_json::json!({
+        "type":"agent_message","id":"amsg_task","author":"/root","recipient":"/root/reviewer",
+        "content":[{"type":"input_text","text":"Review the actual source.\nPreserve the caller policy."}],
+        "internal_chat_message_metadata_passthrough":{"turn_id":"owned-turn"}
+    })).unwrap();
+    let change = project_native_agent_input(&item).unwrap();
+    assert_eq!(
+        change,
+        ThreadHistoryItemChange {
+            turn_id: "owned-turn".into(),
+            item: ThreadItem::UserMessage {
+                id: "amsg_task".into(),
+                client_id: None,
+                content: vec![crate::protocol::v2::UserInput::Text {
+                    text: "Review the actual source.\nPreserve the caller policy.".into(),
+                    text_elements: Vec::new()
+                }]
+            },
+            started_at_ms: None,
+            completed_at_ms: None
+        }
+    );
+    let projected = project(RolloutItem::ResponseItem(item.into()));
+    assert_eq!(
+        projected,
+        ThreadHistoryChangeSet {
+            changed_items: vec![change],
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
 fn projects_turn_lifecycle_without_prior_builder_state() {
     let started = project(RolloutItem::EventMsg(EventMsg::TurnStarted(
         TurnStartedEvent {

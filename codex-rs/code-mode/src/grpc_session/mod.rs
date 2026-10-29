@@ -103,6 +103,14 @@ impl GrpcCodeModeSessionProvider {
     ) -> Result<Arc<GrpcCodeModeSession>, String> {
         let mut client = deadline::startup("transport connection", self.transport.client()).await?;
         let limits = grpc::SessionCellExecutionLimits {
+            profile: match limits.profile {
+                codex_code_mode_protocol::CodeModeCellExecutionProfile::General => {
+                    grpc::CellExecutionProfile::General as i32
+                }
+                codex_code_mode_protocol::CodeModeCellExecutionProfile::Workflow => {
+                    grpc::CellExecutionProfile::Workflow as i32
+                }
+            },
             max_yield_time_ms: limits.max_yield_time_ms,
             max_heap_size_bytes: limits
                 .max_heap_size_bytes
@@ -111,8 +119,9 @@ impl GrpcCodeModeSessionProvider {
                 .map_err(|error| format!("invalid code-mode heap size limit: {error}"))?,
         };
         let cell_execution_limits = (limits.max_yield_time_ms.is_some()
-            || limits.max_heap_size_bytes.is_some())
-        .then_some(limits);
+            || limits.max_heap_size_bytes.is_some()
+            || limits.profile != grpc::CellExecutionProfile::General as i32)
+            .then_some(limits);
         let open_session_span = tracing::info_span!("code_mode.grpc.open_session");
         let (lease, first, route) = deadline::startup("session opening", async {
             let mut retries = 0;

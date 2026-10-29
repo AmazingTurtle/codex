@@ -3,7 +3,7 @@
 use codex_app_server_protocol::CommandExecutionSource as ExecCommandSource;
 use codex_protocol::parse_command::ParsedCommand;
 
-use crate::exec_command::split_command_string;
+pub(super) use crate::thread_transcript::tools::command_execution_command_and_parsed;
 
 pub(super) struct RunningCommand {
     pub(super) command: Vec<String>,
@@ -66,18 +66,4 @@ pub(super) fn is_standard_tool_call(parsed_cmd: &[ParsedCommand]) -> bool {
         && parsed_cmd
             .iter()
             .all(|parsed| !matches!(parsed, ParsedCommand::Unknown { .. }))
-}
-
-pub(super) fn command_execution_command_and_parsed(
-    command: &str,
-    command_actions: &[codex_app_server_protocol::CommandAction],
-) -> (Vec<String>, Vec<ParsedCommand>) {
-    (
-        split_command_string(command),
-        command_actions
-            .iter()
-            .cloned()
-            .map(codex_app_server_protocol::CommandAction::into_core)
-            .collect(),
-    )
 }

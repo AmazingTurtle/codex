@@ -1,14 +1,13 @@
 ---
 source: core/tests/suite/scenarios_agent_eviction_tests.rs
-assertion_line: 275
 expression: "format!(\"{history}\\n\\nResumed worker mailbox:\\n{mailbox}\")"
 ---
 Scenario: A parent with no configured environment delegates an API migration, queues a note while the worker is idle, and follows up after idle eviction. The worker temporarily attaches a workspace, then resumes with no environment, its earlier answer, and the unread note. Complete model streams are grouped as parent, then worker.
 
 ## Window 1
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=7958a01e34d95ac2):
-        - namespace/functions; hash=30a5fc1fcffb1c04
+00:additional_tools/developer (2; hash=29b3680adce80d55):
+        - namespace/functions; hash=51ae7b8a27505bff
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -21,8 +20,14 @@ Scenario: A parent with no configured environment delegates an API migration, qu
           - function/wait_agent
 01:message/developer:
     <MODEL_INSTRUCTIONS>
-02:message/developer:
-    <PERMISSIONS_INSTRUCTIONS>
+02:message/developer[2]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <PERMISSIONS_INSTRUCTIONS>
 03:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
@@ -66,8 +71,8 @@ Scenario: A parent with no configured environment delegates an API migration, qu
 
 ## Window 2 (after request 6: input diverged at item 03)
 -- request 7 (turn) --
-00:additional_tools/developer (2; hash=7958a01e34d95ac2):
-        - namespace/functions; hash=30a5fc1fcffb1c04
+00:additional_tools/developer (2; hash=29b3680adce80d55):
+        - namespace/functions; hash=51ae7b8a27505bff
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -80,8 +85,14 @@ Scenario: A parent with no configured environment delegates an API migration, qu
           - function/wait_agent
 01:message/developer:
     <MODEL_INSTRUCTIONS>
-02:message/developer:
-    <PERMISSIONS_INSTRUCTIONS>
+02:message/developer[2]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <PERMISSIONS_INSTRUCTIONS>
 03:message/developer:
     You are an agent in a team of agents collaborating to complete a task.
 

@@ -383,6 +383,8 @@ async fn new_config(
         update_plan_enabled: true,
         tool_registry: Default::default(),
         code_mode: Default::default(),
+        dynamic_workflows_mode: Default::default(),
+        dynamic_workflows: Default::default(),
         background_terminal_max_timeout: 300_000,
         thread_unload_delay: std::time::Duration::from_secs(/*secs*/ 1800),
         ghost_snapshot: GhostSnapshotConfig::default(),

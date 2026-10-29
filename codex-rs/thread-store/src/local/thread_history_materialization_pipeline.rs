@@ -22,15 +22,25 @@ pub(super) enum ProjectionMessage {
     Failed(ThreadStoreError),
 }
 
+/// Separates the physical projection key from its verified logical conversation owner.
+pub(super) struct ProjectionIdentity {
+    pub(super) rollout_id: ThreadId,
+    pub(super) owner_thread_id: ThreadId,
+}
+
 pub(super) async fn read_and_apply(
     store: &LocalThreadStore,
-    thread_id: ThreadId,
+    identity: ProjectionIdentity,
     rollout_path: &Path,
     start_offset: u64,
     expected_ordinal: u64,
     initial_ordinal: u64,
     subagent_history_start_ordinal: Option<u64>,
 ) -> ThreadStoreResult<()> {
+    let ProjectionIdentity {
+        rollout_id,
+        owner_thread_id,
+    } = identity;
     // Two queued batches, one being produced and one being consumed. Each is limited by
     // source bytes and step count; an oversized individual record remains indivisible.
     let (sender, receiver) = tokio::sync::mpsc::channel(QUEUED_BATCHES);
@@ -43,7 +53,7 @@ pub(super) async fn read_and_apply(
             &path,
             start_offset,
             expected_ordinal,
-            thread_id,
+            rollout_id,
             subagent_history_start_ordinal,
             || stop.is_closed(),
             |projections, next_offset| {
@@ -63,7 +73,15 @@ pub(super) async fn read_and_apply(
         };
         let _ = sender.blocking_send(completion);
     });
-    let result = apply_batches(store, thread_id, start_offset, initial_ordinal, receiver).await;
+    let result = apply_batches(
+        store,
+        rollout_id,
+        owner_thread_id,
+        start_offset,
+        initial_ordinal,
+        receiver,
+    )
+    .await;
     // apply_batches drops the receiver on error, unblocking any pending producer send.
     drop(keep_running);
     worker.await.map_err(|err| ThreadStoreError::Internal {
@@ -75,6 +93,7 @@ pub(super) async fn read_and_apply(
 pub(super) async fn apply_batches(
     store: &LocalThreadStore,
     thread_id: ThreadId,
+    owner_thread_id: ThreadId,
     mut start_offset: u64,
     initial_ordinal: u64,
     mut receiver: tokio::sync::mpsc::Receiver<ProjectionMessage>,
@@ -89,6 +108,7 @@ pub(super) async fn apply_batches(
                 apply_projection(
                     store,
                     thread_id,
+                    owner_thread_id,
                     start_offset,
                     next_offset,
                     initial_ordinal,

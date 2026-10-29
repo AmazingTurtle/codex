@@ -1,0 +1,7 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "format!(\"{narrow}\\n{partial}\\n{unknown}\")"
+---
+  audit · I 312K/O 86K · 28m 57s
+  audit · [■■■■□□□□] 1/2 phases · Verify · in ≥312K · out ≥86K · 28m 57s · 3 agents used · ↓ open
+  audit · [■■■■□□□□] 1/2 phases · Verify · in ? · out ? · 28m 57s · 3 agents used · ↓ open

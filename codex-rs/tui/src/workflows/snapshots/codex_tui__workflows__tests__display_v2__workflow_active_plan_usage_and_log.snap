@@ -1,0 +1,30 @@
+---
+source: tui/src/workflows/display_v2_tests.rs
+expression: active
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                                       Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt               │  1 Overview   2 Transcript   3 Source
+  Current conversation                    │ audit
+  › audit · Running                       │ Status: Running
+      Inspect · Active                    │ Agent starts: 2/4
+        Review source · Running           │ Steps: 0/1 completed
+      Verify · Planned                    │ Audit the project before release
+                                          │ Tokens: ≥312.000 in, ≥86.000 out (? model turns)
+                                          │ Cached input: ≥12.000 (included in input)
+                                          │ Active time: 28m 57s
+                                          │
+                                          │ Phases
+                                          │ Inspect: Active
+                                          │ Verify: Planned
+                                          │
+                                          │ Input
+                                          │ • target: src
+                                          │
+                                          │ Log
+                                          │ #1: Audit accepted
+                                          │
+                                          │
+                                          │
+  Esc close · ↑/↓ select · Enter Main · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

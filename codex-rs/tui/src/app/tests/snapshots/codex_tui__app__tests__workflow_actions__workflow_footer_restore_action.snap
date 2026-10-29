@@ -1,0 +1,31 @@
+---
+source: tui/src/app/tests/workflow_actions.rs
+expression: menu
+---
+  Actions · existing-workflow
+  Control revision 0 · 0 / 32 agent starts
+
+↑
+     Interrupt selected work (disabled)             Interrupt only the selected workflow work
+                                                    (disabled: Select the current active step with a
+                                                    known owned turn)
+  1. Revise workflow                                Stage JavaScript source and arguments before
+                                                    applying
+     Apply revision after accepted work (disabled)  Keep accepted work, then apply the staged
+                                                    revision (disabled: Stage a revision before
+                                                    applying it)
+     Interrupt and apply revision (disabled)        Interrupt accepted work and apply the staged
+                                                    revision (disabled: Stage a revision before
+                                                    applying it)
+     Resume workflow (disabled)                     Continue the current revision under its
+                                                    remaining budget (disabled: No ready revision is
+                                                    available to resume)
+     Show result in chat (disabled)                 Insert the immutable result directly in chat,
+                                                    once (disabled: The workflow has not produced a
+                                                    terminal result)
+  2. Revision history                               Inspect revision status, preserved work, and
+                                                    rerun reasons
+› 3. Show in footer                                 The workflow stays available in this command
+                                                    center
+
+  enter select · esc back

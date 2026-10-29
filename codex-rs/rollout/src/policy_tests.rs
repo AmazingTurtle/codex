@@ -10,6 +10,28 @@ use codex_protocol::protocol::ThreadHistoryMode;
 
 use super::persisted_event_msg;
 
+#[test]
+fn workflow_lifecycle_is_durable_without_becoming_a_response_item() {
+    let event:EventMsg=serde_json::from_value(serde_json::json!({"type":"workflow_lifecycle",
+        "id":"ui-event","ownerThreadId":"owner","runId":"run","executionId":"execution","workflowName":"Review","completionMode":"display","sequence":0,"createdAt":1,
+        "kind":{"type":"started","name":"Review","description":"Inspect the change"}
+    })).expect("typed lifecycle event");
+    for mode in [ThreadHistoryMode::Legacy, ThreadHistoryMode::Paginated] {
+        let persisted = persisted_event_msg(&event, mode).expect("workflow lifecycle retained");
+        assert_eq!(
+            serde_json::to_value(persisted.as_ref()).unwrap(),
+            serde_json::to_value(&event).unwrap()
+        );
+    }
+    assert!(
+        super::persisted_rollout_item(
+            &crate::RolloutItem::EventMsg(event),
+            ThreadHistoryMode::Paginated
+        )
+        .is_some()
+    );
+}
+
 fn image_item(image: GeneratedImageRef) -> ImageGenerationItem {
     ImageGenerationItem {
         id: "image-1".to_string(),

@@ -1203,6 +1203,7 @@ async fn thread_list_db_only_errors_distinguish_unavailable_database_from_empty_
     ] {
         let client = in_process::start(InProcessStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
+            code_mode_session_provider: None,
             config: Arc::clone(&config),
             cli_overrides: Vec::new(),
             loader_overrides: loader_overrides.clone(),

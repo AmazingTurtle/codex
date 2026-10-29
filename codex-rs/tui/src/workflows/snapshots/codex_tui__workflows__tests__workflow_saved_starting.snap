@@ -1,0 +1,18 @@
+---
+source: tui/src/workflows/workflow_tests.rs
+assertion_line: 114
+expression: "render(&center, 90, 14)"
+---
+  Saved workflows  Tab / Shift+Tab filter
+   All 1   Project 1   User 0                                     Tab / Shift+Tab filter
+  ──────────────────────────────────────────────────────────────────────────────────────
+  Starting workflow…
+  {"target":"src"}
+
+
+
+
+
+
+
+  Esc cancel · Enter run

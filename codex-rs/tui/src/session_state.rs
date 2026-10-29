@@ -26,7 +26,14 @@ pub(crate) struct MessageHistoryMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TimelineHistorySnapshot {
+    Available(Vec<codex_app_server_protocol::ThreadTimelineEntry>),
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ThreadSessionState {
+    pub(crate) timeline: Option<TimelineHistorySnapshot>,
     pub(crate) daybreak_enabled: bool,
     pub(crate) wake_state: Option<codex_app_server_protocol::ThreadWakeState>,
     pub(crate) windows_sandbox_host: crate::app::WindowsSandboxHost,

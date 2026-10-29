@@ -413,6 +413,98 @@ where
     }
     Ok(methods)
 }
+
+/// Legacy reconnect fixtures retain their ordinary history without a canonical timeline API.
+pub(super) fn legacy_timeline_unsupported_response(
+    request: &JSONRPCRequest,
+    thread_ids: &[ThreadId],
+) -> serde_json::Value {
+    assert_eq!(request.method, "thread/timeline/list");
+    let params: codex_app_server_protocol::ThreadTimelineListParams =
+        serde_json::from_value(request.params.clone().expect("timeline params")).unwrap();
+    assert!(
+        thread_ids
+            .iter()
+            .any(|id| id.to_string() == params.thread_id),
+        "timeline must target a fixture thread: {}",
+        params.thread_id
+    );
+    assert_eq!(params.cursor, None);
+    assert!(
+        params.limit.is_some_and(|limit| (1..=100).contains(&limit)),
+        "the unsupported timeline probe must remain bounded"
+    );
+    json!({"error": JSONRPCErrorError {
+        code:-32601,
+        message:"thread/timeline/list is unsupported by this legacy server".into(),
+        data:None,
+    }})
+}
+
+/// Implements only the bounded discovery contract for the fixture's independent roots.
+pub(super) fn workflow_discovery_response(
+    request: &JSONRPCRequest,
+    roots: &[ThreadId],
+) -> serde_json::Value {
+    use codex_app_server_protocol::ThreadExecutionControl;
+    use codex_app_server_protocol::ThreadExecutionControlReadParams;
+    use codex_app_server_protocol::ThreadExecutionControlReadResponse;
+    use codex_app_server_protocol::WorkflowListParams;
+    use codex_app_server_protocol::WorkflowListResponse;
+    use codex_app_server_protocol::WorkflowListScope;
+    use codex_app_server_protocol::WorkflowSavedListParams;
+    use codex_app_server_protocol::WorkflowSavedListResponse;
+    let params = request
+        .params
+        .clone()
+        .expect("discovery requests carry typed params");
+    let assert_root = |id: &str| {
+        assert!(
+            roots.iter().any(|root| root.to_string() == id),
+            "discovery must target an owning root: {id}"
+        )
+    };
+    let result = match request.method.as_str() {
+        "thread/executionControl/read" => {
+            let params: ThreadExecutionControlReadParams = serde_json::from_value(params).unwrap();
+            assert_root(&params.thread_id);
+            serde_json::to_value(ThreadExecutionControlReadResponse {
+                execution_control: ThreadExecutionControl {
+                    root_thread_id: params.thread_id,
+                    state: codex_protocol::protocol::ExecutionControlState::Running,
+                    can_pause: false,
+                },
+            })
+            .unwrap()
+        }
+        "workflow/list" => {
+            let params: WorkflowListParams = serde_json::from_value(params).unwrap();
+            assert_root(&params.thread_id);
+            assert_eq!(
+                (params.scope, params.cursor, params.limit),
+                (Some(WorkflowListScope::Current), None, Some(50))
+            );
+            serde_json::to_value(WorkflowListResponse {
+                data: Vec::new(),
+                next_cursor: None,
+            })
+            .unwrap()
+        }
+        "workflow/saved/list" => {
+            let params: WorkflowSavedListParams = serde_json::from_value(params).unwrap();
+            assert_root(&params.thread_id);
+            assert_eq!((params.cursor, params.limit), (None, Some(50)));
+            serde_json::to_value(WorkflowSavedListResponse {
+                data: Vec::new(),
+                next_cursor: None,
+                watch_roots: Vec::new(),
+            })
+            .unwrap()
+        }
+        method => panic!("unexpected workflow discovery request: {method}"),
+    };
+    json!({"result": result})
+}
 #[tokio::test]
 async fn lost_initial_thread_reply_keeps_startup_draft_offline() -> Result<()> {
     for disconnect_first in [false, true] {

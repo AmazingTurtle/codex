@@ -59,8 +59,26 @@ def run(
     lint_script = state_path.with_name("lint.sh")
     import shlex
 
+    lint_commands = f"exec {shlex.join(lint)}"
+    if "dynamic-workflows" in state["patches"]:
+        # The sample is compile-only; --tests does not establish binary lint coverage.
+        sample_lint = [
+            "cargo",
+            "clippy",
+            "--no-deps",
+            "-p",
+            "codex-thread-manager-sample",
+            "--bin",
+            "codex-thread-manager-sample",
+        ]
+        if "codex-v8-poc" in (release.ROOT / "codex-rs/Cargo.toml").read_text():
+            sample_lint.extend(
+                ["-p", "codex-v8-poc", "--features", "codex-v8-poc/sandbox"]
+            )
+        sample_lint.extend(["--", "-D", "warnings"])
+        lint_commands = f"{shlex.join(lint)}\nexec {shlex.join(sample_lint)}"
     lint_script.write_text(
-        f"#!/bin/sh\nset -eu\ncd {shlex.quote(str(release.ROOT / 'codex-rs'))}\nexec {shlex.join(lint)}\n"
+        f"#!/bin/sh\nset -eu\ncd {shlex.quote(str(release.ROOT / 'codex-rs'))}\n{lint_commands}\n"
     )
     checks.insert(2, ("lint", ["sh", str(lint_script)]))
     schema_script = state_path.with_name("schema.sh")

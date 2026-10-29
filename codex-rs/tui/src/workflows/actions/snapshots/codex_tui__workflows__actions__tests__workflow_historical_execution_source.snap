@@ -1,0 +1,24 @@
+---
+source: tui/src/workflows/actions/actions_tests.rs
+expression: source
+---
+  Historical execution · read-only
+   1 Overview   2 Agent chat   3 Source
+  return 'historical source';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Esc back · 1/2/3 view · j↑ k↓ scroll · PgUp/PgDn top/bottom

@@ -15,16 +15,22 @@ Settings:
   stream: true
   text: {"verbosity":"low"}
   tool_choice: "auto"
-  tools (4; hash=42b9d6c575a7c669):
-    - custom/exec: Exec guidance.  Run JavaScript code to orchestrate/compose tool calls - Evaluates the provided Ja...; hash=340190054261a464
+  tools (4; hash=bbf84a47de507cae):
+    - custom/exec: Exec guidance.  Run JavaScript code to orchestrate/compose tool calls - Evaluates the provided Ja...; hash=e899959da134e471
     - function/wait: Waits on a yielded `exec` cell and returns new output or completion. - Use `wait` only after `exe...; args=[cell_id, max_tokens, terminate, yield_time_ms]; hash=6692d8f6c55be489
     - function/request_user_input: Request user input for one to three short questions and wait for the response. This tool is only ...; args=[questions]; hash=64a729b25c424fc6
     - web_search; hash=e214d4db1bc49e89
 -- request 1 (turn) --
 00:message/developer:
     <MODEL_INSTRUCTIONS>
-01:message/developer:
-    <PERMISSIONS_INSTRUCTIONS>
+01:message/developer[2]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <PERMISSIONS_INSTRUCTIONS>
 02:message/developer:
     Coordinate sub-agents.
 03:message/developer:
@@ -49,13 +55,19 @@ Settings:
 ## Window 2 (after request 2)
 Settings: relative to window 1
   model: "prefixes-cleared"
-  tools (4; hash=c043b95e2e6ad1fb):
-    ~ custom/exec: Run JavaScript code to orchestrate/compose tool calls - Evaluates the provided JavaScript code in...; hash=ebfb7c912d0cdfd2
+  tools (4; hash=e09920917468ec7a):
+    ~ custom/exec: Run JavaScript code to orchestrate/compose tool calls - Evaluates the provided JavaScript code in...; hash=c00cdbd939572cb1
 -- request 3 (turn) --
 00:message/developer:
     <MODEL_INSTRUCTIONS>
-01:message/developer:
-    <PERMISSIONS_INSTRUCTIONS>
+01:message/developer[2]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <PERMISSIONS_INSTRUCTIONS>
 02:message/developer:
     Coordinate sub-agents.
 03:message/developer:

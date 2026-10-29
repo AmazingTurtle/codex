@@ -1,0 +1,7 @@
+---
+source: tui/src/structured_value_tests.rs
+expression: rendered
+---
+研究🦀: alpha beta
+        gamma delta
+        epsilon

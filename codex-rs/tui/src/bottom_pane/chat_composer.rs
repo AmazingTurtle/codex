@@ -16,6 +16,8 @@
 //! Shortcut help expands above the composer, with its close hint replacing the final shortcuts row
 //! so input and persistent status stay anchored when help opens or closes.
 //! Escape dismisses visible shortcut help before editing, transcript backtracking, or interruption.
+//! Execution controls are suggested only when applicable; typed controls still reach the host
+//! so an idle pause or redundant resume receives a local explanation.
 //! Fullscreen limits the composer height; wheel browsing preserves the caret until editor input.
 //! Transcript interactions borrow the hint footer through `ComposerRenderOptions`;
 //! its resolved presentation drives height, painting, and the focused cursor together.
@@ -482,6 +484,10 @@ pub enum InputResult {
     Command(SlashCommand),
     /// A bare model service-tier command parsed by the composer.
     ServiceTierCommand(ServiceTierCommand),
+    WorkflowCommand {
+        command: crate::workflows::saved_commands::SavedCommand,
+        arguments: Option<String>,
+    },
     /// An inline slash command and its trimmed argument text.
     ///
     /// The `TextElement` ranges are rebased into the argument string, while any pending local
@@ -649,8 +655,11 @@ pub(crate) struct ChatComposer {
     token_activity_command_enabled: bool,
     service_tier_commands_enabled: bool,
     service_tier_commands: Vec<ServiceTierCommand>,
+    saved_workflow_commands: Vec<crate::workflows::saved_commands::SavedCommand>,
     mentions_v2_enabled: bool,
     goal_command_enabled: bool,
+    pause_command_visible: bool,
+    unpause_command_visible: bool,
     voice_command_enabled: bool,
     worktrees_enabled: bool,
     windows_degraded_sandbox_active: bool,
@@ -705,6 +714,7 @@ impl ChatComposer {
             self.draft.is_bash_mode,
             self.builtin_command_flags(),
             &self.service_tier_commands,
+            &self.saved_workflow_commands,
         )
     }
 
@@ -823,8 +833,11 @@ impl ChatComposer {
             token_activity_command_enabled: false,
             service_tier_commands_enabled: false,
             service_tier_commands: Vec::new(),
+            saved_workflow_commands: Vec::new(),
             mentions_v2_enabled: false,
             goal_command_enabled: false,
+            pause_command_visible: false,
+            unpause_command_visible: false,
             voice_command_enabled: false,
             worktrees_enabled: false,
             windows_degraded_sandbox_active: false,
@@ -1043,6 +1056,12 @@ impl ChatComposer {
 
     fn update_slash_command_catalog(&mut self, update: impl FnOnce(&mut Self)) {
         update(self);
+        if let ActivePopup::Command(popup) = &self.popups.active {
+            let selected = popup.selected_item();
+            let mut replacement = self.slash_input().command_popup(self.draft.textarea.text());
+            replacement.restore_selection(selected.as_ref());
+            self.popups.active = ActivePopup::Command(replacement);
+        }
         self.sync_popups();
     }
 
@@ -3153,6 +3172,7 @@ impl ChatComposer {
                 | InputResult::Queued { .. }
                 | InputResult::Command(_)
                 | InputResult::ServiceTierCommand(_)
+                | InputResult::WorkflowCommand { .. }
                 | InputResult::CommandWithArgs(_, _, _)
         ) && self.config.reset_vim_on_submission
         {
@@ -3339,6 +3359,10 @@ impl ChatComposer {
         Some(match command {
             SlashCommandItem::Builtin(cmd) => InputResult::Command(cmd),
             SlashCommandItem::ServiceTier(command) => InputResult::ServiceTierCommand(command),
+            SlashCommandItem::Workflow(command) => InputResult::WorkflowCommand {
+                command,
+                arguments: None,
+            },
         })
     }
 
@@ -3363,6 +3387,12 @@ impl ChatComposer {
         );
         let trimmed_rest = inline_command.rest.trim();
         args_elements = Self::trim_text_elements(inline_command.rest, trimmed_rest, args_elements);
+        if let SlashCommandItem::Workflow(command) = &command {
+            return Some(InputResult::WorkflowCommand {
+                command: command.clone(),
+                arguments: Some(trimmed_rest.into()),
+            });
+        }
         let SlashCommandItem::Builtin(cmd) = command else {
             return None;
         };
@@ -5011,6 +5041,10 @@ impl ChatComposer {
 #[cfg(test)]
 #[path = "chat_composer/agents_navigation_tests.rs"]
 mod agents_navigation_tests;
+
+#[cfg(test)]
+#[path = "chat_composer/saved_workflow_tests.rs"]
+mod saved_workflow_tests;
 
 #[cfg(test)]
 #[path = "chat_composer_effort_tests.rs"]
@@ -9430,6 +9464,9 @@ mod tests {
                     Some(CommandItem::ServiceTier(command)) => {
                         panic!("expected {expected} command, got service tier {command:?}")
                     }
+                    Some(CommandItem::Workflow(command)) => {
+                        panic!("expected {expected}, got workflow {command:?}")
+                    }
                     None => panic!("no selected command for '{input}'"),
                 },
                 _ => panic!("slash popup not active after typing '{input}'"),
@@ -9542,6 +9579,9 @@ mod tests {
             }
             InputResult::ServiceTierCommand(command) => {
                 panic!("expected init command, got service tier {command:?}")
+            }
+            InputResult::WorkflowCommand { command, .. } => {
+                panic!("expected init, got workflow {command:?}")
             }
             InputResult::Submitted { text, .. } => {
                 panic!("expected command dispatch, but composer submitted literal text: {text}")
@@ -10053,6 +10093,9 @@ mod tests {
             InputResult::ServiceTierCommand(command) => {
                 panic!("expected diff command, got service tier {command:?}")
             }
+            InputResult::WorkflowCommand { command, .. } => {
+                panic!("expected diff, got workflow {command:?}")
+            }
             InputResult::Submitted { text, .. } => {
                 panic!("expected command dispatch after Tab completion, got literal submit: {text}")
             }
@@ -10252,6 +10295,9 @@ mod tests {
             }
             InputResult::ServiceTierCommand(command) => {
                 panic!("expected mention command, got service tier {command:?}")
+            }
+            InputResult::WorkflowCommand { command, .. } => {
+                panic!("expected mention, got workflow {command:?}")
             }
             InputResult::Submitted { text, .. } => {
                 panic!("expected command dispatch, but composer submitted literal text: {text}")

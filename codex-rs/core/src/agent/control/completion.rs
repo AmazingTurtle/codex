@@ -47,6 +47,19 @@ impl LocalAgentControl {
             return;
         };
 
+        // Schema validation and the durable workflow step determine the friendly
+        // completion. Later independent human turns retain ordinary routing.
+        if crate::workflows::owns_turn(
+            &self.runtime,
+            outcome.thread_id,
+            child_agent_path,
+            &outcome.turn_id,
+        )
+        .await
+        {
+            return;
+        }
+
         if matches!(status, AgentStatus::Completed(_))
             && let Some(parent_turn_id) = outcome.parent_turn_id
         {

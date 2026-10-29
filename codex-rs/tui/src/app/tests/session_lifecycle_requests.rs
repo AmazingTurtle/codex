@@ -366,6 +366,7 @@ async fn same_thread_retry_keeps_subscription_and_restores_draft() -> Result<()>
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum HistoryCapabilities {
     Current,
+    ItemsPaginationOnly,
     LegacyOnly,
     LegacyOnlyUnsupportedVariant,
     LegacyDynamicToolsAndHistory,
@@ -411,6 +412,21 @@ pub(super) async fn start_recording_app_server(
         HistoryCapabilities::Current,
         blocked_thread_list,
         failed_thread_name,
+        crate::app_server_session::ThreadParamsMode::Embedded,
+        LoaderOverrides::without_managed_config_for_tests(),
+    )
+    .await
+}
+
+/// Exercises ordinary item pagination against a server predating canonical timelines.
+pub(super) async fn start_recording_item_pagination_app_server(
+    config: &Config,
+) -> Result<RecordingAppServer> {
+    start_recording_app_server_with_history(
+        config,
+        HistoryCapabilities::ItemsPaginationOnly,
+        /*blocked_thread_list*/ None,
+        /*failed_thread_name*/ None,
         crate::app_server_session::ThreadParamsMode::Embedded,
         LoaderOverrides::without_managed_config_for_tests(),
     )
@@ -610,6 +626,27 @@ pub(super) async fn start_recording_app_server_with_realtime_speech(
                         JSONRPCMessage::Response(JSONRPCResponse {
                             id: request_id,
                             result: serde_json::json!({}),
+                        })
+                    } else if history_capabilities == HistoryCapabilities::ItemsPaginationOnly
+                        && request.method == "thread/timeline/list"
+                    {
+                        let timeline: codex_app_server_protocol::ThreadTimelineListParams =
+                            serde_json::from_value(
+                                request.params.clone().expect("typed timeline params"),
+                            )?;
+                        ThreadId::from_string(&timeline.thread_id)?;
+                        assert!(
+                            timeline
+                                .limit
+                                .is_some_and(|limit| (1..=100).contains(&limit))
+                        );
+                        JSONRPCMessage::Error(JSONRPCError {
+                            id: request_id,
+                            error: JSONRPCErrorError {
+                                code: -32601,
+                                data: None,
+                                message: "method not found: thread/timeline/list".into(),
+                            },
                         })
                     } else if (matches!(
                         history_capabilities,
@@ -2746,12 +2783,8 @@ async fn transcript_alt_beginning_loads_every_older_history_page() -> Result<()>
         .join("\n");
     std::fs::write(path, format!("{records}\n"))?;
 
-    let (mut app_server, requests, proxy) = start_recording_app_server(
-        &app.config,
-        /*blocked_thread_list*/ None,
-        /*failed_thread_name*/ None,
-    )
-    .await?;
+    let (mut app_server, requests, proxy) =
+        start_recording_item_pagination_app_server(&app.config).await?;
     let started = app_server
         .resume_thread(
             &app.local_settings,
@@ -3162,12 +3195,8 @@ async fn underfilled_scrollback_fetches_older_pages_without_opening_the_transcri
         .join("\n");
     std::fs::write(path, format!("{records}\n"))?;
 
-    let (mut app_server, requests, proxy) = start_recording_app_server(
-        &app.config,
-        /*blocked_thread_list*/ None,
-        /*failed_thread_name*/ None,
-    )
-    .await?;
+    let (mut app_server, requests, proxy) =
+        start_recording_item_pagination_app_server(&app.config).await?;
     let started = app_server
         .resume_thread(
             &app.local_settings,

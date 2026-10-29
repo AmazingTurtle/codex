@@ -1,0 +1,12 @@
+---
+source: tui/src/app/tests/workflow_actions.rs
+expression: "render_bottom_popup(&app.chat_widget, 100)"
+---
+  Revise workflow
+  Control revision changed. Reopen Actions before submitting. · Stage first. The preview
+  identifies preserved work and reruns; the existing budget remains
+
+› workflow.meta({name:'review',description:'Updated review'});
+  return workflow.args;
+
+  enter arguments · esc back

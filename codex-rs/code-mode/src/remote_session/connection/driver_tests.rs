@@ -277,6 +277,7 @@ async fn open_session_includes_nondefault_cell_execution_limits() {
     let mut harness = DriverHarness::start();
     let session = remote_session();
     let limits = CodeModeSessionCellExecutionLimits {
+        profile: Default::default(),
         max_yield_time_ms: Some(250),
         max_heap_size_bytes: Some(16 * 1024 * 1024),
     };
@@ -308,6 +309,7 @@ async fn open_session_includes_nondefault_cell_execution_limits() {
             request: HostRequest::OpenSession {
                 session_id: session.id,
                 cell_execution_limits: Some(WireSessionCellExecutionLimits {
+                    profile: Default::default(),
                     max_yield_time_ms: Some(250),
                     max_heap_size_bytes: Some(16 * 1024 * 1024),
                 }),

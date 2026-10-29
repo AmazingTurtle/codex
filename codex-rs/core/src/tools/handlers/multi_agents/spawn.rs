@@ -126,6 +126,8 @@ async fn handle_spawn_agent(
             )?,
             options: SpawnAgentOptions {
                 admission_cancellation: None,
+                admission_control: None,
+                final_output_json_schema: None,
                 fork_parent_spawn_call_id: fork_mode.as_ref().map(|_| call_id.clone()),
                 fork_mode: fork_mode.clone(),
                 parent_thread_id: Some(session.thread_id),

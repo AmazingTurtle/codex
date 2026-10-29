@@ -42,7 +42,20 @@ mod turn;
 mod user_verification;
 mod wake_state;
 mod windows_sandbox;
+mod workflow;
+mod workflow_control;
+mod workflow_execution;
+mod workflow_lifecycle;
+mod workflow_presentation;
+mod workflow_revision;
+mod workflow_transcript;
 pub use wake_state::*;
+pub use workflow_control::*;
+pub use workflow_execution::*;
+pub use workflow_lifecycle::*;
+pub use workflow_presentation::*;
+pub use workflow_revision::*;
+pub use workflow_transcript::*;
 
 pub use account::*;
 pub use application::*;
@@ -86,6 +99,7 @@ pub use thread_usage::*;
 pub use turn::*;
 pub use user_verification::*;
 pub use windows_sandbox::*;
+pub use workflow::*;
 
 #[cfg(test)]
 mod tests;

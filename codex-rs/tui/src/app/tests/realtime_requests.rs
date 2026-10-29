@@ -47,6 +47,7 @@ fn voice_snapshot_directory_keeps_header_width_for_windows_paths() {
 
 fn test_agent_message(id: &str, text: &str) -> ThreadItem {
     ThreadItem::AgentMessage {
+        workflow: None,
         id: id.into(),
         text: text.into(),
         phase: Some(MessagePhase::FinalAnswer),
@@ -739,6 +740,7 @@ async fn retained_caption_consumes_only_one_matching_answer_fallback_on_reattach
         .into(),
     );
     let answer = |id: &str, text: &str| ThreadItem::AgentMessage {
+        workflow: None,
         id: id.into(),
         text: text.into(),
         phase: Some(MessagePhase::FinalAnswer),

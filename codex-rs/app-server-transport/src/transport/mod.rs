@@ -274,7 +274,7 @@ fn serialize_outgoing_message(outgoing_message: OutgoingMessage) -> Option<Strin
         Ok(json) => Some(json),
         Err(err) => {
             error!("Failed to serialize JSONRPCMessage: {err}");
-            let OutgoingMessage::Response(response) = outgoing_message else {
+            let OutgoingMessage::Response(response) = outgoing_message.into_original() else {
                 return None;
             };
             serde_json::to_string(&response_serialization_error(response.id, err))

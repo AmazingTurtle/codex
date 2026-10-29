@@ -1,0 +1,7 @@
+//! Bundled wording used when model catalogs omit dynamic-workflow overrides.
+
+pub const DEFAULT_GUIDANCE: &str = "Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recovery; documentation grants no launch permission. Start one-off scripts inline with workflow_start.source; save files or library entries for intended reuse. Workers retain native tools and permissions; schema is optional and prose/Markdown results are valid. Keep shared limits when controlling or revising work. Results render in conversation; do not repeat them automatically. Legacy work is read-only.";
+
+pub const DEFAULT_LAUNCH_DESCRIPTION: &str = "Start an authorized workflow with inline canonical JavaScript source text or a saved V2 workflow and optional args (default {}). One-off runs need no temporary script file; source is retained for recovery. Workers use native tools and permissions and may return prose or Markdown; schema is optional. Scripts coordinate agents without direct tools. Follow launch mode and user and repository delegation restrictions. Results appear in conversation without another model turn.";
+
+pub const DEFAULT_CONTROL_DESCRIPTION: &str = "Inspect workflow runs and saved scripts. Metadata contains bounded status and control identities; read explicit content pages for source, args or results. Use guarded controls or revisions to change V2 work; retry recovers unchanged work. Legacy scripts and runs are read-only.";

@@ -1238,6 +1238,7 @@ async fn bang_shell_enter_while_task_running_submits_run_user_shell_command() {
     let thread_id = ThreadId::new();
     let rollout_file = NamedTempFile::new().unwrap();
     let configured = crate::session_state::ThreadSessionState {
+        timeline: None,
         daybreak_enabled: false,
         long_context: false,
         wake_state: None,

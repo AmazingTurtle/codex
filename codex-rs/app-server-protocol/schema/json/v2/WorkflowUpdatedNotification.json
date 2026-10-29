@@ -1,0 +1,699 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "LegacyAppPathString": {
+      "type": "string"
+    },
+    "WorkflowAdmissionStatus": {
+      "enum": [
+        "notRequested",
+        "reserved",
+        "accepted",
+        "rejected",
+        "uncertain"
+      ],
+      "type": "string"
+    },
+    "WorkflowAttempt": {
+      "properties": {
+        "admission": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkflowAdmissionStatus"
+            }
+          ],
+          "default": "notRequested"
+        },
+        "childThreadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "completedAt": {
+          "default": null,
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executionId": {
+          "default": "",
+          "description": "The execution that originally admitted this attempt; empty for older records.",
+          "type": "string"
+        },
+        "finalTurnId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "metrics": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkflowMetrics"
+            }
+          ],
+          "default": {
+            "activeDurationMs": null,
+            "agentsUsed": null,
+            "modelTurns": null,
+            "usage": null,
+            "usageComplete": false,
+            "usageIncompleteReason": null,
+            "wallDurationMs": null
+          }
+        },
+        "ownedTurnIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reasoningEffort": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolvedModel": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/WorkflowStatus"
+        },
+        "updatedAt": {
+          "default": null,
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "usage": true
+      },
+      "required": [
+        "id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "WorkflowLog": {
+      "properties": {
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sequence": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "createdAt",
+        "message",
+        "sequence"
+      ],
+      "type": "object"
+    },
+    "WorkflowMetadata": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "phases": {
+          "items": {
+            "$ref": "#/definitions/WorkflowPhaseDefinition"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "description",
+        "name",
+        "phases"
+      ],
+      "type": "object"
+    },
+    "WorkflowMetrics": {
+      "properties": {
+        "activeDurationMs": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "agentsUsed": {
+          "default": null,
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modelTurns": {
+          "default": null,
+          "description": "Unique usage-bearing model responses; null means the count is unknown.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WorkflowTokenUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Null means no reported usage checkpoint is available; zero is an observed zero."
+        },
+        "usageComplete": {
+          "type": "boolean"
+        },
+        "usageIncompleteReason": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wallDurationMs": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "usageComplete"
+      ],
+      "type": "object"
+    },
+    "WorkflowPhaseDefinition": {
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
+    "WorkflowPhaseProgress": {
+      "properties": {
+        "completedAt": {
+          "default": null,
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "metrics": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkflowMetrics"
+            }
+          ],
+          "default": {
+            "activeDurationMs": null,
+            "agentsUsed": null,
+            "modelTurns": null,
+            "usage": null,
+            "usageComplete": false,
+            "usageIncompleteReason": null,
+            "wallDurationMs": null
+          }
+        },
+        "status": {
+          "$ref": "#/definitions/WorkflowPhaseStatus"
+        },
+        "stepsCompleted": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "stepsDiscovered": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "default": null,
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "stepsCompleted",
+        "stepsDiscovered",
+        "title"
+      ],
+      "type": "object"
+    },
+    "WorkflowPhaseStatus": {
+      "enum": [
+        "pending",
+        "active",
+        "completed",
+        "skipped",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "WorkflowResult": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "absent"
+              ],
+              "title": "AbsentWorkflowResultType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "AbsentWorkflowResult",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "value"
+              ],
+              "title": "ValueWorkflowResultType",
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "title": "ValueWorkflowResult",
+          "type": "object"
+        }
+      ]
+    },
+    "WorkflowRun": {
+      "properties": {
+        "acceptedStarts": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executionId": {
+          "default": "",
+          "type": "string"
+        },
+        "formatVersion": {
+          "default": 1,
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "input": true,
+        "limits": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkflowRunLimits"
+            }
+          ],
+          "default": {
+            "maxAgents": 32,
+            "maxTokens": null
+          }
+        },
+        "logs": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/WorkflowLog"
+          },
+          "type": "array"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WorkflowMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "metrics": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkflowMetrics"
+            }
+          ],
+          "default": {
+            "activeDurationMs": null,
+            "agentsUsed": null,
+            "modelTurns": null,
+            "usage": null,
+            "usageComplete": false,
+            "usageIncompleteReason": null,
+            "wallDurationMs": null
+          }
+        },
+        "ownerThreadId": {
+          "type": "string"
+        },
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "phaseProgress": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/WorkflowPhaseProgress"
+          },
+          "type": "array"
+        },
+        "phases": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "projectRoot": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LegacyAppPathString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "readOnly": {
+          "default": true,
+          "type": "boolean"
+        },
+        "result": true,
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/WorkflowStatus"
+        },
+        "steps": {
+          "additionalProperties": {
+            "$ref": "#/definitions/WorkflowStep"
+          },
+          "type": "object"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "createdAt",
+        "id",
+        "input",
+        "ownerThreadId",
+        "phases",
+        "source",
+        "status",
+        "steps",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "WorkflowRunLimits": {
+      "properties": {
+        "maxAgents": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "maxTokens": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "maxAgents"
+      ],
+      "type": "object"
+    },
+    "WorkflowStatus": {
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "stopped",
+        "interrupted"
+      ],
+      "type": "string"
+    },
+    "WorkflowStep": {
+      "properties": {
+        "attempts": {
+          "items": {
+            "$ref": "#/definitions/WorkflowAttempt"
+          },
+          "type": "array"
+        },
+        "completedAt": {
+          "default": null,
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "controlOutcome": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WorkflowStepControlOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "disposition": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkflowStepDisposition"
+            }
+          ],
+          "default": "native"
+        },
+        "effectiveOptions": {
+          "default": null
+        },
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "default": "",
+          "type": "string"
+        },
+        "logicalId": {
+          "default": "",
+          "type": "string"
+        },
+        "metrics": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkflowMetrics"
+            }
+          ],
+          "default": {
+            "activeDurationMs": null,
+            "agentsUsed": null,
+            "modelTurns": null,
+            "usage": null,
+            "usageComplete": false,
+            "usageIncompleteReason": null,
+            "wallDurationMs": null
+          }
+        },
+        "options": true,
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result": true,
+        "scope": {
+          "default": "",
+          "type": "string"
+        },
+        "updatedAt": {
+          "default": null,
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "attempts",
+        "id",
+        "options"
+      ],
+      "type": "object"
+    },
+    "WorkflowStepControlOutcome": {
+      "properties": {
+        "commandId": {
+          "type": "string"
+        },
+        "replacement": {
+          "$ref": "#/definitions/WorkflowResult"
+        },
+        "revisionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "commandId",
+        "replacement",
+        "revisionId"
+      ],
+      "type": "object"
+    },
+    "WorkflowStepDisposition": {
+      "enum": [
+        "native",
+        "skipped"
+      ],
+      "type": "string"
+    },
+    "WorkflowTokenUsage": {
+      "properties": {
+        "cachedInputTokens": {
+          "description": "Included in inputTokens; it must not be added to input a second time.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "inputTokens": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "outputTokens": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "totalTokens": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cachedInputTokens",
+        "inputTokens",
+        "outputTokens",
+        "totalTokens"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "threadId": {
+      "type": "string"
+    },
+    "workflow": {
+      "$ref": "#/definitions/WorkflowRun"
+    }
+  },
+  "required": [
+    "threadId",
+    "workflow"
+  ],
+  "title": "WorkflowUpdatedNotification",
+  "type": "object"
+}

@@ -2,6 +2,7 @@ mod compact;
 mod lifecycle;
 mod regular;
 mod review;
+mod targeted_abort;
 mod user_shell;
 
 use std::sync::Arc;
@@ -638,50 +639,6 @@ impl Session {
             self.maybe_start_turn_for_pending_work().await;
         }
         self.refresh_execution_activity().await;
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "serialize wake invalidation and active-turn removal with turn admission"
-    )]
-    pub(crate) async fn abort_turn_if_active(
-        self: &Arc<Self>,
-        turn_id: &str,
-        reason: TurnAbortReason,
-        error: Option<ErrorEvent>,
-    ) -> bool {
-        let _turn_start_guard = self.turn_start_lock.lock().await;
-        let active_turn = {
-            let mut active = self.active_turn.lock().await;
-            if active
-                .as_ref()
-                .and_then(|active_turn| active_turn.task.as_ref())
-                .is_some_and(|task| task.turn_context.sub_id == turn_id)
-            {
-                if matches!(
-                    reason,
-                    TurnAbortReason::Interrupted | TurnAbortReason::BudgetLimited
-                ) {
-                    self.mark_interrupted();
-                    let generation = self
-                        .wake_generation
-                        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-                        + 1;
-                    self.wake_tracker.invalidate_commands(generation);
-                    self.discard_interrupted_execution_input(generation).await;
-                }
-                active.take()
-            } else {
-                None
-            }
-        };
-        let Some(active_turn) = active_turn else {
-            return false;
-        };
-        drop(_turn_start_guard);
-
-        self.finish_turn_abort(active_turn, reason, error).await;
-        true
     }
 
     pub(crate) async fn finish_turn_abort(

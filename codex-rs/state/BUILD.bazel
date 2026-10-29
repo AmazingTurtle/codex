@@ -1,15 +1,18 @@
 load("//:defs.bzl", "codex_rust_crate")
 
+_MIGRATION_DATA = glob([
+    "goals_migrations/**",
+    "logs_migrations/**",
+    "memory_migrations/**",
+    "migrations/**",
+    "queue_migrations/**",
+    "thread_history_migrations/**",
+])
+
 codex_rust_crate(
     name = "state",
-    compile_data = glob([
-        "goals_migrations/**",
-        "logs_migrations/**",
-        "memory_migrations/**",
-        "migrations/**",
-        "queue_migrations/**",
-        "thread_history_migrations/**",
-    ]),
+    build_script_data = _MIGRATION_DATA,
+    compile_data = _MIGRATION_DATA,
     crate_name = "codex_state",
     test_shard_counts = {
         # Windows runs database-heavy Rust tests serially within each shard.

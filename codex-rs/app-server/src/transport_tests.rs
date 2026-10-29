@@ -32,6 +32,194 @@ fn app_server_notification(notification: ServerNotification) -> OutgoingMessage 
 }
 
 #[tokio::test]
+async fn workflow_final_presentation_requires_experimental_negotiation() {
+    use codex_app_server_protocol::ThreadItem;
+    use codex_app_server_protocol::ThreadItemsListResponse;
+    let response:ThreadItemsListResponse=serde_json::from_value(json!({
+        "data":[{"turnId":"owned","item":{"type":"agentMessage","id":"final","text":"{\"done\":true}","workflow":{
+            "runId":"run","executionId":"execution","attemptId":"attempt","childThreadId":"child","turnId":"owned","itemId":"final","format":"json"
+        }}},{"turnId":"owned","item":{"type":"dynamicToolCall","id":"tool","namespace":null,"tool":"retained","arguments":{"workflow":"USER_VALUE","nested":{"type":"agentMessage","workflow":"ALSO_USER_VALUE"}},"status":"completed","contentItems":null,"success":true,"durationMs":1}}],"nextCursor":null,"backwardsCursor":null,
+    })).unwrap();
+    for proven in [false, true] {
+        let mut response = response.clone();
+        if !proven && let ThreadItem::AgentMessage { workflow, .. } = &mut response.data[0].item {
+            *workflow = None;
+        }
+        for experimental in [false, true] {
+            let connection_id = ConnectionId(7);
+            let (tx, mut rx) = mpsc::channel(1);
+            let mut connections = HashMap::from([(
+                connection_id,
+                OutboundConnectionState::new(
+                    tx,
+                    Arc::new(AtomicBool::new(true)),
+                    Arc::new(AtomicBool::new(experimental)),
+                    Arc::new(RwLock::new(HashSet::new())),
+                    /*disconnect_sender*/ None,
+                ),
+            )]);
+            route_outgoing_envelope(
+                &mut connections,
+                OutgoingEnvelope::ToConnection {
+                    connection_id,
+                    message: OutgoingMessage::Response(crate::outgoing_message::OutgoingResponse {
+                        id: RequestId::Integer(1),
+                        result: Box::new(response.clone().into()),
+                    }),
+                    write_complete_tx: None,
+                },
+            )
+            .await;
+            let delivered = serde_json::to_value(rx.recv().await.unwrap().message).unwrap();
+            let mut expected = serde_json::to_value(&response).unwrap();
+            if !experimental {
+                expected["data"][0]["item"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("workflow");
+            }
+            assert_eq!(
+                delivered,
+                json!({"id":1,"result":expected}),
+                "raw serialization changes only the experimental native item field"
+            );
+            if !experimental {
+                assert!(
+                    delivered["result"]["data"][0]["item"]
+                        .get("workflow")
+                        .is_none()
+                );
+            }
+        }
+    }
+
+    // Exercise clearing beyond the first match within a turn and across turns.
+    // The raw serializer also omits fields, so inspect the original typed view:
+    // in-process consumers must not retain a later experimental proof either.
+    let first = serde_json::to_value(&response.data[0].item).unwrap();
+    let mut second = first.clone();
+    second["id"] = json!("second-final");
+    second["workflow"]["itemId"] = json!("second-final");
+    let mut later = first.clone();
+    later["id"] = json!("later-final");
+    later["workflow"]["itemId"] = json!("later-final");
+    later["workflow"]["turnId"] = json!("later-owned");
+    let turns: codex_app_server_protocol::ThreadTurnsListResponse = serde_json::from_value(json!({
+        "data":[
+            {"id":"owned","status":"completed","items":[first,response.data[1].item,second]},
+            {"id":"later-owned","status":"completed","items":[later]}
+        ],"nextCursor":null,"backwardsCursor":null,
+    }))
+    .unwrap();
+    let item_paths = ["/data/0/items/0", "/data/0/items/2", "/data/1/items/0"];
+    for experimental in [false, true] {
+        let connection = ConnectionId(7);
+        let (tx, mut rx) = mpsc::channel(1);
+        let mut connections = HashMap::from([(
+            connection,
+            OutboundConnectionState::new(
+                tx,
+                Arc::new(AtomicBool::new(true)),
+                Arc::new(AtomicBool::new(experimental)),
+                Arc::new(RwLock::new(HashSet::new())),
+                /*disconnect_sender*/ None,
+            ),
+        )]);
+        route_outgoing_envelope(
+            &mut connections,
+            OutgoingEnvelope::ToConnection {
+                connection_id: connection,
+                message: OutgoingMessage::Response(crate::outgoing_message::OutgoingResponse {
+                    id: RequestId::Integer(2),
+                    result: Box::new(turns.clone().into()),
+                }),
+                write_complete_tx: None,
+            },
+        )
+        .await;
+        let delivered = rx.recv().await.unwrap().message;
+        let mut expected = serde_json::to_value(&turns).unwrap();
+        if !experimental {
+            for path in item_paths {
+                expected.pointer_mut(path).unwrap()["workflow"] = serde_json::Value::Null;
+            }
+        }
+        let typed = serde_json::to_value(delivered.clone().into_original()).unwrap();
+        assert_eq!(
+            typed["result"], expected,
+            "clearing must visit every typed item and turn; short-circuiting any() leaves later proofs intact"
+        );
+        if !experimental {
+            for path in item_paths {
+                expected
+                    .pointer_mut(path)
+                    .unwrap()
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("workflow");
+            }
+        }
+        assert_eq!(
+            serde_json::to_value(delivered).unwrap(),
+            json!({"id":2,"result":expected})
+        );
+    }
+}
+
+#[tokio::test]
+async fn stable_history_notifications_preserve_opt_out_and_envelope_metadata() {
+    let notice:ServerNotification=serde_json::from_value(json!({"method":"item/completed","params":{
+        "threadId":"child","turnId":"owned","completedAtMs":1200,
+        "item":{"type":"agentMessage","id":"final","text":"Native text unchanged","workflow":null}
+    }})).unwrap();
+    for opted_out in [false, true] {
+        let connection = ConnectionId(9);
+        let (tx, mut rx) = mpsc::channel(1);
+        let methods = if opted_out {
+            HashSet::from(["item/completed".to_owned()])
+        } else {
+            HashSet::new()
+        };
+        let mut connections = HashMap::from([(
+            connection,
+            OutboundConnectionState::new(
+                tx,
+                Arc::new(AtomicBool::new(true)),
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(RwLock::new(methods)),
+                /*disconnect_sender*/ None,
+            ),
+        )]);
+        route_outgoing_envelope(
+            &mut connections,
+            OutgoingEnvelope::ToConnection {
+                connection_id: connection,
+                message: app_server_notification(notice.clone()),
+                write_complete_tx: None,
+            },
+        )
+        .await;
+        if opted_out {
+            assert!(
+                rx.try_recv().is_err(),
+                "projection must not hide the original notification method from opt-out filtering"
+            );
+        } else {
+            let wire = serde_json::to_value(rx.recv().await.unwrap().message).unwrap();
+            let mut expected =
+                serde_json::to_value(app_server_notification(notice.clone())).unwrap();
+            expected["params"]["item"]
+                .as_object_mut()
+                .unwrap()
+                .remove("workflow");
+            assert_eq!(wire, expected);
+            assert_eq!(wire["emittedAtMs"], 1234);
+            assert!(wire["params"]["item"].get("workflow").is_none());
+        }
+    }
+}
+
+#[tokio::test]
 async fn to_connection_notification_respects_opt_out_filters() {
     let connection_id = ConnectionId(7);
     let (writer_tx, mut writer_rx) = mpsc::channel(1);

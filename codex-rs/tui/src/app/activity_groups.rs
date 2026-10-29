@@ -8,6 +8,62 @@ use crate::thread_transcript::join_computer_groups;
 use crate::thread_transcript::join_exploration_groups;
 
 impl App {
+    pub(super) fn join_older_workflow_group(
+        &mut self,
+        boundary: usize,
+        entries: &[codex_app_server_protocol::ThreadTimelineEntry],
+    ) {
+        let Some(start) = boundary.checked_sub(1) else {
+            return;
+        };
+        let Some(mut group) = self
+            .transcript_cells
+            .get(start)
+            .and_then(|cell| {
+                cell.as_any()
+                    .downcast_ref::<history_cell::WorkflowLifecycleHistoryCell>()
+            })
+            .cloned()
+        else {
+            return;
+        };
+        if boundary == self.transcript_cells.len() {
+            let Some((previous, hydrated)) = self
+                .chat_widget
+                .prepend_active_workflow_history(self.transcript_cells[start].as_ref(), entries)
+            else {
+                return;
+            };
+            self.transcript_view
+                .absorb_tail_into_live(&self.transcript_cells, previous, hydrated);
+            if let Some(Overlay::Transcript(overlay)) = self.overlay.as_mut() {
+                overlay.absorb_tail_into_live(previous, hydrated);
+            }
+            self.transcript_cells.pop();
+            self.native_history.retain(&self.transcript_cells);
+            return;
+        }
+        let Some(newer) = self.transcript_cells.get(boundary).and_then(|cell| {
+            cell.as_any()
+                .downcast_ref::<history_cell::WorkflowLifecycleHistoryCell>()
+        }) else {
+            return;
+        };
+        if !group.append_from_timeline(newer, entries) {
+            return;
+        }
+        let group: Arc<dyn HistoryCell> = Arc::new(group);
+        let range = start..boundary + 1;
+        self.native_history
+            .consolidate(&self.transcript_cells[range.clone()], &group);
+        self.transcript_view
+            .replace_group(&self.transcript_cells, range.clone(), &group);
+        if let Some(Overlay::Transcript(overlay)) = self.overlay.as_mut() {
+            overlay.regroup_cells(range.clone(), Arc::clone(&group));
+        }
+        self.transcript_cells.splice(range, [group]);
+    }
+
     pub(super) fn join_older_activity_group(&mut self, boundary: usize, turns: &[Turn]) {
         let Some(start) = self.transcript_cells[..boundary]
             .iter()

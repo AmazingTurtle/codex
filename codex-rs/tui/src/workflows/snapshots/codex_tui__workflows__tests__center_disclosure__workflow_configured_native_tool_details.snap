@@ -1,0 +1,34 @@
+---
+source: tui/src/workflows/center_disclosure_tests.rs
+expression: expanded
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt         │  1 Overview   2 Transcript   3 Source
+  Current conversation              │ $ python audit.py
+    Review changes · Running        │ tool output line 1
+  ›   review · Running              │ tool output line 2
+                                    │ tool output line 3
+                                    │ tool output line 4
+                                    │ tool output line 5
+                                    │ tool output line 6
+                                    │ tool output line 7
+                                    │ tool output line 8
+                                    │ tool output line 9
+                                    │ tool output line 10
+                                    │ tool output line 11
+                                    │ tool output line 12
+                                    │ ✓ • 24ms
+                                    │     − Show less
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+  Esc close · ↑/↓ select · Enter chat · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · f8 tools · Space Actions · ? help

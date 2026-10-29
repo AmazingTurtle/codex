@@ -1,0 +1,32 @@
+---
+source: tui/src/workflows/center_metrics_tests.rs
+expression: screen
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 0   Completed 1   Inactive 0                                                                                                                                                                                                                                           Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt                 Model             Reasoning  Status       Updated   │  1 Overview   2 Transcript   3 Source
+  Current conversation                                                                          │ Review
+    audit                                                                Completed    now       │ Status: Completed
+  ›   Review                                                             Completed    3m ago    │ Steps: 1/1 completed
+        Independent audit                   gpt-6.1-sol       high       Completed    2m ago    │ Tokens: 221.564 in, 380.804 out (10 model turns across 4 agents)
+                                                                                                │
+                                                                                                │ Step                                          Model               Reasoning   Prompt                                                                                                                             Status
+                                                                                                │ Independent audit                             gpt-6.1-sol         high        Check the migration plan                                                                                                           Completed
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+  Esc close · ↑/↓ select · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

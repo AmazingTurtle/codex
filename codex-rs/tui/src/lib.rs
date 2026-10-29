@@ -223,6 +223,7 @@ mod startup_recovery;
 mod status;
 mod status_indicator_widget;
 mod streaming;
+mod structured_value;
 mod style;
 mod subscription;
 mod system_motion;
@@ -266,6 +267,7 @@ mod version;
 mod vim_search;
 mod width;
 mod windows_sandbox;
+mod workflows;
 mod workspace_command;
 mod workspace_messages;
 
@@ -735,6 +737,7 @@ where
         .collect();
     let client = start_client(InProcessClientStartArgs {
         arg0_paths,
+        code_mode_session_provider: None,
         config: Arc::new(config),
         cli_overrides: cli_kv_overrides,
         loader_overrides,

@@ -1910,6 +1910,11 @@ pub struct ThreadTimelineListParams {
 )]
 #[ts(tag = "type", rename_all = "camelCase", export_to = "v2/")]
 pub enum ThreadTimelineEntry {
+    Workflow {
+        #[ts(type = "number")]
+        position: u64,
+        event: Box<super::WorkflowLifecycleEvent>,
+    },
     Item {
         #[ts(type = "number")]
         position: u64,

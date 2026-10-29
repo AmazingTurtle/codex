@@ -1,0 +1,16 @@
+---
+source: tui/src/workflows/actions/actions_tests.rs
+expression: screen
+---
+
+  Skip step
+  Use null to skip without a result, or provide the replacement JSON value
+  Enter JSON: trailing characters at line 1 column 6
+
+› null trailing
+
+
+
+
+
+  enter submit · esc back

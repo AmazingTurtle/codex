@@ -209,6 +209,7 @@ pub(crate) mod agents_overview_discovery;
 mod agents_overview_threads;
 mod agents_overview_usage;
 mod agents_overview_view;
+mod workflows;
 pub(crate) use agents_overview::AGENTS_OVERVIEW_VIEW_ID;
 mod activity_groups;
 mod app_server_event_targets;
@@ -279,6 +280,7 @@ mod thread_goal_actions;
 mod thread_routing;
 mod thread_session_state;
 mod thread_settings;
+mod thread_timeline_cache;
 mod thread_title;
 mod transcript_export;
 mod tui_mode_picker;
@@ -642,6 +644,7 @@ pub(crate) struct App {
     thread_event_listener_tasks: HashMap<ThreadId, JoinHandle<()>>,
     agent_navigation: AgentNavigationState,
     agents_overview: agents_overview::AgentsOverviewState,
+    workflows: crate::workflows::SharedWorkflows,
     side_threads: HashMap<ThreadId, SideThreadState>,
     abandoned_side_threads: HashSet<ThreadId>,
     active_thread_id: Option<ThreadId>,
@@ -996,6 +999,14 @@ impl App {
                     })
                 && app.keymap.chat.toggle_voice.is_pressed(key)
         };
+        if self.overlay.is_none()
+            && !self.transcript_view.has_active_interaction()
+            && !self.backtrack.overlay_preview_active
+            && let TuiEvent::Key(key) = &event
+            && self.chat_widget.handle_workflow_navigation(*key)
+        {
+            return Ok(AppRunControl::Continue);
+        }
         // Find consumes otherwise-unhandled keys; let enabled voice controls reach App.
         if !matches!(&event, TuiEvent::Key(key)
             if voice_toggle(self, *key) && !self.transcript_view.owns_interaction_key(*key))
@@ -1232,6 +1243,22 @@ impl App {
     }
 
     fn render_chat_widget_frame(&mut self, tui: &mut tui::Tui, screen_size: Size) -> Result<Rect> {
+        self.sync_workflow_presentation();
+        {
+            let state = self
+                .workflows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if state
+                .rows
+                .iter()
+                .any(|row| matches!(row.status.as_str(), "Running" | "Pending"))
+                || self.chat_widget.active_view_is(crate::workflows::CENTER_ID)
+            {
+                tui.frame_requester()
+                    .schedule_frame_in(Duration::from_secs(1));
+            }
+        }
         self.chat_widget
             .set_sparkle_terminal_focus(tui.is_terminal_focused());
         if tui.is_owned_screen() {
@@ -1245,7 +1272,11 @@ impl App {
         let dashboard_visible = self
             .chat_widget
             .selected_index_for_present_view(AGENTS_OVERVIEW_VIEW_ID)
-            .is_some();
+            .is_some()
+            || self.chat_widget.active_view_is(crate::workflows::CENTER_ID)
+            || self
+                .chat_widget
+                .active_view_is(crate::workflows::actions::INSPECTION_ID);
         let dashboard_was_visible = std::mem::replace(
             &mut self.agents_overview.rendered_full_screen,
             dashboard_visible,

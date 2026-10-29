@@ -485,7 +485,11 @@ pub(crate) async fn run_turn(
     // 1. At the start of a turn, so the fresh turn input in `input` gets sampled first.
     // 2. After auto-compact, while a model/tool continuation is pending.
 
-    let mut next_step_context = Some(first_step_context);
+    let mut next_step_context = if sess.services.workflows.activated(&turn_context.sub_id) {
+        None
+    } else {
+        Some(first_step_context)
+    };
     let mut guardian_budget_compacted = false;
     loop {
         sess.wait_until_running(&cancellation_token).await?;
@@ -1019,6 +1023,7 @@ pub(crate) async fn run_hooks_and_record_inputs(
                 input_persist_context,
             )
             .await;
+            crate::workflows::activate_turn(sess, turn_context, std::slice::from_ref(input_item));
         }
     }
     if let Err(error) = sess.acknowledge_recorded_input(input).await {
@@ -2291,6 +2296,7 @@ pub(super) fn realtime_text_for_event(msg: &EventMsg) -> Option<RealtimeEventTex
         | EventMsg::EnvironmentDisconnected(_)
         | EventMsg::ThreadGoalUpdated(_)
         | EventMsg::ThreadQueueChanged(_)
+        | EventMsg::WorkflowLifecycle(_)
         | EventMsg::McpStartupUpdate(_)
         | EventMsg::McpStartupComplete(_)
         | EventMsg::McpToolCallBegin(_)

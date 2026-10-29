@@ -1061,6 +1061,7 @@ async fn sessions_enforce_independent_yield_limits() -> Result<()> {
     let provider = GrpcCodeModeSessionProvider::new(host.endpoint);
     let limited = provider
         .create_session_with_limits(CodeModeSessionCellExecutionLimits {
+            profile: Default::default(),
             max_yield_time_ms: Some(/*value*/ 1),
             max_heap_size_bytes: Some(/*value*/ 16 * 1024 * 1024),
         })
@@ -1068,6 +1069,7 @@ async fn sessions_enforce_independent_yield_limits() -> Result<()> {
         .map_err(anyhow::Error::msg)?;
     let other = provider
         .create_session_with_limits(CodeModeSessionCellExecutionLimits {
+            profile: Default::default(),
             max_yield_time_ms: Some(/*value*/ 1_000),
             max_heap_size_bytes: None,
         })

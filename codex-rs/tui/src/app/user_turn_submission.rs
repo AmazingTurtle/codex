@@ -90,6 +90,16 @@ pub(super) async fn try_submit_user_turn(
             }
         }
     }
+    if app_server.preserves_child_turn_settings(thread_id) {
+        app_server
+            .child_human_turn_start(thread_id, client_user_message_id.clone(), items.to_vec())
+            .await?;
+        if app.active_thread_id == Some(thread_id) && app.chat_widget.thread_id() == Some(thread_id)
+        {
+            crate::startup_recovery::acknowledged(client_user_message_id);
+        }
+        return Ok(true);
+    }
     let eligible_account = app.chat_widget.daybreak_account_eligible();
     let enabled = app.chat_widget.daybreak_enabled
         && !app.chat_widget.side_conversation_active()

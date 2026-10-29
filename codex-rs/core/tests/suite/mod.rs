@@ -99,6 +99,22 @@ mod guardian_authorization_refresh;
 mod guardian_cached_score;
 #[path = "guardian_checkpoint_migration_tests.rs"]
 mod guardian_checkpoint_migration;
+#[path = "workflow_control_tools.rs"]
+mod workflow_control_tools;
+mod workflow_conversation;
+mod workflow_lifecycle;
+mod workflow_notice_ids;
+mod workflow_observation;
+#[path = "workflow_revision.rs"]
+mod workflow_revision;
+#[path = "workflow_revision_policy.rs"]
+mod workflow_revision_policy;
+#[path = "workflow_targeted_interrupt.rs"]
+mod workflow_targeted_interrupt;
+#[path = "workflow_task_transport.rs"]
+mod workflow_task_transport;
+mod workflow_v2;
+mod workflows;
 // Uses the same command-approval harness as guardian_review below.
 mod canonical_plugin_connectors;
 mod gateway_auth;

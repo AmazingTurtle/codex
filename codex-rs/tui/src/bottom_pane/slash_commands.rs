@@ -21,6 +21,7 @@ pub(crate) struct ServiceTierCommand {
 pub(crate) enum SlashCommandItem {
     Builtin(SlashCommand),
     ServiceTier(ServiceTierCommand),
+    Workflow(crate::workflows::saved_commands::SavedCommand),
 }
 
 impl SlashCommandItem {
@@ -28,6 +29,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.command(),
             Self::ServiceTier(command) => &command.name,
+            Self::Workflow(command) => &command.name,
         }
     }
 
@@ -35,6 +37,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.supports_inline_args(),
             Self::ServiceTier(_) => false,
+            Self::Workflow(_) => true,
         }
     }
 
@@ -42,6 +45,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.available_in_side_conversation(),
             Self::ServiceTier(_) => false,
+            Self::Workflow(_) => SlashCommand::Workflows.available_in_side_conversation(),
         }
     }
 
@@ -49,6 +53,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.available_during_task(),
             Self::ServiceTier(_) => true,
+            Self::Workflow(_) => true,
         }
     }
 }
@@ -62,6 +67,9 @@ pub(crate) struct BuiltinCommandFlags {
     pub(crate) service_tier_commands_enabled: bool,
     pub(crate) daybreak_command_description: Option<&'static str>,
     pub(crate) goal_command_enabled: bool,
+    /// Visibility only: direct command parsing must still produce a host no-op response.
+    pub(crate) pause_command_visible: bool,
+    pub(crate) unpause_command_visible: bool,
     pub(crate) voice_command_enabled: bool,
     pub(crate) worktrees_enabled: bool,
     pub(crate) allow_elevate_sandbox: bool,
@@ -186,6 +194,8 @@ mod tests {
             service_tier_commands_enabled: true,
             daybreak_command_description: Some(""),
             goal_command_enabled: true,
+            pause_command_visible: true,
+            unpause_command_visible: true,
             voice_command_enabled: true,
             worktrees_enabled: true,
             allow_elevate_sandbox: true,
@@ -340,6 +350,9 @@ mod tests {
             vec![
                 SlashCommand::Ide,
                 SlashCommand::Agents,
+                SlashCommand::Workflows,
+                SlashCommand::Pause,
+                SlashCommand::Unpause,
                 SlashCommand::Copy,
                 SlashCommand::Export,
                 SlashCommand::Raw,

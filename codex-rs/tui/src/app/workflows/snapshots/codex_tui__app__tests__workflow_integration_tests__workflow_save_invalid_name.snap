@@ -1,0 +1,12 @@
+---
+source: tui/src/app/workflows/workflow_integration_tests.rs
+assertion_line: 188
+expression: "render_bottom_popup(&app.chat_widget, 96)"
+---
+  Save workflow
+  1–80 letters, digits, hyphens or underscores
+  Use 1–80 letters, digits, hyphens or underscores
+
+› bad name
+
+  enter save · esc back

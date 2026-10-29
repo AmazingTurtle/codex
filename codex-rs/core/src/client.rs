@@ -1062,7 +1062,10 @@ impl ModelClient {
         responses_metadata: &CodexResponsesMetadata,
         include_internal: bool,
     ) -> Result<ResponsesApiRequest> {
-        let mut input = prompt.get_formatted_input_for_request(model_info);
+        let mut input = crate::workflows::project_workflow_task_input(
+            prompt.get_formatted_input_for_request(model_info),
+        )
+        .map_err(CodexErr::InvalidRequest)?;
         if !self.reasoning_effort_override_enabled(model_info) {
             // Unsupported models and disabled overrides must also accept saved history.
             // Filter only the request copy; persisted history remains unchanged.
@@ -1208,6 +1211,19 @@ impl ModelClient {
 
     fn prepare_response_items_for_request(&self, input: &mut [ResponseItem]) {
         for item in input {
+            if let ResponseItem::Message { id: Some(id), .. } = item
+                && let Some(suffix) = id.strip_prefix("amsg_")
+                && let Ok(identity) = Uuid::parse_str(suffix)
+            {
+                // Early workflow continuations used the AgentMessage prefix.
+                // Repair only this request copy; persisted IDs remain receipt keys.
+                *id = ResponseItemId::with_suffix("msg", identity);
+            }
+            if let ResponseItem::AgentMessage { id: Some(id), .. } = item
+                && let Some(alias) = crate::workflows::legacy_notice_id_for_request(id)
+            {
+                *id = alias;
+            }
             if item.id().is_some_and(|id| !id.is_prefixed()) {
                 item.set_id(/*new_id*/ None);
             }

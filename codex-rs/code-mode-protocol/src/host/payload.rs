@@ -7,6 +7,7 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 use crate::CellId;
+use crate::CodeModeCellExecutionProfile;
 use crate::CodeModeNestedToolCall;
 use crate::CodeModeSessionCellExecutionLimits;
 use crate::CodeModeToolKind;
@@ -27,6 +28,11 @@ pub struct WireSessionCellExecutionLimits {
     pub max_yield_time_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_heap_size_bytes: Option<u64>,
+    #[serde(
+        default,
+        skip_serializing_if = "CodeModeCellExecutionProfile::is_general"
+    )]
+    pub profile: CodeModeCellExecutionProfile,
 }
 
 impl TryFrom<CodeModeSessionCellExecutionLimits> for WireSessionCellExecutionLimits {
@@ -35,6 +41,7 @@ impl TryFrom<CodeModeSessionCellExecutionLimits> for WireSessionCellExecutionLim
     fn try_from(value: CodeModeSessionCellExecutionLimits) -> Result<Self, Self::Error> {
         Ok(Self {
             max_yield_time_ms: value.max_yield_time_ms,
+            profile: value.profile,
             max_heap_size_bytes: value.max_heap_size_bytes.map(u64::try_from).transpose()?,
         })
     }
@@ -46,6 +53,7 @@ impl TryFrom<WireSessionCellExecutionLimits> for CodeModeSessionCellExecutionLim
     fn try_from(value: WireSessionCellExecutionLimits) -> Result<Self, Self::Error> {
         Ok(Self {
             max_yield_time_ms: value.max_yield_time_ms,
+            profile: value.profile,
             max_heap_size_bytes: value.max_heap_size_bytes.map(usize::try_from).transpose()?,
         })
     }

@@ -51,6 +51,7 @@ use crate::request_processors::ThreadRequestProcessor;
 use crate::request_processors::ThreadResumeTarget;
 use crate::request_processors::TurnRequestProcessor;
 use crate::request_processors::WindowsSandboxRequestProcessor;
+use crate::request_processors::WorkflowRequestProcessor;
 use crate::request_processors::read_server_diagnostics;
 use crate::request_serialization::QueuedInitializedRequest;
 use crate::request_serialization::RequestSerializationQueueKey;
@@ -173,6 +174,7 @@ pub(crate) struct MessageProcessor {
     thread_processor: ThreadRequestProcessor,
     turn_processor: TurnRequestProcessor,
     windows_sandbox_processor: WindowsSandboxRequestProcessor,
+    workflow_processor: WorkflowRequestProcessor,
     request_serialization_queues: RequestSerializationQueues,
 }
 
@@ -547,6 +549,7 @@ impl MessageProcessor {
         let turn_processor = TurnRequestProcessor::new(
             auth_manager,
             Arc::clone(&thread_manager),
+            Arc::clone(&thread_store),
             outgoing.clone(),
             analytics_events_client.clone(),
             Arc::clone(&config),
@@ -593,6 +596,12 @@ impl MessageProcessor {
             EnvironmentRequestProcessor::new(thread_manager.environment_manager());
         let execution_control_processor =
             ExecutionControlRequestProcessor::new(Arc::clone(&thread_manager));
+        let workflow_processor = WorkflowRequestProcessor::new(
+            Arc::clone(&thread_manager),
+            Arc::clone(&thread_store),
+            Arc::clone(&config),
+            &thread_processor,
+        );
         let fs_processor = FsRequestProcessor::new(
             Arc::clone(&environment_manager_for_requests),
             FsWatchManager::new(outgoing.clone()),
@@ -634,6 +643,7 @@ impl MessageProcessor {
             thread_processor,
             turn_processor,
             windows_sandbox_processor,
+            workflow_processor,
             request_serialization_queues,
         }
     }
@@ -1300,6 +1310,101 @@ impl MessageProcessor {
             ClientRequest::ModelProviderCapabilitiesRead { .. } => self
                 .config_processor
                 .model_provider_capabilities_read()
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowResultDisplay { params, .. } => self
+                .workflow_processor
+                .result_display(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowControl { params, .. } => self
+                .workflow_processor
+                .control(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowControlList { params, .. } => self
+                .workflow_processor
+                .control_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRevisionStage { params, .. } => self
+                .workflow_processor
+                .revision_stage(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRevisionApply { params, .. } => self
+                .workflow_processor
+                .revision_apply(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRevisionResume { params, .. } => self
+                .workflow_processor
+                .revision_resume(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRevisionList { params, .. } => self
+                .workflow_processor
+                .revision_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowExecutionRead { params, .. } => self
+                .workflow_processor
+                .execution_read(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowStart { params, .. } => self
+                .workflow_processor
+                .start(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowList { params, .. } => self
+                .workflow_processor
+                .list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRead { params, .. } => self
+                .workflow_processor
+                .read(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowTranscriptList { params, .. } => self
+                .workflow_processor
+                .transcript_list(connection_id, params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowStop { params, .. } => self
+                .workflow_processor
+                .stop(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRetry { params, .. } => self
+                .workflow_processor
+                .retry(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRecover { params, .. } => self
+                .workflow_processor
+                .recover(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowSave { params, .. } => self
+                .workflow_processor
+                .save(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowSavedList { params, .. } => self
+                .workflow_processor
+                .saved_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowSavedRead { params, .. } => self
+                .workflow_processor
+                .saved_read(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowSavedDelete { params, .. } => self
+                .workflow_processor
+                .saved_delete(params)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::ThreadPause { params, .. } => self

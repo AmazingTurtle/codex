@@ -7,6 +7,9 @@ use crate::legacy_core::config::ConfigBuilder;
 use app_test_support::create_fake_paginated_rollout;
 use app_test_support::create_fake_rollout;
 use codex_app_server_protocol::ThreadHistoryMode;
+use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadTimelineEntry;
+use codex_app_server_protocol::UserInput;
 use codex_features::Feature;
 use codex_protocol::ThreadId;
 use color_eyre::eyre::Result;
@@ -20,6 +23,33 @@ async fn build_config(temp_dir: &TempDir) -> Config {
         .build()
         .await
         .expect("config should build")
+}
+
+fn assert_cached_canonical_history(
+    server: &super::super::AppServerSession,
+    thread_id: ThreadId,
+    history_mode: ThreadHistoryMode,
+    expected_text: &str,
+) {
+    // This accessor reads already-hydrated state; it cannot make the request
+    // whose exact count the resume tests are checking.
+    let entries = server
+        .timeline_entries(thread_id)
+        .expect("resume hydrated canonical history");
+    assert!(
+        entries.iter().any(|entry| matches!(entry,
+        ThreadTimelineEntry::Item { item, .. } if matches!(item.as_ref(),
+            ThreadItem::UserMessage { content, .. } if content.iter().any(|input|
+                matches!(input, UserInput::Text { text, .. } if text == expected_text))))),
+        "the canonical cache must retain the original ordinary conversation"
+    );
+    assert_eq!(
+        server
+            .history_pagination
+            .get(&thread_id)
+            .map(|state| state.history_mode),
+        Some(history_mode)
+    );
 }
 
 #[tokio::test]
@@ -313,8 +343,15 @@ async fn legacy_resume_preserves_history_mode_after_picker_server_replacement() 
         )
         .await?;
 
-    assert_eq!(app_server.next_request_id, next_request_id + 2);
+    // Metadata revalidation, guarded resume, then one canonical timeline request.
+    assert_eq!(app_server.next_request_id, next_request_id + 3);
     assert!(!resumed.turns.is_empty());
+    assert_cached_canonical_history(
+        &app_server,
+        thread_id,
+        ThreadHistoryMode::Legacy,
+        "Saved user message",
+    );
     app_server.shutdown().await?;
     Ok(())
 }
@@ -376,8 +413,15 @@ async fn cached_legacy_resume_revalidates_history_across_migration_settings() ->
             );
             resume.await?
         };
-        assert_eq!(app_server.next_request_id, next_request_id + 2);
+        // The migration guard protects revalidation/resume; canonical hydration is independent.
+        assert_eq!(app_server.next_request_id, next_request_id + 3);
         assert!(!legacy.turns.is_empty());
+        assert_cached_canonical_history(
+            &app_server,
+            legacy_thread_id,
+            ThreadHistoryMode::Legacy,
+            "Saved legacy user message",
+        );
         app_server.shutdown().await?;
     }
     Ok(())
@@ -385,6 +429,14 @@ async fn cached_legacy_resume_revalidates_history_across_migration_settings() ->
 
 #[tokio::test]
 async fn rollout_maintenance_contention_disables_cached_legacy_resume_shortcut() -> Result<()> {
+    use codex_protocol::items::TurnItem;
+    use codex_protocol::items::UserMessageItem;
+    use codex_protocol::protocol::EventMsg;
+    use codex_protocol::protocol::ItemCompletedEvent;
+    use codex_protocol::protocol::TurnCompleteEvent;
+    use codex_protocol::protocol::TurnStartedEvent;
+    use codex_rollout::RolloutItem;
+
     let codex_home = tempfile::tempdir().expect("tempdir");
     let config = build_config(&codex_home).await;
     let thread_id = ThreadId::from_string(
@@ -398,6 +450,52 @@ async fn rollout_maintenance_contention_disables_cached_legacy_resume_shortcut()
         )
         .expect("create paginated rollout"),
     )?;
+    // The minimal helper retains legacy user events with ordinals, but those
+    // have no turn identity for the stateless paginated projector. Add a valid
+    // owned turn so canonical hydration must preserve actual visible history.
+    let path = app_test_support::rollout_path(
+        codex_home.path(),
+        "2025-01-05T12-00-00",
+        &thread_id.to_string(),
+    );
+    let turn_id = "saved-paginated-turn";
+    for item in [
+        RolloutItem::EventMsg(EventMsg::TurnStarted(TurnStartedEvent {
+            turn_attribution: None,
+            turn_id: turn_id.into(),
+            root_turn_id: Some(turn_id.into()),
+            trace_id: None,
+            started_at: Some(1),
+            model_context_window: None,
+            collaboration_mode_kind: Default::default(),
+        })),
+        RolloutItem::EventMsg(EventMsg::ItemCompleted(ItemCompletedEvent {
+            thread_id,
+            turn_id: turn_id.into(),
+            item: TurnItem::UserMessage(UserMessageItem {
+                id: "saved-paginated-message".into(),
+                client_id: None,
+                content: vec![codex_protocol::user_input::UserInput::Text {
+                    text: "Saved paginated user message".into(),
+                    text_elements: Vec::new(),
+                }],
+            }),
+            started_at_ms: Some(1_000),
+            completed_at_ms: 1_001,
+        })),
+        RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
+            root_turn_id: Some(turn_id.into()),
+            turn_id: turn_id.into(),
+            last_agent_message: None,
+            error: None,
+            started_at: Some(1),
+            completed_at: Some(2),
+            duration_ms: Some(1_000),
+            time_to_first_token_ms: None,
+        })),
+    ] {
+        codex_rollout::append_rollout_item_to_path(&path, &item).await?;
+    }
     let mut app_server = crate::start_embedded_app_server_for_picker(&config).await?;
     app_server.remember_thread_history_mode(thread_id, ThreadHistoryMode::Legacy);
     let _maintenance_guard =
@@ -414,7 +512,8 @@ async fn rollout_maintenance_contention_disables_cached_legacy_resume_shortcut()
         )
         .await?;
 
-    assert_eq!(app_server.next_request_id, next_request_id + 3);
+    // Resume, ordinary turn/item pages, and one canonical timeline request.
+    assert_eq!(app_server.next_request_id, next_request_id + 4);
     assert_eq!(resumed.session.thread_id, thread_id);
     assert_eq!(
         app_server
@@ -422,6 +521,12 @@ async fn rollout_maintenance_contention_disables_cached_legacy_resume_shortcut()
             .get(&thread_id)
             .map(|state| state.history_mode),
         Some(ThreadHistoryMode::Paginated)
+    );
+    assert_cached_canonical_history(
+        &app_server,
+        thread_id,
+        ThreadHistoryMode::Paginated,
+        "Saved paginated user message",
     );
 
     app_server.shutdown().await?;

@@ -57,6 +57,96 @@ fn runtime_servers(config: &Config) -> HashMap<String, McpServerConfig> {
     )
 }
 
+#[tokio::test]
+async fn workflow_policy_refreshes_live_and_preserves_session_overrides() {
+    let (_home, base) = base_config().await;
+    for scope in [RuntimeConfigRefresh::User, RuntimeConfigRefresh::UserFiles] {
+        let mut current =
+            layered_config(&base, "[features]\ndynamic_workflows = true", "", "", "").await;
+        for (input, expected) in [
+            (
+                "[features.dynamic_workflows]\nmode = 'explicit'",
+                super::super::DynamicWorkflowsMode::Explicit,
+            ),
+            (
+                "[features]\ndynamic_workflows = false",
+                super::super::DynamicWorkflowsMode::Off,
+            ),
+            (
+                "[features.dynamic_workflows]\nenabled = true\nmode = 'auto'",
+                super::super::DynamicWorkflowsMode::Auto,
+            ),
+        ] {
+            let incoming = layered_config(&base, input, "", "", "").await;
+            current = current.resolve_runtime_refresh(&incoming, scope).unwrap();
+            assert_eq!(current.dynamic_workflows_mode, expected);
+            assert!(!current.features.enabled(Feature::CodeMode));
+        }
+    }
+    let current = layered_config(
+        &base,
+        "",
+        "",
+        "",
+        "features.dynamic_workflows.mode = 'explicit'",
+    )
+    .await;
+    let incoming = layered_config(
+        &base,
+        "[features.dynamic_workflows]\nmode = 'off'",
+        "",
+        "",
+        "",
+    )
+    .await;
+    let refreshed = current
+        .resolve_runtime_refresh(&incoming, RuntimeConfigRefresh::User)
+        .unwrap();
+    assert_eq!(
+        refreshed.dynamic_workflows_mode,
+        super::super::DynamicWorkflowsMode::Explicit
+    );
+    let refreshed = current
+        .resolve_runtime_refresh(&incoming, RuntimeConfigRefresh::Mcp)
+        .unwrap();
+    assert_eq!(
+        refreshed.dynamic_workflows_mode,
+        super::super::DynamicWorkflowsMode::Explicit
+    );
+}
+
+#[tokio::test]
+async fn workflow_limits_refresh_for_future_runs_without_changing_launch_mode() {
+    let (_home, base) = base_config().await;
+    let current = layered_config(
+        &base,
+        "[features.dynamic_workflows]\nmode = 'explicit'",
+        "",
+        "",
+        "",
+    )
+    .await;
+    let incoming = layered_config(&base, "[features.dynamic_workflows]\nmode = 'explicit'\n[dynamic_workflows]\nmax_agents = 12\nmax_tokens = 2000", "", "", "").await;
+    let refreshed = current
+        .resolve_runtime_refresh(&incoming, RuntimeConfigRefresh::User)
+        .unwrap();
+    assert_eq!(
+        refreshed.dynamic_workflows,
+        super::super::DynamicWorkflowsConfig {
+            max_agents: 12,
+            max_tokens: std::num::NonZeroU64::new(2000),
+        }
+    );
+    assert_eq!(
+        refreshed.dynamic_workflows_mode,
+        super::super::DynamicWorkflowsMode::Explicit
+    );
+    let unchanged = current
+        .resolve_runtime_refresh(&incoming, RuntimeConfigRefresh::Mcp)
+        .unwrap();
+    assert_eq!(unchanged.dynamic_workflows, current.dynamic_workflows);
+}
+
 #[test_case::test_case(RuntimeConfigRefresh::User; "user refresh")]
 #[test_case::test_case(RuntimeConfigRefresh::Mcp; "MCP refresh")]
 #[tokio::test]

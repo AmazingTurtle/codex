@@ -237,7 +237,9 @@ pub(super) async fn handle(
     let request = request.into();
     if matches!(
         &mode,
-        TurnInputMode::StartIfIdle | TurnInputMode::ContinueIfIdle { .. }
+        TurnInputMode::StartIfIdle
+            | TurnInputMode::ContinueIfIdle { .. }
+            | TurnInputMode::ContinueIfIdleAtGeneration { .. }
     ) && session
         .services
         .local_agent_runtime
@@ -257,6 +259,16 @@ pub(super) async fn handle(
         )
         && UserInputOrigin::from_turn_trigger(request.request.start.turn_trigger.as_deref())
             == UserInputOrigin::User;
+    let expected_wake_generation = match &mode {
+        TurnInputMode::ContinueIfIdleAtGeneration {
+            expected_wake_generation,
+            ..
+        } => Some(*expected_wake_generation),
+        TurnInputMode::StartOrSteer
+        | TurnInputMode::StartIfIdle
+        | TurnInputMode::ContinueIfIdle { .. }
+        | TurnInputMode::Steer { .. } => None,
+    };
     let result = match mode {
         TurnInputMode::StartOrSteer => start_or_steer(session, request, submission_id).await,
         TurnInputMode::StartIfIdle => {
@@ -275,11 +287,16 @@ pub(super) async fn handle(
                 submission_id,
                 kind,
                 /*expected_previous_turn_id*/ None,
+                /*expected_wake_generation*/ None,
             )
             .await
         }
         TurnInputMode::ContinueIfIdle {
             expected_previous_turn_id,
+        }
+        | TurnInputMode::ContinueIfIdleAtGeneration {
+            expected_previous_turn_id,
+            ..
         } => {
             if !matches!(
                 &request.request.input,
@@ -295,6 +312,7 @@ pub(super) async fn handle(
                 submission_id,
                 TurnStartKind::Recovery,
                 Some(expected_previous_turn_id),
+                expected_wake_generation,
             )
             .await
         }
@@ -363,6 +381,7 @@ pub(super) async fn handle_recovery(
         submission_id,
         TurnStartKind::Recovery,
         /*expected_previous_turn_id*/ None,
+        /*expected_wake_generation*/ None,
     )
     .await;
     if let Ok(TurnInputSubmission::Started { turn_id, .. }) = &result {
@@ -519,8 +538,19 @@ async fn start_if_idle(
     submission_id: String,
     kind: TurnStartKind,
     expected_previous_turn_id: Option<String>,
+    expected_wake_generation: Option<u64>,
 ) -> CodexResult<TurnInputSubmission> {
     let _turn_start_guard = session.turn_start_lock.lock().await;
+    if expected_wake_generation.is_some_and(|expected| {
+        session
+            .wake_generation
+            .load(std::sync::atomic::Ordering::Acquire)
+            != expected
+    }) {
+        return Ok(TurnInputSubmission::NotSubmitted {
+            reason: NotSubmittedReason::Superseded,
+        });
+    }
     let WithTurnExtensionData {
         request,
         turn_extension_init,

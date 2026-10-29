@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dynamic Workflow"
+  short_description: "Author and manage authorized agent workflows"
+  default_prompt: "Use $dynamic-workflow to author or manage a workflow within the requested scope."

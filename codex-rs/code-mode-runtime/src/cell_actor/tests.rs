@@ -129,6 +129,7 @@ fn spawn_cell_actor_harness_with_host_and_failure_handler<H: CellHost>(
             yield_time_ms: None,
             max_output_tokens: None,
         },
+        codex_code_mode_protocol::CodeModeCellExecutionProfile::General,
         runtime_event_tx,
         PendingRuntimeMode::PauseUntilResumed,
         /*task_failure_handler*/ None,

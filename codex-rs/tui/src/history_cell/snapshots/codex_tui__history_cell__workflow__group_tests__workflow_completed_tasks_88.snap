@@ -1,0 +1,7 @@
+---
+source: tui/src/history_cell/workflow_group_tests.rs
+expression: "lines.iter().map(Line::to_string).collect::<Vec<_>>().join(\"\\n\")"
+---
+• Completed tasks in workflow review
+  └ Review 1 after 3m 40s
+  └ Review 2 after 3m 40s

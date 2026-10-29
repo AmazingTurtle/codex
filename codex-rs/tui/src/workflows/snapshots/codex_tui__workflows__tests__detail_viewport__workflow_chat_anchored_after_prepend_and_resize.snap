@@ -1,0 +1,20 @@
+---
+source: tui/src/workflows/detail_viewport_tests.rs
+expression: resized
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0               Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt    │  1 Overview   2 Transcript   3 Source
+  Current conversation         │ Entry12 · content stays with its logical history cell
+    Review changes · Running   │
+  ›   review · Running         │ Entry13 · content stays with its logical history cell
+                               │
+                               │ Entry14 · content stays with its logical history cell
+                               │
+                               │ Entry15 · content stays with its logical history cell
+                               │
+                               │ Entry16 · content stays with its logical history cell
+                               │
+                               │ Entry17 · content stays with its logical history cell
+  Esc close · ↑/↓ select · Enter chat · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · f4 tools · Sp

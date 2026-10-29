@@ -31,6 +31,11 @@ use crate::StoredTurnError;
 use crate::StoredTurnStatus;
 use crate::local::test_support::test_config;
 
+#[path = "native_inputs_tests.rs"]
+mod native_input_tests;
+#[path = "workflow_read_tests.rs"]
+mod workflow_tests;
+
 #[tokio::test]
 async fn list_turns_pages_projected_rows_and_applies_item_views() {
     let (_home, store, thread_id) = store_with_mode(ThreadHistoryMode::Paginated).await;
@@ -500,7 +505,8 @@ INSERT INTO thread_realtime_items (
                 ThreadTimelineEntry::Item { position, .. }
                 | ThreadTimelineEntry::Realtime { position, .. }
                 | ThreadTimelineEntry::TurnStarted { position, .. }
-                | ThreadTimelineEntry::TurnCompleted { position, .. } => *position,
+                | ThreadTimelineEntry::TurnCompleted { position, .. }
+                | ThreadTimelineEntry::Workflow { position, .. } => *position,
             })
             .collect::<Vec<_>>(),
         vec![30, 31, 40]
@@ -525,7 +531,8 @@ INSERT INTO thread_realtime_items (
                 ThreadTimelineEntry::Item { position, .. }
                 | ThreadTimelineEntry::Realtime { position, .. }
                 | ThreadTimelineEntry::TurnStarted { position, .. }
-                | ThreadTimelineEntry::TurnCompleted { position, .. } => *position,
+                | ThreadTimelineEntry::TurnCompleted { position, .. }
+                | ThreadTimelineEntry::Workflow { position, .. } => *position,
             })
             .collect::<Vec<_>>(),
         vec![12, 20, 21]

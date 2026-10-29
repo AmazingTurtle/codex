@@ -1,0 +1,5 @@
+---
+source: tui/src/history_cell/workflow_tests.rs
+expression: "cell.display_lines(60).iter().map(Line::to_string).collect::<Vec<_>>().join(\"\\n\")"
+---
+• Skipped task Review in workflow review

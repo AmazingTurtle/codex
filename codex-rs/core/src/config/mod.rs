@@ -17,6 +17,7 @@ use codex_config::ConfigRequirementsToml;
 use codex_config::ConstrainedWithSource;
 use codex_config::DebloatCapabilitySource;
 use codex_config::DebloatPolicy;
+pub use codex_config::DynamicWorkflowsConfig;
 use codex_config::FeatureRequirementsToml;
 use codex_config::ManagedAuthPolicy;
 use codex_config::McpEnterpriseManagedAuthConfig;
@@ -72,6 +73,7 @@ use codex_features::CodeModeConfigToml;
 use codex_features::CurrentTimeReminderConfigToml;
 use codex_features::CurrentTimeReminderDeliveryMode;
 use codex_features::CurrentTimeSource;
+pub use codex_features::DynamicWorkflowsMode;
 use codex_features::Feature;
 use codex_features::FeatureConfigSource;
 use codex_features::FeatureOverrides;
@@ -172,6 +174,7 @@ use toml::Value as TomlValue;
 use toml_edit::DocumentMut;
 
 mod auth_keyring;
+mod dynamic_workflows;
 pub mod edit;
 mod managed_features;
 mod metrics;
@@ -1139,6 +1142,11 @@ pub struct Config {
 
     /// Configuration for the experimental code-mode tool surface.
     pub code_mode: CodeModeConfig,
+
+    /// Persistent launch policy for scripted agent coordination.
+    pub dynamic_workflows_mode: DynamicWorkflowsMode,
+    /// Resource limits captured when a new workflow starts.
+    pub dynamic_workflows: DynamicWorkflowsConfig,
 
     /// Maximum poll window for background terminal output (`write_stdin`), in milliseconds.
     /// Default: `300000` (5 minutes).
@@ -4069,6 +4077,7 @@ impl Config {
                 .unwrap_or_default(),
         };
         let code_mode = resolve_code_mode_config(&cfg);
+        let dynamic_workflows_mode = dynamic_workflows::resolve_dynamic_workflows_mode(cfg.features.as_ref(), &features);
         let multi_agent_v2 = resolve_multi_agent_v2_config(&cfg);
         let token_budget = resolve_token_budget_config(&cfg, &features)?;
         let rollout_budget = resolve_rollout_budget_config(&cfg, &features)?;
@@ -4782,6 +4791,8 @@ impl Config {
             update_plan_enabled,
             tool_registry,
             code_mode,
+            dynamic_workflows_mode,
+            dynamic_workflows: cfg.dynamic_workflows.unwrap_or_default(),
             background_terminal_max_timeout,
             thread_unload_delay,
             ghost_snapshot,

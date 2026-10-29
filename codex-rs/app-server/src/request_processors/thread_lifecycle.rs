@@ -6,6 +6,11 @@ use codex_extension_api::ThreadIdleCause;
 use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
+#[path = "workflow_resync.rs"]
+mod workflow_resync;
+#[cfg(test)]
+#[path = "workflow_resync_tests.rs"]
+mod workflow_resync_tests;
 
 pub(super) enum ListenerStart {
     Immediate,
@@ -15,6 +20,7 @@ pub(super) enum ListenerStart {
 #[derive(Clone)]
 pub(super) struct ListenerTaskContext {
     pub(super) thread_manager: Arc<ThreadManager>,
+    pub(super) thread_store: Arc<dyn ThreadStore>,
     pub(super) thread_state_manager: ThreadStateManager,
     pub(super) outgoing: Arc<OutgoingMessageSender>,
     pub(super) pending_thread_unloads: PendingThreadUnloads,
@@ -140,15 +146,53 @@ pub(super) enum EnsureConversationListenerResult {
     ConnectionClosed,
 }
 
-#[expect(
-    clippy::await_holding_invalid_type,
-    reason = "listener subscription must be serialized against pending unloads"
-)]
+#[derive(Clone, Copy)]
+enum ListenerSubscription {
+    Conversation { raw_events_enabled: bool },
+    WorkflowInspection,
+}
+
 pub(super) async fn ensure_conversation_listener(
     listener_task_context: ListenerTaskContext,
     conversation_id: ThreadId,
     connection_id: ConnectionId,
     raw_events_enabled: bool,
+    listener_start: ListenerStart,
+) -> Result<EnsureConversationListenerResult, JSONRPCErrorError> {
+    ensure_subscription(
+        listener_task_context,
+        conversation_id,
+        connection_id,
+        ListenerSubscription::Conversation { raw_events_enabled },
+        listener_start,
+    )
+    .await
+}
+
+pub(super) async fn ensure_workflow_inspection_listener(
+    listener_task_context: ListenerTaskContext,
+    conversation_id: ThreadId,
+    connection_id: ConnectionId,
+) -> Result<EnsureConversationListenerResult, JSONRPCErrorError> {
+    ensure_subscription(
+        listener_task_context,
+        conversation_id,
+        connection_id,
+        ListenerSubscription::WorkflowInspection,
+        ListenerStart::Immediate,
+    )
+    .await
+}
+
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "listener subscription must be serialized against pending unloads"
+)]
+async fn ensure_subscription(
+    listener_task_context: ListenerTaskContext,
+    conversation_id: ThreadId,
+    connection_id: ConnectionId,
+    subscription: ListenerSubscription,
     listener_start: ListenerStart,
 ) -> Result<EnsureConversationListenerResult, JSONRPCErrorError> {
     let conversation = match listener_task_context
@@ -170,11 +214,25 @@ pub(super) async fn ensure_conversation_listener(
                 "thread {conversation_id} is closing; retry after the thread is closed"
             )));
         }
-        match listener_task_context
-            .thread_state_manager
-            .try_ensure_connection_subscribed(conversation_id, connection_id, raw_events_enabled)
-            .await
-        {
+        let subscribed = match subscription {
+            ListenerSubscription::Conversation { raw_events_enabled } => {
+                listener_task_context
+                    .thread_state_manager
+                    .try_ensure_connection_subscribed(
+                        conversation_id,
+                        connection_id,
+                        raw_events_enabled,
+                    )
+                    .await
+            }
+            ListenerSubscription::WorkflowInspection => {
+                listener_task_context
+                    .thread_state_manager
+                    .try_ensure_workflow_inspection(conversation_id, connection_id)
+                    .await
+            }
+        };
+        match subscribed {
             Some(thread_state) => (thread_state, EnsureConversationListenerResult::Attached),
             None => {
                 // Startup can outlast connection cleanup; the thread still needs a
@@ -199,10 +257,20 @@ pub(super) async fn ensure_conversation_listener(
     )
     .await
     {
-        let _ = listener_task_context
-            .thread_state_manager
-            .unsubscribe_connection_from_thread(conversation_id, connection_id)
-            .await;
+        match subscription {
+            ListenerSubscription::Conversation { .. } => {
+                listener_task_context
+                    .thread_state_manager
+                    .unsubscribe_connection_from_thread(conversation_id, connection_id)
+                    .await;
+            }
+            ListenerSubscription::WorkflowInspection => {
+                listener_task_context
+                    .thread_state_manager
+                    .unsubscribe_workflow_inspection(conversation_id, connection_id)
+                    .await;
+            }
+        }
         return Err(error);
     }
     Ok(result)
@@ -294,6 +362,7 @@ pub(super) async fn ensure_listener_task_running(
     let ListenerTaskContext {
         outgoing,
         thread_manager,
+        thread_store,
         thread_state_manager,
         pending_thread_unloads,
         thread_watch_manager,
@@ -302,6 +371,21 @@ pub(super) async fn ensure_listener_task_running(
         ..
     } = listener_task_context;
     let outgoing_for_task = Arc::clone(&outgoing);
+    // Subscribe before accepting a model turn so model-tool launches have the
+    // same live notifications as explicit workflow API launches. The shared
+    // owning-root listener forwards this bus once, including worker launches.
+    let workflow_service = match conversation.workflows().await {
+        Ok(service) if service.owner_thread_id() == conversation_id.to_string() => Some(service),
+        Ok(_) => None,
+        Err(error) => {
+            tracing::debug!(%conversation_id, %error, "workflow notifications unavailable");
+            None
+        }
+    };
+    let mut workflow_updates = workflow_service.as_ref().map(|service| service.subscribe());
+    let mut workflow_progress = workflow_service
+        .as_ref()
+        .map(|service| service.subscribe_progress());
     let mut wake_updates = conversation.subscribe_wake_state();
     // Auto-attached clients may have no start/resume response. Publish the
     // current snapshot even when the wait began before this listener existed.
@@ -337,6 +421,7 @@ pub(super) async fn ensure_listener_task_running(
                     handle_thread_listener_command(
                         conversation_id,
                         &conversation,
+                        thread_store.as_ref(),
                         codex_home.as_path(),
                         &thread_state_manager,
                         &thread_state,
@@ -346,6 +431,60 @@ pub(super) async fn ensure_listener_task_running(
                         listener_command,
                     )
                     .await;
+                }
+                update = async {
+                    match &mut workflow_updates {
+                        Some(updates) => updates.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match update {
+                        Ok(run) => {
+                            let subscribers = thread_state_manager.subscribed_connection_ids(conversation_id).await;
+                            let thread_outgoing = ThreadScopedOutgoingMessageSender::new(
+                                outgoing_for_task.clone(), subscribers, conversation_id);
+                            thread_outgoing.send_server_notification(
+                                ServerNotification::WorkflowUpdated(codex_app_server_protocol::WorkflowUpdatedNotification {
+                                    thread_id: conversation_id.to_string(),
+                                    workflow: super::workflow_processor::conversion::workflow(run),
+                                })).await;
+                            super::execution_control::notify(conversation_id,&conversation,&outgoing_for_task,&thread_state_manager,&mut execution_snapshot).await;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            tracing::warn!(%conversation_id, skipped, "workflow notification stream lagged; replaying authoritative snapshots");
+                            if let Some(service)=&workflow_service {
+                                let subscribers=thread_state_manager.subscribed_connection_ids(conversation_id).await;
+                                let sender=ThreadScopedOutgoingMessageSender::new(outgoing_for_task.clone(),subscribers,conversation_id);
+                                if let Err(error)=workflow_resync::replay(service,&sender,workflow_resync::Stream::Snapshots).await {tracing::warn!(%conversation_id,%error,"workflow snapshot replay failed");}
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => workflow_updates = None,
+                    }
+                }
+                progress = async {
+                    match &mut workflow_progress {
+                        Some(progress) => progress.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match progress {
+                        Ok(summary) => {
+                            let subscribers=thread_state_manager.subscribed_connection_ids(conversation_id).await;
+                            let thread_outgoing=ThreadScopedOutgoingMessageSender::new(outgoing_for_task.clone(),subscribers,conversation_id);
+                            thread_outgoing.send_server_notification(ServerNotification::WorkflowProgress(codex_app_server_protocol::WorkflowProgressNotification {
+                                thread_id:conversation_id.to_string(),workflow:super::workflow_processor::conversion::summary(summary),
+                            })).await;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            tracing::warn!(%conversation_id,skipped,"workflow progress stream lagged; replaying authoritative summaries");
+                            if let Some(service)=&workflow_service {
+                                let subscribers=thread_state_manager.subscribed_connection_ids(conversation_id).await;
+                                let sender=ThreadScopedOutgoingMessageSender::new(outgoing_for_task.clone(),subscribers,conversation_id);
+                                if let Err(error)=workflow_resync::replay(service,&sender,workflow_resync::Stream::Progress).await {tracing::warn!(%conversation_id,%error,"workflow progress replay failed");}
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => workflow_progress=None,
+                    }
                 }
                 changed = wake_updates.changed() => {
                     if changed.is_err() { break; }
@@ -369,6 +508,25 @@ pub(super) async fn ensure_listener_task_running(
                         }
                     };
 
+                    if let EventMsg::WorkflowLifecycle(lifecycle)=&event.msg {
+                        let final_message = match super::workflow_presentation::lifecycle_proof(thread_store.as_ref(),lifecycle).await {
+                            Ok(proof) => proof,
+                            Err(error) => { tracing::debug!(?error,"workflow final-message presentation proof unavailable"); None },
+                        };
+                        let mut subscribers=thread_state_manager.subscribed_connection_ids(conversation_id).await;
+                        if let Some(proof)=&final_message
+                            && let Ok(child)=ThreadId::from_string(&proof.child_thread_id)
+                        {
+                            for connection in thread_state_manager.subscribed_connection_ids(child).await {
+                                if !subscribers.contains(&connection) { subscribers.push(connection); }
+                            }
+                        }
+                        let thread_outgoing=ThreadScopedOutgoingMessageSender::new(outgoing_for_task.clone(),subscribers,conversation_id);
+                        thread_outgoing.send_server_notification(ServerNotification::WorkflowLifecycleChanged(codex_app_server_protocol::WorkflowLifecycleChangedNotification {
+                            thread_id:conversation_id.to_string(),event:lifecycle.clone().into(),final_message,
+                        })).await;
+                        continue;
+                    }
                     if matches!(&event.msg,EventMsg::ExecutionControlChanged(_)) {
                         super::execution_control::notify(conversation_id,&conversation,&outgoing_for_task,&thread_state_manager,&mut execution_snapshot).await;
                         continue;
@@ -673,6 +831,7 @@ pub(super) async fn unload_thread_without_subscribers(
 pub(super) async fn handle_thread_listener_command(
     conversation_id: ThreadId,
     conversation: &Arc<CodexThread>,
+    thread_store: &dyn ThreadStore,
     codex_home: &Path,
     thread_state_manager: &ThreadStateManager,
     thread_state: &Arc<Mutex<ThreadState>>,
@@ -689,6 +848,7 @@ pub(super) async fn handle_thread_listener_command(
             handle_pending_thread_resume_request(
                 conversation_id,
                 conversation,
+                thread_store,
                 codex_home,
                 thread_state_manager,
                 thread_state,
@@ -767,7 +927,8 @@ pub(super) async fn handle_thread_listener_command(
 pub(super) async fn handle_pending_thread_resume_request(
     conversation_id: ThreadId,
     conversation: &Arc<CodexThread>,
-    _codex_home: &Path,
+    thread_store: &dyn ThreadStore,
+    codex_home: &Path,
     thread_state_manager: &ThreadStateManager,
     thread_state: &Arc<Mutex<ThreadState>>,
     thread_watch_manager: &ThreadWatchManager,
@@ -958,6 +1119,25 @@ pub(super) async fn handle_pending_thread_resume_request(
     let session_id = conversation.startup_metadata().session_id.to_string();
     thread.session_id = session_id;
     thread.wake_state = Some(crate::wake_state::snapshot(conversation));
+
+    if let Ok(home) = AbsolutePathBuf::from_absolute_path(codex_home) {
+        super::workflow_presentation::turns(
+            &home,
+            thread_store,
+            conversation_id,
+            &mut thread.turns,
+        )
+        .await;
+        if let Some(page) = &mut initial_turns_page {
+            super::workflow_presentation::turns(
+                &home,
+                thread_store,
+                conversation_id,
+                &mut page.data,
+            )
+            .await;
+        }
+    }
 
     let response = ThreadResumeResponse {
         long_context: config_snapshot.long_context,

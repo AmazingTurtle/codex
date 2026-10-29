@@ -1,0 +1,12 @@
+---
+source: tui/src/app/workflows/workflow_integration_tests.rs
+assertion_line: 202
+expression: "render_bottom_popup(&app.chat_widget, 96)"
+---
+  Save “Review-project”
+
+
+› 1. This project  Available in this project
+  2. All projects  Available in your user workflow library
+
+  enter select · esc back

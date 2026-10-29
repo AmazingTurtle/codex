@@ -1,0 +1,47 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: "format!(\"Beginning\\n{narrow}\\n\\nEnd\\n{bottom}\")"
+---
+Beginning
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 1     ›
+  ──────────────────────────────────────
+   1 Overview   2 Transcript   3 Source
+  Review changes
+  Status: Running
+  Review project changes
+
+  Input
+  • n: 15 · convention: fib(0)=0,
+    fib(1)=1 · literal: *literal* |
+    [link](not-a-url)
+
+  Result
+  ## results
+
+  ### 1 · language: Python
+
+  Esc list · Enter Main · 1/2/3 view
+  j↑ k↓ scroll · PgUp/PgDn ends · ? help
+
+End
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 1     ›
+  ──────────────────────────────────────
+   1 Overview   2 Transcript   3 Source
+  Result
+  ## results
+
+  ### 1 · language: Python
+
+  • value: 610
+
+  ### 2 · language: Rust
+
+  • value: 610
+
+  ### 3 · language: JavaScript
+
+  • value: 610
+  Esc list · Enter Main · 1/2/3 view
+  j↑ k↓ scroll · PgUp/PgDn ends · ? help

@@ -1,0 +1,18 @@
+---
+source: tui/src/workflows/worker_rows_tests.rs
+expression: compact
+---
+  Workflow command center · Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0
+  ──────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt           Model           Reasoning  Status
+  Current conversation
+    Review changes                                               Running
+  ›   review                          gpt-6.1-sol     high       Running
+      review · Attempt 1              Unknown         Unknown    Failed
+
+
+
+
+  ? help · Esc back · ↑/↓ move
+  Enter chat · 1/2/3 view · Space Actions

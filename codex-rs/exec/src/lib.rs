@@ -730,6 +730,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
     };
     let in_process_start_args = InProcessClientStartArgs {
         arg0_paths,
+        code_mode_session_provider: None,
         config: std::sync::Arc::new(config.clone()),
         cli_overrides: run_cli_overrides,
         loader_overrides: run_loader_overrides,

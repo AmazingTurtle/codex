@@ -707,6 +707,69 @@ disable_in_process_fallback = true
 }
 
 #[tokio::test]
+async fn load_config_resolves_dynamic_workflows_mode() -> std::io::Result<()> {
+    let codex_home = tempdir()?;
+    for (input, expected) in [
+        ("", DynamicWorkflowsMode::Auto),
+        (
+            "[features]\ndynamic_workflows = true",
+            DynamicWorkflowsMode::Auto,
+        ),
+        (
+            "[features]\ndynamic_workflows = false",
+            DynamicWorkflowsMode::Off,
+        ),
+        (
+            "[features.dynamic_workflows]\nmode = 'explicit'",
+            DynamicWorkflowsMode::Explicit,
+        ),
+        (
+            "[features.dynamic_workflows]\nmode = 'off'",
+            DynamicWorkflowsMode::Off,
+        ),
+        (
+            "[features.dynamic_workflows]\nenabled = false\nmode = 'auto'",
+            DynamicWorkflowsMode::Off,
+        ),
+    ] {
+        let config = Config::load_from_base_config_with_overrides(
+            toml::from_str(input).expect("valid workflow config"),
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await?;
+        assert_eq!(config.dynamic_workflows_mode, expected, "{input}");
+        // Workflow availability must not expose the ordinary JavaScript exec tool.
+        assert!(!config.features.enabled(Feature::CodeMode));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_resolves_workflow_resource_limits() -> std::io::Result<()> {
+    let codex_home = tempdir()?;
+    for (input, expected) in [
+        ("", DynamicWorkflowsConfig::default()),
+        (
+            "[dynamic_workflows]\nmax_agents = 1024\nmax_tokens = 25000",
+            DynamicWorkflowsConfig {
+                max_agents: 1024,
+                max_tokens: std::num::NonZeroU64::new(25_000),
+            },
+        ),
+    ] {
+        let config = Config::load_from_base_config_with_overrides(
+            toml::from_str(input).expect("valid workflow limits"),
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await?;
+        assert_eq!(config.dynamic_workflows, expected);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn load_config_resolves_tool_registry_config() -> std::io::Result<()> {
     let codex_home = tempdir()?;
 

@@ -1,0 +1,22 @@
+---
+source: tui/src/workflows/workflow_tests.rs
+expression: "render(&center, 120, 18)"
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt         │  1 Overview   2 Transcript   3 Source
+  Current conversation              │ workflow.meta({ name: 'Review changes', description: 'Review project changes',
+    Review changes · Running        │ phases: [] });
+  ›   review · Running              │ const result = await workflow.agent('review', { message: 'Review source' });
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+                                    │
+  Esc close · ↑/↓ select · Enter chat · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

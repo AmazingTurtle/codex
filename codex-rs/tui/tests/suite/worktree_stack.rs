@@ -4,18 +4,22 @@
 
 use super::focus_palette::PtyCodex;
 use super::focus_palette::write_test_config;
+use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
 use codex_worktree::ManagedWorktree;
 use codex_worktree::WorktreeManager;
 use codex_worktree::WorktreeSettings;
 use core_test_support::responses;
+use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 use std::time::Instant;
+use wiremock::Match;
 use wiremock::matchers::body_string_contains;
+use wiremock::matchers::header;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn picker_side_worktree_fork_and_cd_run_on_the_production_stack() -> Result<()> {
@@ -148,6 +152,51 @@ async fn picker_side_worktree_fork_and_cd_run_on_the_production_stack() -> Resul
     ))?;
     terminal.ensure_running()?;
 
+    // Exercise the attached fork and wait for its own live completion. A cached
+    // idle status from the parent cannot establish the fork's task lifecycle.
+    let fork_owner = worktrees
+        .owner(&forked[0].root)?
+        .context("forked worktree must have a conversation owner")?;
+    const FORK_PROMPT: &str = "Confirm this forked worktree conversation is usable.";
+    const FORK_REPLY: &str = "STACK_FORK_READY";
+    let fork_header = header("thread-id", fork_owner.as_str());
+    let fork_reply = responses::mount_sse_once_match(
+        &server,
+        move |request: &wiremock::Request| {
+            fork_header.matches(request)
+                && body_string_contains(r#"\"thread_source\":\"user\""#).matches(request)
+                && body_string_contains(FORK_PROMPT).matches(request)
+        },
+        responses::sse(vec![
+            responses::ev_assistant_message("fork-ready", FORK_REPLY),
+            responses::ev_completed("fork-ready-response"),
+        ]),
+    )
+    .await;
+    let fork_turn_start = terminal.output_len();
+    submit(&mut terminal, FORK_PROMPT)?;
+    terminal.wait_for_screen(FORK_REPLY)?;
+    terminal.wait_for_done_since(fork_turn_start)?;
+    let request = fork_reply.single_request();
+    assert_eq!(request.header("thread-id"), Some(fork_owner));
+    let request_json = request.body_json().to_string();
+    ensure!(
+        request_json.contains(FORK_PROMPT),
+        "the fork probe prompt was not submitted"
+    );
+    ensure!(
+        request_json.contains(r#"\"thread_source\":\"user\""#),
+        "the fork probe was not an actual user turn"
+    );
+    ensure!(
+        request_json.contains("STACK_SAVED_HISTORY"),
+        "the forked native turn lost the original conversation"
+    );
+    ensure!(
+        request_json.contains(forked[0].root.to_string_lossy().as_ref()),
+        "the forked native turn did not receive its worktree cwd"
+    );
+
     submit(&mut terminal, &format!("/cd {}", root.display()))?;
     terminal.wait_for_screen(&format!("Working directory changed to: {}", root.display()))?;
     terminal.ensure_running()?;
@@ -182,16 +231,8 @@ fn submit(terminal: &mut PtyCodex, input: &str) -> Result<()> {
     // while earlier characters are still buffered by paste-burst detection.
     terminal.write_input(format!("\x1b[200~{input}\x1b[201~").as_bytes())?;
     terminal.wait_for_screen(input)?;
-    // Thread startup can keep the composer in queue mode after the history is visible.
-    let deadline = Instant::now() + Duration::from_secs(/*secs*/ 30);
-    while terminal.screen_contains("tab to queue message") {
-        ensure!(
-            Instant::now() < deadline,
-            "composer remained busy before {input:?}"
-        );
-        terminal.read_output(Duration::from_millis(/*millis*/ 50))?;
-        terminal.ensure_running()?;
-    }
+    // Visible history and cwd acknowledgement can precede pending turn attachment.
+    terminal.wait_for_idle()?;
     terminal.write_input(b"\r")?;
     Ok(())
 }

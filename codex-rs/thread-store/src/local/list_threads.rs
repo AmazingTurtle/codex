@@ -241,6 +241,17 @@ pub(super) async fn list_rollout_threads(
     sort_key: codex_rollout::ThreadSortKey,
     sort_direction: codex_rollout::SortDirection,
 ) -> ThreadStoreResult<codex_rollout::ThreadsPage> {
+    // Relation-only discovery is an optional indexed capability. A failed
+    // query against an existing database must retain its ordinary error.
+    if state_db.is_none()
+        && params.relation_filter.is_some()
+        && params.section.is_none()
+        && params.project_id.is_none()
+    {
+        return Err(ThreadStoreError::Unsupported {
+            operation: "thread_relations",
+        });
+    }
     if params.relation_filter.is_some() || params.section.is_some() || params.project_id.is_some() {
         let page = codex_rollout::state_db::list_threads_db(
             state_db.as_deref(),
@@ -366,6 +377,71 @@ mod tests {
     use crate::local::test_support::write_archived_session_file;
     use crate::local::test_support::write_session_file;
     use crate::local::test_support::write_session_file_with;
+
+    #[tokio::test]
+    async fn relation_listing_reports_only_an_absent_optional_index_as_unsupported() {
+        let home = TempDir::new().expect("temp dir");
+        let config = test_config(home.path());
+        let store = LocalThreadStore::new(config.clone(), /*state_db*/ None);
+        let mut params = ListThreadsParams {
+            page_size: 10,
+            cursor: None,
+            sort_key: ThreadSortKey::CreatedAt,
+            sort_direction: SortDirection::Asc,
+            allowed_sources: Vec::new(),
+            model_providers: Some(Vec::new()),
+            cwd_filters: None,
+            section: None,
+            project_id: None,
+            archived: false,
+            search_term: None,
+            relation_filter: Some(ThreadRelationFilter::DescendantsOf(
+                ThreadId::from_string(&Uuid::from_u128(511).to_string()).expect("thread id"),
+            )),
+            use_state_db_only: false,
+        };
+        assert!(matches!(
+            store.list_threads(params.clone()).await,
+            Err(ThreadStoreError::Unsupported {
+                operation: "thread_relations"
+            })
+        ));
+
+        params.cursor = Some("invalid cursor".to_string());
+        assert!(matches!(
+            store.list_threads(params.clone()).await,
+            Err(ThreadStoreError::InvalidRequest { .. })
+        ));
+        params.cursor = None;
+        params.project_id = Some(Some("project".to_string()));
+        assert!(matches!(
+            store.list_threads(params.clone()).await,
+            Err(ThreadStoreError::Internal { .. })
+        ));
+        params.project_id = None;
+        params.section = Some(Some("section".to_string()));
+        assert!(matches!(
+            store.list_threads(params.clone()).await,
+            Err(ThreadStoreError::Internal { .. })
+        ));
+        params.section = None;
+
+        // A present database with mismatched configuration is a real failure,
+        // not absence of the optional relation index.
+        let other_home = TempDir::new().expect("other temp dir");
+        let other_config = test_config(other_home.path());
+        let database = codex_state::StateRuntime::init(
+            other_config.sqlite,
+            other_config.default_model_provider_id,
+        )
+        .await
+        .expect("state db should initialize");
+        let broken_store = LocalThreadStore::new(config, Some(database));
+        assert!(matches!(
+            broken_store.list_threads(params).await,
+            Err(ThreadStoreError::Internal { .. })
+        ));
+    }
 
     #[tokio::test]
     async fn list_threads_uses_default_provider_when_rollout_omits_provider() {

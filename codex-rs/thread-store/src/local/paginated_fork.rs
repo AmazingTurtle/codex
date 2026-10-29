@@ -59,6 +59,7 @@ pub(super) async fn prepare(
             super::thread_history_materialization::materialize_to_sqlite(
                 store,
                 segment.rollout_id(),
+                segment.owner_thread_id,
                 segment.rollout_path.as_path(),
             )
             .await?;
@@ -68,6 +69,7 @@ pub(super) async fn prepare(
     super::thread_history_materialization::materialize_to_sqlite(
         store,
         source_segment.rollout_id(),
+        source_segment.owner_thread_id,
         source_segment.rollout_path.as_path(),
     )
     .await?;

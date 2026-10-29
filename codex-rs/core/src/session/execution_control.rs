@@ -181,11 +181,13 @@ impl Session {
                     })
                     .await
                     .map_err(|error| codex_protocol::error::CodexErr::Fatal(error.to_string()))?;
-                ids.extend(found.into_iter().map(|id| match id {
-                    codex_thread_store::PersistedInputId::ResponseItem(id) => id.to_string(),
+                ids.extend(found.into_iter().filter_map(|id| match id {
+                    codex_thread_store::PersistedInputId::ResponseItem(id) => Some(id.to_string()),
                     codex_thread_store::PersistedInputId::UserInputOrder(order) => {
-                        format!("user:{order}")
+                        Some(format!("user:{order}"))
                     }
+                    // UI delivery receipts do not acknowledge queued model input.
+                    codex_thread_store::PersistedInputId::WorkflowLifecycle(_) => None,
                 }));
             }
         } else {

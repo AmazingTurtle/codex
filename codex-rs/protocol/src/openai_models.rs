@@ -35,6 +35,9 @@ use crate::protocol::MultiAgentVersion;
 mod access_programs;
 mod incremental_tools;
 pub use incremental_tools::IncrementalToolMessages;
+#[path = "openai_models/dynamic_workflows.rs"]
+mod dynamic_workflows;
+pub use dynamic_workflows::DynamicWorkflowToolMessages;
 #[path = "openai_models/memento_v2.rs"]
 mod memento_v2;
 pub use memento_v2::ContextManagementToolMessages;
@@ -629,6 +632,8 @@ pub struct ToolMessages {
     pub multi_agent: Option<MultiAgentToolMessages>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_mode: Option<CodeModeToolMessages>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dynamic_workflows: Option<DynamicWorkflowToolMessages>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_resources: Option<McpResourceToolMessages>,
 }

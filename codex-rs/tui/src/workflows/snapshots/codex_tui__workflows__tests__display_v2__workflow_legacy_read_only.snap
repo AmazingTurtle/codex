@@ -1,0 +1,26 @@
+---
+source: tui/src/workflows/display_v2_tests.rs
+expression: readonly
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                                       Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt               │  1 Overview   2 Transcript   3 Source
+  Current conversation                    │ Legacy workflow is read-only. Its source and transcripts remain available.
+  › Legacy workflow [legacy] · Pending    │ Legacy workflow
+      Inspect · Unknown                   │ Status: Pending
+        Review source · Completed         │ Steps: 1/1 completed
+                                          │ Tokens: ? in, ? out (? model turns)
+                                          │
+                                          │ Input
+                                          │ • target: src
+                                          │
+                                          │ Log
+                                          │ #1: Audit accepted
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+  Esc close · ↑/↓ select · Enter Main · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

@@ -1,0 +1,47 @@
+---
+source: tui/src/workflows/center_metrics_tests.rs
+expression: "format!(\"Partial accounting\\n{partial}\\n\\nUnknown accounting\\n{unknown}\")"
+---
+Partial accounting
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 0     ›
+  ──────────────────────────────────────
+   1 Overview   2 Transcript   3 Source
+  Independent audit
+  Status: Completed (1st attempt)
+  Model: gpt-6.1-sol (high)
+  Tokens: ≥55.391 in, ≥95.201 out (?
+          model turns)
+  Cached input: ≥12.000 (included in
+                input)
+  Active time: 3m 40s
+
+  Prompt
+  Check the migration plan
+
+  Result
+  Ready for review
+  Esc list · Enter chat · 1/2/3 view
+  j↑ k↓ scroll · PgUp/PgDn ends · ? help
+
+Unknown accounting
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 0     ›
+  ──────────────────────────────────────
+   1 Overview   2 Transcript   3 Source
+  Independent audit
+  Status: Completed (1st attempt)
+  Model: gpt-6.1-sol (high)
+  Tokens: ? in, ? out (? model turns)
+
+  Prompt
+  Check the migration plan
+
+  Result
+  Ready for review
+
+
+
+
+  Esc list · Enter chat · 1/2/3 view
+  j↑ k↓ scroll · PgUp/PgDn ends · ? help

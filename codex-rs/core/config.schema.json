@@ -933,6 +933,9 @@
             "deferred_tool_world_state": {
               "type": "boolean"
             },
+            "dynamic_workflows": {
+              "type": "boolean"
+            },
             "elevated_windows_sandbox": {
               "type": "boolean"
             },
@@ -1625,6 +1628,28 @@
             "type": "string"
           },
           "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "DynamicWorkflowsConfig": {
+      "additionalProperties": false,
+      "description": "Limits captured when a workflow starts. Native agent capacity still applies.",
+      "properties": {
+        "max_agents": {
+          "default": 32,
+          "description": "Maximum accepted agents per run, from 1 through 1,024. Defaults to 32.",
+          "format": "uint",
+          "maximum": 1024.0,
+          "minimum": 1.0,
+          "type": "integer"
+        },
+        "max_tokens": {
+          "description": "Optional token budget, at most JavaScript's largest exact integer. Omission leaves the budget unbounded.",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 1.0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -7352,6 +7377,14 @@
       "description": "Legacy fallback for `tui.disable_paste_burst`. Prefer the setting under `[tui]`.",
       "type": "boolean"
     },
+    "dynamic_workflows": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/DynamicWorkflowsConfig"
+        }
+      ],
+      "description": "Limits for newly launched dynamic workflows."
+    },
     "experimental_compact_prompt_file": {
       "$ref": "#/definitions/AbsolutePathBuf"
     },
@@ -7556,6 +7589,9 @@
           "type": "boolean"
         },
         "deferred_tool_world_state": {
+          "type": "boolean"
+        },
+        "dynamic_workflows": {
           "type": "boolean"
         },
         "elevated_windows_sandbox": {

@@ -1,0 +1,34 @@
+---
+source: tui/src/workflows/center_metrics_tests.rs
+expression: screen
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 0   Completed 1   Inactive 0                                                                                                                                                                                                                                           Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt                 Model             Reasoning  Status       Updated   │  1 Overview   2 Transcript   3 Source
+  Current conversation                                                                          │ Independent audit
+    audit                                                                Completed    now       │ Status: Completed (1st attempt)
+      Review                                                             Completed    3m ago    │ Model: gpt-6.1-sol (high)
+  ›     Independent audit                   gpt-6.1-sol       high       Completed    2m ago    │ Tokens: 55.391 in, 95.201 out (3 model turns)
+                                                                                                │ Cached input: 12.000 (included in input)
+                                                                                                │ Active time: 3m 40s
+                                                                                                │
+                                                                                                │ Prompt
+                                                                                                │ Check the migration plan
+                                                                                                │
+                                                                                                │ Result
+                                                                                                │ Ready for review
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+  Esc close · ↑/↓ select · Enter chat · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

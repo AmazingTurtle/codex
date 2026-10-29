@@ -216,6 +216,7 @@ pub(super) async fn shutdown_thread(
         if let Err(err) = super::thread_history_materialization::materialize_to_sqlite(
             store,
             rollout_id,
+            thread_id,
             rollout_path.as_path(),
         )
         .await
@@ -443,6 +444,7 @@ async fn write_and_project(
         if let Err(err) = super::thread_history_materialization::materialize_to_sqlite(
             store,
             rollout_id,
+            thread_id,
             rollout_path,
         )
         .await

@@ -1,0 +1,7 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "format!(\"{skipped}\\n{unknown}\\n{publish}\")"
+---
+  audit · [■■■■■■■■] 2/2 phases · Verify · in 312K · out 86K · 28m 57s · 3 agents used · ↓ open
+  unphased audit · [········] indeterminate · 2/3 steps · in 312K · out 86K · 28m 57s · 3 agents used · ↓ open
+  publish · [········] No agent steps · Completed · in ? · out ? · 0ms · 0 agents used · ↓ open

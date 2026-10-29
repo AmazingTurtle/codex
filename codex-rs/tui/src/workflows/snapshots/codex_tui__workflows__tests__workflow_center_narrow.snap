@@ -1,0 +1,16 @@
+---
+source: tui/src/workflows/workflow_tests.rs
+expression: "render(&center, 42, 12)"
+---
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 1     ›
+  ──────────────────────────────────────
+  Workflow / step / attempt
+  Current conversation
+  › Review changes · Running
+      review · Running
+
+
+
+  ? help · Esc back · ↑/↓ move
+  Enter Main · 1/2/3 view

@@ -169,6 +169,53 @@ impl App {
         app_server_client: &AppServerSession,
         notification: ServerNotification,
     ) {
+        match &notification {
+            ServerNotification::FsChanged(update)
+                if update.watch_id.starts_with("workflow-library-") =>
+            {
+                let source = {
+                    let mut state = self
+                        .workflows
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if state.loading {
+                        state.refresh_pending = true;
+                    }
+                    state.saved_sources.clear();
+                    (state.center.saved
+                        && state.center.saved_detail_tab == crate::workflows::DetailTab::Source)
+                        .then(|| state.center.saved_id.clone())
+                        .flatten()
+                };
+                self.app_event_tx
+                    .send(AppEvent::Workflow(crate::workflows::WorkflowEvent::Refresh));
+                self.app_event_tx.send(AppEvent::Workflow(
+                    crate::workflows::WorkflowEvent::RefreshSavedCatalog,
+                ));
+                if let Some(id) = source {
+                    self.app_event_tx.send(AppEvent::Workflow(
+                        crate::workflows::WorkflowEvent::ReadSavedSource { id, refresh: true },
+                    ));
+                }
+                return;
+            }
+            ServerNotification::WorkflowUpdated(update) => {
+                self.apply_workflow_update(update.clone());
+                self.refresh_workflow_transcript_after_update(app_server_client, update);
+                self.refresh_workflow_actions_after_update(app_server_client, update);
+                return;
+            }
+            ServerNotification::WorkflowProgress(update) => {
+                self.apply_workflow_progress(update.clone());
+                self.refresh_workflow_overview_after_progress(app_server_client, update);
+                return;
+            }
+            ServerNotification::ThreadExecutionControlChanged(update) => {
+                self.apply_execution_control(update.clone());
+                return;
+            }
+            _ => {}
+        }
         // A picker can leave an old runtime's close notification queued while the same thread
         // is resumed. Thread IDs survive reloads, so confirm that the displayed thread is still
         // unloaded before routing a close that would exit the TUI or switch away from it.
@@ -254,6 +301,10 @@ impl App {
             return;
         }
         self.handle_agent_picker_visibility_notification(app_server_client, &notification);
+        self.apply_workflow_chat_notification(&notification);
+        if matches!(&notification, ServerNotification::TurnCompleted(_)) {
+            self.refresh_visible_workflow_transcript(app_server_client);
+        }
 
         if let ServerNotification::ThreadStarted(started) = &notification
             && let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {

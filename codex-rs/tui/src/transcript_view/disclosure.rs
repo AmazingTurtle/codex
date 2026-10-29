@@ -39,6 +39,40 @@ impl Disclosure {
 }
 
 impl TranscriptView {
+    /// Toggle the native activity at the reading position without stealing a surrounding list's navigation.
+    pub(crate) fn toggle_visible_activity_key(
+        &mut self,
+        key: KeyEvent,
+        cells: &[Arc<dyn HistoryCell>],
+    ) -> bool {
+        if !self.disclosure.keymap.app.focus_activity.is_pressed(key)
+            || self.detailed
+            || self.mode != HistoryRenderMode::Rich
+        {
+            return false;
+        }
+        let focused = self
+            .disclosure
+            .focused
+            .as_ref()
+            .and_then(|ids| self.canonical_activity_index(cells, ids));
+        let index = focused
+            .or_else(|| {
+                self.highlight
+                    .filter(|index| !self.activity_ids(cells, *index).is_empty())
+            })
+            .or_else(|| {
+                self.visible
+                    .iter()
+                    .find_map(|row| self.canonical_activity_index(cells, &row.activity_ids))
+            });
+        if let Some(index) = index {
+            self.toggle_activity(cells, index);
+        }
+        self.disclosure.focused = None;
+        true
+    }
+
     pub(crate) fn is_activity_focused(&self) -> bool {
         self.disclosure.focused.is_some() && !self.detailed && self.mode == HistoryRenderMode::Rich
     }

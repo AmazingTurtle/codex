@@ -237,7 +237,9 @@ impl ChatComposer {
         result: &InputResult,
     ) {
         match result {
-            InputResult::Command(_) | InputResult::ServiceTierCommand(_) => {
+            InputResult::Command(_)
+            | InputResult::ServiceTierCommand(_)
+            | InputResult::WorkflowCommand { .. } => {
                 if self.sparkle.draft.get() == SparkleDraft::Command {
                     self.sparkle.draft.set(SparkleDraft::Untouched);
                     self.sparkle.command_input.borrow_mut().clear();

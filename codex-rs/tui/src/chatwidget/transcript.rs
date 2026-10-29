@@ -54,6 +54,11 @@ pub(super) struct StatusCopySource {
 
 #[derive(Default)]
 pub(super) struct TranscriptState {
+    pub(super) workflow_finals: std::collections::HashMap<
+        crate::history_cell::NativeMessageIdentity,
+        codex_app_server_protocol::WorkflowAgentMessageProvenance,
+    >,
+    pub(super) workflow_event_ids: std::collections::HashSet<String>,
     pub(super) active_cell: Option<Box<dyn HistoryCell>>,
     /// Shared retained rows for concurrently running dynamic tools, removed on completion.
     pub(super) dynamic_calls:

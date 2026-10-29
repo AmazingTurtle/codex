@@ -1,0 +1,5 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "rendered[0]"
+---
+  Publish report · Completed · 3/3 · 3 agents used · ↓ open

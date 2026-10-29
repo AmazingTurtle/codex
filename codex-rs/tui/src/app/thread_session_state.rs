@@ -87,6 +87,7 @@ impl App {
             session
         } else {
             ThreadSessionState {
+                timeline: None,
                 daybreak_enabled: false,
                 wake_state: None,
                 windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
@@ -176,6 +177,7 @@ mod tests {
 
     fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
         ThreadSessionState {
+            timeline: None,
             daybreak_enabled: false,
             long_context: false,
             wake_state: None,

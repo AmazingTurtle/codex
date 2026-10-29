@@ -1,0 +1,7 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "format!(\"{running}\\n{paused}\\n{completed}\")"
+---
+  audit · [■■■■□□□□] 1/2 phases · Verify · in 312K · out 86K · 28m 57s · 3 agents used · ↓ open
+  audit · [■■■■□□□□] 1/2 phases · Verify · Paused · in 312K · out 86K · 28m 57s · 3 agents used · ↓ open
+  audit · [■■■■■■■■] 2/2 phases · Verify · Completed · in 312K · out 86K · 28m 57s · 3 agents used · ↓ open

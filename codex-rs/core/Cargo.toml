@@ -34,6 +34,7 @@ codex-context-fragments = { workspace = true }
 codex-config = { workspace = true }
 codex-core-plugins = { workspace = true }
 codex-diagnostics = { workspace = true }
+codex-dynamic-workflows = { workspace = true }
 codex-exec-server = { workspace = true }
 codex-extension-api = { workspace = true }
 codex-extension-items = { workspace = true }
@@ -88,6 +89,7 @@ codex-utils-pty = { workspace = true }
 codex-utils-string = { workspace = true }
 codex-utils-stream-parser = { workspace = true }
 codex-windows-sandbox = { package = "codex-windows-sandbox", path = "../windows-sandbox-rs" }
+codex-worktree = { workspace = true }
 dirs = { workspace = true }
 dunce = { workspace = true }
 eventsource-stream = { workspace = true }

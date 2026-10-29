@@ -28,6 +28,26 @@ pub type NotificationFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>
 pub struct CodeModeSessionCellExecutionLimits {
     pub max_yield_time_ms: Option<u64>,
     pub max_heap_size_bytes: Option<usize>,
+    pub profile: CodeModeCellExecutionProfile,
+}
+
+/// Selects the host bindings installed in each isolated execution cell.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CodeModeCellExecutionProfile {
+    #[default]
+    General,
+    Workflow,
+}
+
+impl CodeModeCellExecutionProfile {
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "Serde skip_serializing_if passes the field by reference"
+    )]
+    pub(crate) fn is_general(&self) -> bool {
+        *self == Self::General
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]

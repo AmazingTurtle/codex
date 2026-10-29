@@ -102,6 +102,7 @@ pub(crate) enum ImageDetail {
 ///
 /// The owning session assigns the cell ID when it admits the request.
 pub(crate) struct CreateCellRequest {
+    pub(crate) profile: codex_code_mode_protocol::CodeModeCellExecutionProfile,
     pub(crate) tool_call_id: String,
     pub(crate) enabled_tools: Vec<ToolDefinition>,
     pub(crate) source: String,

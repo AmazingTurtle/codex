@@ -125,6 +125,20 @@ async fn revert_keeps_thread_id_and_hides_suffix_across_repeated_reverts() {
     )
     .await
     .expect("write legacy replacement rollout");
+    let report = serde_json::json!({
+        "id":"replacement-report","ownerThreadId":thread_id,"runId":"run","executionId":"execution",
+        "workflowName":"Retained owner","completionMode":"display","sequence":0,"createdAt":1,
+        "kind":{"type":"started","name":"Retained owner","description":"The physical rollout does not change workflow ownership"}
+    });
+    codex_rollout::append_rollout_item_to_path(
+        &first_replacement_path,
+        &RolloutItem::EventMsg(EventMsg::WorkflowLifecycle(
+            serde_json::from_value(report.clone()).unwrap(),
+        )),
+    )
+    .await
+    .expect("append a genuine logical-owner workflow fact to the replacement");
+    let replacement_bytes = tokio::fs::read(&first_replacement_path).await.unwrap();
 
     store
         .revert_thread(RevertThreadParams {
@@ -135,6 +149,36 @@ async fn revert_keeps_thread_id_and_hides_suffix_across_repeated_reverts() {
         .await
         .expect("revert before first turn");
     assert_eq!(turn_ids(&store, thread_id).await, Vec::<String>::new());
+    let first_rollout_id = codex_rollout::rollout_id_from_path(&first_replacement_path)
+        .expect("the first replacement has its own physical identity");
+    let pool = store.thread_history_db().await.expect("history projection");
+    let checkpoint: String = sqlx::query_scalar(
+        "SELECT workflow_origin_state FROM thread_history_projection_state WHERE thread_id = ?",
+    )
+    .bind(first_rollout_id.to_string())
+    .fetch_one(pool)
+    .await
+    .expect("the second revert projects the first replacement under its physical key");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&checkpoint).unwrap()["thread_id"],
+        serde_json::json!(thread_id),
+        "workflow provenance retains the logical conversation owner"
+    );
+    let projected_report: (String, String) = sqlx::query_as(
+        "SELECT thread_id,event_json FROM thread_workflow_events WHERE event_id = 'replacement-report'",
+    ).fetch_one(pool).await.expect("project the owned fact without retargeting it to another conversation");
+    assert_eq!(
+        (
+            projected_report.0,
+            serde_json::from_str::<serde_json::Value>(&projected_report.1).unwrap()
+        ),
+        (first_rollout_id.to_string(), report)
+    );
+    assert_eq!(
+        tokio::fs::read(&first_replacement_path).await.unwrap(),
+        replacement_bytes,
+        "reprojection must not rewrite the first immutable replacement"
+    );
     let stored = state_db
         .get_thread(thread_id)
         .await
@@ -144,6 +188,15 @@ async fn revert_keeps_thread_id_and_hides_suffix_across_repeated_reverts() {
         .await
         .expect("read recovered creator metadata")
         .meta;
+    assert_eq!(recovered.id, thread_id);
+    assert_ne!(
+        codex_rollout::rollout_id_from_path(&stored.rollout_path),
+        Some(first_rollout_id)
+    );
+    assert_ne!(
+        codex_rollout::rollout_id_from_path(&stored.rollout_path),
+        Some(thread_id)
+    );
     assert_eq!(
         (recovered.creator_user_id, recovered.creator_account_id),
         (

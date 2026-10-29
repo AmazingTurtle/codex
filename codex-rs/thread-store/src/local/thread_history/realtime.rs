@@ -17,11 +17,11 @@ use crate::TimelinePage;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TimelineCursor {
-    thread_id: ThreadId,
-    position: u64,
-    kind: u8,
-    id: String,
+pub(super) struct TimelineCursor {
+    pub(super) thread_id: ThreadId,
+    pub(super) position: u64,
+    pub(super) kind: u8,
+    pub(super) id: String,
 }
 
 // A rollout record can materialize both an item and a turn boundary. Keep the
@@ -33,6 +33,7 @@ pub(super) fn entry_key(entry: &ThreadTimelineEntry) -> (u64, u8, &str) {
         } => (*position, 0, turn_id),
         ThreadTimelineEntry::Item { position, item, .. } => (*position, 1, item.id()),
         ThreadTimelineEntry::Realtime { position, item } => (*position, 2, &item.id),
+        ThreadTimelineEntry::Workflow { position, event } => (*position, 4, &event.id),
         ThreadTimelineEntry::TurnCompleted {
             position, turn_id, ..
         } => (*position, 3, turn_id),
@@ -43,6 +44,9 @@ pub(in crate::local) async fn list_timeline(
     store: &LocalThreadStore,
     params: ListTimelineParams,
 ) -> ThreadStoreResult<TimelinePage> {
+    if let Some(page) = super::legacy_timeline::read_if_legacy(store, &params).await? {
+        return Ok(page);
+    }
     validate_thread_for_paginated_reads(
         store,
         params.thread_id,
@@ -56,6 +60,7 @@ pub(in crate::local) async fn list_timeline(
         .resolve_rollout_lineage(params.thread_id, /*initial_path*/ None)
         .await?;
     let pool = store.thread_history_db().await?;
+    super::native_inputs::backfill(store, &lineage, /*turn_id*/ None).await?;
     let cursor = params
         .cursor
         .as_deref()
@@ -79,7 +84,7 @@ pub(in crate::local) async fn list_timeline(
         .map(|position| sqlite_integer(position, "rollout ordinal"))
         .transpose()?
         .unwrap_or(i64::MAX);
-    let cursor_kind = cursor.as_ref().map_or(4, |cursor| cursor.kind);
+    let cursor_kind = cursor.as_ref().map_or(5, |cursor| cursor.kind);
     let cursor_id = cursor.as_ref().map_or("", |cursor| cursor.id.as_str());
 
     let mut rows = Vec::new();
@@ -122,6 +127,13 @@ WHERE thread_id = ?1 AND rollout_ordinal >= ?2
   AND rollout_ordinal < ?3 AND rollout_ordinal <= ?4
   AND (rollout_ordinal, 2, item_id) < (?4, ?5, ?6)
 ORDER BY rollout_ordinal DESC, item_id DESC LIMIT ?7
+), workflows AS (
+SELECT rollout_ordinal, 4 AS kind, event_id AS id, NULL AS turn_id, event_json AS item_json
+FROM thread_workflow_events
+WHERE thread_id = ?1 AND rollout_ordinal >= ?2
+  AND rollout_ordinal < ?3 AND rollout_ordinal <= ?4
+  AND (rollout_ordinal, 4, event_id) < (?4, ?5, ?6)
+ORDER BY rollout_ordinal DESC, event_id DESC LIMIT ?7
 ), ends AS (
 SELECT rollout_end_ordinal AS rollout_ordinal, 3 AS kind, turn_id AS id, turn_id,
        json_object('type', 'turnCompleted', 'position', rollout_end_ordinal,
@@ -137,6 +149,7 @@ ORDER BY rollout_end_ordinal DESC, turn_id DESC LIMIT ?7
 SELECT * FROM starts
 UNION ALL SELECT * FROM items
 UNION ALL SELECT * FROM realtime
+UNION ALL SELECT * FROM workflows
 UNION ALL SELECT * FROM ends
 ORDER BY rollout_ordinal DESC, kind DESC, id DESC
 LIMIT ?7
@@ -171,6 +184,10 @@ LIMIT ?7
                     item: serde_json::from_str::<RealtimeItem>(&item_json)
                         .map_err(thread_history_error)?
                         .into(),
+                },
+                4 => ThreadTimelineEntry::Workflow {
+                    position,
+                    event: serde_json::from_str(&item_json).map_err(thread_history_error)?,
                 },
                 _ => return Err(thread_history_error("invalid timeline entry kind")),
             });

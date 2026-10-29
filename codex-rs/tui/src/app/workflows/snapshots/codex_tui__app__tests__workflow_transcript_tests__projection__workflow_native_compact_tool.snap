@@ -1,0 +1,9 @@
+---
+source: tui/src/app/workflows/transcript_projection_tests.rs
+expression: compact
+---
+• Ran printf ACTUAL_TOOL
+  └ line 1
+    line 2
+    line 3
+    +11 lines (⌃t to view transcript)

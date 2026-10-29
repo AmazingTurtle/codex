@@ -156,6 +156,18 @@ impl ChatWidget {
                 });
                 self.note_stream_consolidation_queued();
                 self.app_event_tx.send(AppEvent::ConsolidateAgentMessage {
+                    identity: completed_message
+                        .and_then(|_| {
+                            self.thread_id
+                                .zip(self.transcript.last_completed_agent_message.as_ref())
+                        })
+                        .map(
+                            |(thread, (turn, item))| history_cell::NativeMessageIdentity {
+                                thread_id: thread.to_string(),
+                                turn_id: turn.clone(),
+                                item_id: item.clone(),
+                            },
+                        ),
                     source,
                     copy_source,
                     cwd: self.config.cwd.to_path_buf(),
@@ -645,14 +657,21 @@ impl ChatWidget {
                     thread_id,
                 )
             });
-            self.add_to_history(
-                history_cell::AgentMarkdownCell::new_with_inline_visualizations(
-                    parsed.visible_markdown.clone(),
-                    self.config.cwd.as_path(),
-                    context,
-                )
-                .with_copy_source(Some(message.clone())),
-            );
+            let native = history_cell::AgentMarkdownCell::new_with_inline_visualizations(
+                parsed.visible_markdown.clone(),
+                self.config.cwd.as_path(),
+                context,
+            )
+            .with_copy_source(Some(message.clone()));
+            let identity = self
+                .thread_id
+                .map(|thread| history_cell::NativeMessageIdentity {
+                    thread_id: thread.to_string(),
+                    turn_id: turn_id.to_owned(),
+                    item_id: item.id.clone(),
+                });
+            let cell = self.identify_agent_message(native, identity);
+            self.add_boxed_history(cell);
             self.handle_stream_finished();
             self.request_redraw();
         } else {

@@ -36,6 +36,7 @@ use super::textarea::TextAreaState;
 
 /// Callback invoked when the user submits a custom prompt.
 pub(crate) type PromptSubmitted = Box<dyn Fn(String) + Send + Sync>;
+type PromptValidator = Box<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
 
 /// Correlates a pending generated prefill with its eventual display label.
 struct PendingTextSuggestion {
@@ -49,6 +50,8 @@ pub(crate) struct CustomPromptView {
     placeholder: String,
     context_label: Option<String>,
     on_submit: PromptSubmitted,
+    validator: Option<PromptValidator>,
+    validation_error: Option<String>,
     submit_label: &'static str,
     preserve_whitespace: bool,
     dismiss_after_child_accept: bool,
@@ -81,6 +84,8 @@ impl CustomPromptView {
             placeholder,
             context_label,
             on_submit,
+            validator: None,
+            validation_error: None,
             submit_label: "submit",
             preserve_whitespace: false,
             dismiss_after_child_accept: false,
@@ -103,6 +108,11 @@ impl CustomPromptView {
     /// Submit the editor contents without trimming their surrounding whitespace.
     pub(crate) fn preserve_whitespace(mut self) -> Self {
         self.preserve_whitespace = true;
+        self
+    }
+
+    pub(crate) fn with_validation(mut self, validator: PromptValidator) -> Self {
+        self.validator = Some(validator);
         self
     }
 
@@ -177,6 +187,13 @@ impl CustomPromptView {
                         } else {
                             text.trim().to_string()
                         };
+                        if let Some(validate) = &self.validator
+                            && let Err(error) = validate(&text)
+                        {
+                            self.validation_error = Some(error);
+                            return;
+                        }
+                        self.validation_error = None;
                         (self.on_submit)(text);
                         if !self.dismiss_after_child_accept {
                             self.completion = Some(ViewCompletion::Accepted);

@@ -507,6 +507,10 @@ impl PtyCodex {
         self.parser.screen().contents()
     }
 
+    pub(super) fn output_len(&self) -> usize {
+        self.output.len()
+    }
+
     pub(super) fn wait_for_screen(&mut self, text: &str) -> Result<()> {
         let deadline = Instant::now() + STARTUP_TIMEOUT;
         while Instant::now() < deadline {
@@ -520,6 +524,52 @@ impl PtyCodex {
             }
         }
         bail!("missing {text:?}; screen:\n{}", self.screen_contents())
+    }
+
+    pub(super) fn wait_for_idle(&mut self) -> Result<()> {
+        self.wait_for_program_status(/*minimum_offset*/ 0, &["idle", "done"])
+    }
+
+    pub(super) fn wait_for_done_since(&mut self, minimum_offset: usize) -> Result<()> {
+        self.wait_for_program_status(minimum_offset, &["done"])
+    }
+
+    fn wait_for_program_status(&mut self, minimum_offset: usize, expected: &[&str]) -> Result<()> {
+        const PREFIX: &[u8] = b"\x1b]7501;state=";
+        let deadline = Instant::now() + STARTUP_TIMEOUT;
+        let mut last_state = None;
+        while Instant::now() < deadline {
+            self.read_output(Duration::from_millis(/*millis*/ 50))?;
+            self.answer_startup_queries()?;
+            last_state = self
+                .output
+                .windows(PREFIX.len())
+                .enumerate()
+                .rev()
+                .find_map(|(start, bytes)| {
+                    if start < minimum_offset || bytes != PREFIX {
+                        return None;
+                    }
+                    let tail = &self.output[start + PREFIX.len()..];
+                    let terminator = tail.windows(2).position(|bytes| bytes == b"\x1b\\")?;
+                    let end = tail[..terminator]
+                        .iter()
+                        .position(|byte| *byte == b':')
+                        .unwrap_or(terminator);
+                    Some(String::from_utf8_lossy(&tail[..end]).into_owned())
+                });
+            if last_state
+                .as_deref()
+                .is_some_and(|state| expected.contains(&state))
+            {
+                return Ok(());
+            }
+            self.ensure_running()?;
+        }
+        bail!(
+            "missing lifecycle state {expected:?} after byte {minimum_offset} (last: {last_state:?}); screen:\n{}",
+            self.screen_contents()
+        )
     }
 
     pub(super) fn ensure_running(&mut self) -> Result<()> {

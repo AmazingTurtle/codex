@@ -1,8 +1,9 @@
 ---
-source: tui/src/chatwidget/tests/slash_commands.rs
-assertion_line: 3091
+source: tui/src/chatwidget/tests/worktree_picker_tests.rs
 expression: popup
 ---
+› /workflows  open the workflow command center
+
 › /work
 
   GPT-5.6-Sol default · /tmp/project

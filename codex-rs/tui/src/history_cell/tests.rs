@@ -602,6 +602,7 @@ fn image_generation_call_renders_saved_path() {
 
 fn session_configured_event(model: &str) -> ThreadSessionState {
     ThreadSessionState {
+        timeline: None,
         daybreak_enabled: false,
         long_context: false,
         wake_state: None,

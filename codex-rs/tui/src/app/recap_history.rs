@@ -109,7 +109,11 @@ fn recent_exchanges(cells: &[Arc<dyn HistoryCell>]) -> Vec<Exchange> {
     for cell in cells.iter().rev() {
         let is_user = if cell.as_any().is::<UserHistoryCell>() {
             true
-        } else if cell.as_any().is::<AgentMarkdownCell>() || cell.as_any().is::<AgentMessageCell>()
+        } else if cell.as_any().is::<AgentMarkdownCell>()
+            || cell
+                .as_any()
+                .is::<crate::history_cell::WorkflowMessageCell>()
+            || cell.as_any().is::<AgentMessageCell>()
         {
             false
         } else {

@@ -1,0 +1,18 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: source
+---
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 1     ›
+  ──────────────────────────────────────
+   1 Overview   2 Transcript   3 Source
+  workflow.meta({ name: 'Review
+  changes', description: 'Review project
+  changes', phases: [] });
+  const result = await
+  workflow.agent('review', { message:
+  'Review source' });
+
+
+  Esc list · Enter chat · 1/2/3 view
+  j↑ k↓ scroll · PgUp/PgDn ends · ? help

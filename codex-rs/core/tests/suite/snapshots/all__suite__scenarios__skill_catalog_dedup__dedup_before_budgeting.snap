@@ -16,8 +16,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=caad2670e6974557):
-        - namespace/functions; hash=ccf7167b44192085
+00:additional_tools/developer (3; hash=fe95c3e58f609b2a):
+        - namespace/functions; hash=0e85c44c90cbf960
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -49,12 +49,18 @@ Settings:
     - Relevance: Determine what a plugin can help with from explicit user mention or from the plugin-associa..., MCP tools, and apps exposed elsewhere in this turn. [hash=620459a4e7b590f0]
     - Missing/blocked: If the user requests a plugin that does not have relevant callable capabilities for t..., say so briefly and continue with the best fallback. [hash=746b0469a8f6cb3e]
 
-02:message/developer[4]:
-    [01] <permissions instructions>
+02:message/developer[5]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <permissions instructions>
         Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `danger-full-access`...ll commands are permitted. Network access is enabled. [hash=c134061cebb94a1b]
         Approval policy is currently never. Do not provide the `sandbox_permissions` for any reason, commands will be rejected.
         </permissions instructions>
-    [02] <collaboration_mode># Collaboration Mode: Default
+    [03] <collaboration_mode># Collaboration Mode: Default
 
         You are now in Default mode. Any previous instructions for other modes (e.g. Plan mode) are no longer active.
 
@@ -70,7 +76,7 @@ Settings:
 
         Never use the `request_user_input` tool for permission requests or permission-related escalations.
         </collaboration_mode>
-    [03] <skills_instructions>
+    [04] <skills_instructions>
         ## Skills
         A skill is a set of instructions provided through a `SKILL.md` source. Below is the list of skills that ...locators can be expanded using the skill roots table. [hash=f00d6a4d3e192f06]
         ### Skill roots
@@ -81,7 +87,7 @@ Settings:
         - other:s1: Skill guidance. Skill guidance. Skill guidance. Skill guidance. Skill guidance. Skill guidan...ce.  UNIQUE_DESCRIPTION_END (executor package: e1/s1) [hash=d8432891813affeb]
         - other:s2: Skill guidance. Skill guidance. Skill guidance. Skill guidance. Skill guidance. Skill guidan...ce.  UNIQUE_DESCRIPTION_END (executor package: e1/s2) [hash=1c05fa218dd21e8f]
         </skills_instructions>
-    [04] <skills_instructions>
+    [05] <skills_instructions>
         ## Skills
         A skill is a set of instructions provided through a `SKILL.md` source. Below is the list of skills that ...urce` locators use their provider's access mechanism. [hash=b6782e3abdba03b2]
         Read a skill package directly with `skills.read({"package":"<package>"})` to read its `SKILL.md`; root a...ackage is not provided, use `skills.list` to find it. [hash=25bf84ea2123d647]

@@ -45,6 +45,7 @@ fn resolve_yield_timeout_applies_grace_before_session_limits() {
         (Some(u64::MAX), u64::MAX, Duration::from_millis(u64::MAX)),
     ] {
         let session = InProcessCodeModeSession::with_limits(CodeModeSessionCellExecutionLimits {
+            profile: codex_code_mode_protocol::CodeModeCellExecutionProfile::General,
             max_yield_time_ms,
             max_heap_size_bytes: None,
         });
@@ -185,6 +186,7 @@ async fn execute_and_wait_clamp_yield_grace_without_stopping_the_cell() {
     let _time_guard = hold_virtual_time();
     let delegate = Arc::new(ReleasableToolDelegate::default());
     let service = InProcessCodeModeSession::with_limits(CodeModeSessionCellExecutionLimits {
+        profile: Default::default(),
         max_yield_time_ms: Some(/*value*/ 10_000),
         max_heap_size_bytes: None,
     });
@@ -320,12 +322,14 @@ async fn zero_yield_limit_is_immediate_and_scoped_to_its_session() {
     let _time_guard = hold_virtual_time();
     let zero_delegate = Arc::new(ReleasableToolDelegate::default());
     let zero_session = InProcessCodeModeSession::with_limits(CodeModeSessionCellExecutionLimits {
+        profile: Default::default(),
         max_yield_time_ms: Some(/*value*/ 0),
         max_heap_size_bytes: None,
     });
     let limited_delegate = Arc::new(ReleasableToolDelegate::default());
     let limited_session =
         InProcessCodeModeSession::with_limits(CodeModeSessionCellExecutionLimits {
+            profile: Default::default(),
             max_yield_time_ms: Some(/*value*/ 10),
             max_heap_size_bytes: None,
         });

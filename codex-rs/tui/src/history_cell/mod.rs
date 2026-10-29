@@ -11,7 +11,10 @@
 //! rendered transcript output can change.
 
 mod activity_group;
+mod workflow_message;
 pub(crate) use activity_group::ActivityGroup;
+pub(crate) use workflow_message::NativeMessageIdentity;
+pub(crate) use workflow_message::WorkflowMessageCell;
 
 use crate::diff_model::FileChange;
 use crate::diff_render::create_diff_summary;
@@ -121,6 +124,7 @@ mod session;
 mod spoken_artifacts;
 mod startup_warnings;
 mod warnings;
+mod workflow;
 
 pub(crate) use activity_details::ActivityDetails;
 pub(crate) use activity_preview::ActivityDisclosure;
@@ -147,6 +151,7 @@ pub(crate) use warnings::WarningId;
 pub(crate) use warnings::WarningKey;
 pub(crate) use warnings::warning_count;
 pub(crate) use warnings::warning_entries;
+pub(crate) use workflow::WorkflowLifecycleHistoryCell;
 
 #[cfg(test)]
 mod tests;

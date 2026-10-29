@@ -986,6 +986,13 @@ impl App {
         thread_id: ThreadId,
         notification: ServerNotification,
     ) -> Result<()> {
+        if let Some(channel) = self.thread_event_channels.get(&thread_id) {
+            let mut store = channel.store.lock().await;
+            if store.timeline_notification_covered(&notification) {
+                store.push_notification(notification);
+                return Ok(());
+            }
+        }
         self.deliver_background_voice_notification(thread_id, &notification);
         if self.abandoned_side_threads.contains(&thread_id) {
             return Ok(());
@@ -1429,6 +1436,7 @@ impl App {
         if !turns.is_empty() {
             self.chat_widget.set_token_info(/*info*/ None);
         }
+        let timeline = session.timeline.clone();
         match presentation {
             ThreadAttachPresentation::Fresh
             | ThreadAttachPresentation::FreshWithDraft
@@ -1451,7 +1459,7 @@ impl App {
         self.schedule_recap_check(thread_id, now);
 
         self.chat_widget
-            .replay_thread_turns(turns, ReplayKind::ResumeInitialMessages);
+            .replay_thread_history(timeline, turns, ReplayKind::ResumeInitialMessages);
         if should_buffer_initial_replay {
             self.app_event_tx
                 .send(AppEvent::EndInitialHistoryReplayBuffer);
@@ -1672,6 +1680,10 @@ impl App {
         mut snapshot: ThreadEventSnapshot,
         resume_restored_queue: bool,
     ) {
+        let timeline = snapshot
+            .session
+            .as_mut()
+            .and_then(|session| session.timeline.take());
         let mut reasoning_replay = reasoning_replay::ReasoningReplay::new(&mut snapshot);
         let replayed_final_items = realtime_delivery::completed_agent_items(&snapshot);
         let replayed_voice_texts = realtime_delivery::replayed_voice_texts(&snapshot);
@@ -1768,10 +1780,11 @@ impl App {
                 preserve_in_flight_turn: true,
             },
         );
-        if !snapshot.turns.is_empty() {
-            self.chat_widget
-                .replay_thread_turns(snapshot.turns, ReplayKind::ThreadSnapshot);
-        }
+        self.chat_widget.replay_thread_history(
+            timeline,
+            snapshot.turns,
+            ReplayKind::ThreadSnapshot,
+        );
         for (event, changes) in snapshot.events.into_iter().zip(request_changes) {
             reasoning_replay.before_event(&event, &mut self.chat_widget);
             match (event, changes) {

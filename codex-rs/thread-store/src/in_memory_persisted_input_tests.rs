@@ -33,7 +33,12 @@ async fn persisted_input_lookup_matches_raw_record_ids_and_user_order_without_hi
         PersistedInputId::ResponseItem(id.clone()),
         PersistedInputId::UserInputOrder(12),
         PersistedInputId::UserInputOrder(13),
+        PersistedInputId::WorkflowLifecycle("workflow-ui".into()),
     ];
+    store.state.lock().await.histories.get_mut(&thread_id).unwrap().push(RolloutItem::EventMsg(serde_json::from_value(json!({
+        "type":"workflow_lifecycle","id":"workflow-ui","ownerThreadId":thread_id,"runId":"run","executionId":"execution","workflowName":"Review","completionMode":"display","sequence":0,"createdAt":1,
+        "kind":{"type":"started","name":"Review","description":"Inspect"}
+    })).unwrap()));
     assert_eq!(
         store
             .find_persisted_input_ids(FindPersistedInputIdsParams { thread_id, ids })
@@ -41,7 +46,8 @@ async fn persisted_input_lookup_matches_raw_record_ids_and_user_order_without_hi
             .unwrap(),
         BTreeSet::from([
             PersistedInputId::ResponseItem(id),
-            PersistedInputId::UserInputOrder(12)
+            PersistedInputId::UserInputOrder(12),
+            PersistedInputId::WorkflowLifecycle("workflow-ui".into())
         ])
     );
     envelope.metadata = Some(serde_json::from_value(json!({"user_input_order":13})).unwrap());

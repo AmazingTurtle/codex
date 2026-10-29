@@ -19,6 +19,8 @@ pub enum PersistedInputId {
     ResponseItem(ResponseItemId),
     /// Matches the acceptance order attached to persisted user input.
     UserInputOrder(u64),
+    /// Matches an immutable workflow UI event independently of model input.
+    WorkflowLifecycle(String),
 }
 
 /// A bounded query against the requested thread's persisted rollout lineage.
@@ -53,6 +55,9 @@ impl PersistedInputSearch {
 
     pub(crate) fn observe(&mut self, item: &RolloutItem) {
         match item {
+            RolloutItem::EventMsg(codex_protocol::protocol::EventMsg::WorkflowLifecycle(event)) => {
+                self.record(PersistedInputId::WorkflowLifecycle(event.id.clone()));
+            }
             RolloutItem::ResponseItem(envelope) => {
                 if let Some(id) = envelope.item.id() {
                     self.record(PersistedInputId::ResponseItem(id.clone()));

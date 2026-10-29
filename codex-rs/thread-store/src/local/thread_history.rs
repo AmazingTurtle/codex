@@ -10,11 +10,15 @@ use super::LocalThreadStore;
 use crate::ThreadStoreError;
 use crate::ThreadStoreResult;
 
+mod legacy_timeline;
+pub(super) mod native_inputs;
 mod read;
 mod realtime;
 mod search;
 mod segment_paging;
 mod turn_lookup;
+mod workflow;
+pub(super) mod workflow_origin;
 
 pub(super) use read::list_items;
 pub(super) use read::list_turns;
@@ -33,6 +37,8 @@ pub(super) struct ProjectedRolloutLine {
     pub fallback_created_at_ms: Option<i64>,
     pub changes: ThreadHistoryChangeSet,
     pub realtime_item: Option<RealtimeItem>,
+    pub workflow_event: Option<codex_app_server_protocol::WorkflowLifecycleEvent>,
+    pub workflow_source: Option<workflow_origin::WorkflowSourceBoundary>,
 }
 
 /// One ordered update to apply while advancing a rollout projection checkpoint.
@@ -50,6 +56,7 @@ pub(super) enum RolloutProjectionStep {
 pub(super) struct RolloutProjectionState {
     pub next_byte_offset: u64,
     pub next_ordinal: u64,
+    pub workflow_origin_state: Option<String>,
 }
 
 pub(super) async fn projection_state(
@@ -68,9 +75,9 @@ pub(super) async fn projection_state(
     }
 
     let pool = store.thread_history_db().await?;
-    let state = sqlx::query_as::<_, (i64, i64)>(
+    let state = sqlx::query_as::<_, (i64, i64, Option<String>)>(
         r#"
-SELECT next_rollout_byte_offset, next_rollout_ordinal
+SELECT next_rollout_byte_offset, next_rollout_ordinal, workflow_origin_state
 FROM thread_history_projection_state
 WHERE thread_id = ?
         "#,
@@ -80,7 +87,7 @@ WHERE thread_id = ?
     .await
     .map_err(thread_history_error)?;
     state
-        .map(|(next_byte_offset, next_ordinal)| {
+        .map(|(next_byte_offset, next_ordinal, workflow_origin_state)| {
             Ok(RolloutProjectionState {
                 next_byte_offset: u64::try_from(next_byte_offset).map_err(|_| {
                     ThreadStoreError::Internal {
@@ -96,6 +103,7 @@ WHERE thread_id = ?
                         ),
                     }
                 })?,
+                workflow_origin_state,
             })
         })
         .transpose()
@@ -104,20 +112,23 @@ WHERE thread_id = ?
 pub(super) async fn apply_projection(
     store: &LocalThreadStore,
     thread_id: ThreadId,
+    owner_thread_id: ThreadId,
     start_offset: u64,
     next_offset: u64,
     initial_ordinal: u64,
     projections: Vec<RolloutProjectionStep>,
 ) -> ThreadStoreResult<()> {
     let pool = store.thread_history_db().await?;
+    // Rows are keyed by the immutable physical rollout. Workflow provenance uses
+    // the logical conversation owner, which stays stable across thread/revert.
     // Write the projected rows and advance the JSONL offset and ordinal in one transaction. If
     // SQLite fails, it stays behind the durable rollout instead of claiming data it did not
     // materialize.
     let mut transaction = pool.begin_immediate().await.map_err(thread_history_error)?;
     let thread_id = thread_id.to_string();
-    let projection_state = sqlx::query_as::<_, (i64, i64)>(
+    let projection_state = sqlx::query_as::<_, (i64, i64, Option<String>)>(
         r#"
-SELECT next_rollout_byte_offset, next_rollout_ordinal
+SELECT next_rollout_byte_offset, next_rollout_ordinal, workflow_origin_state
 FROM thread_history_projection_state
 WHERE thread_id = ?
         "#,
@@ -126,8 +137,12 @@ WHERE thread_id = ?
     .fetch_optional(&mut *transaction)
     .await
     .map_err(thread_history_error)?;
-    let (expected_offset, mut next_ordinal) =
-        projection_state.unwrap_or((0, sqlite_integer(initial_ordinal, "rollout ordinal")?));
+    let (expected_offset, mut next_ordinal, origin_checkpoint) =
+        projection_state.unwrap_or((0, sqlite_integer(initial_ordinal, "rollout ordinal")?, None));
+    let mut origins = match origin_checkpoint {
+        Some(json) => workflow_origin::WorkflowOrigins::restore(owner_thread_id, &json)?,
+        None => workflow_origin::WorkflowOrigins::new(owner_thread_id),
+    };
     let start_offset = sqlite_integer(start_offset, "rollout byte offset")?;
     if expected_offset != start_offset {
         return Err(ThreadStoreError::Internal {
@@ -146,6 +161,9 @@ WHERE thread_id = ?
                         ),
                     });
                 }
+                if let Some(boundary) = projection.workflow_source {
+                    origins.observe(boundary)?;
+                }
                 apply_change_set(
                     &mut transaction,
                     thread_id.as_str(),
@@ -156,6 +174,16 @@ WHERE thread_id = ?
                     projection.changes,
                 )
                 .await?;
+                if let Some(event) = projection.workflow_event {
+                    workflow::insert_projected(
+                        &mut transaction,
+                        thread_id.as_str(),
+                        owner_thread_id,
+                        ordinal,
+                        origins.authorize(event)?,
+                    )
+                    .await?;
+                }
                 if let Some(item) = projection.realtime_item {
                     let item_json = serde_json::to_string(&item).map_err(thread_history_error)?;
                     sqlx::query(
@@ -223,16 +251,19 @@ ON CONFLICT(thread_id, item_id) DO NOTHING
 INSERT INTO thread_history_projection_state (
     thread_id,
     next_rollout_byte_offset,
-    next_rollout_ordinal
-) VALUES (?, ?, ?)
+    next_rollout_ordinal,
+    workflow_origin_state
+) VALUES (?, ?, ?, ?)
 ON CONFLICT(thread_id) DO UPDATE SET
     next_rollout_byte_offset = excluded.next_rollout_byte_offset,
-    next_rollout_ordinal = excluded.next_rollout_ordinal
+    next_rollout_ordinal = excluded.next_rollout_ordinal,
+    workflow_origin_state = excluded.workflow_origin_state
         "#,
     )
     .bind(thread_id.as_str())
     .bind(sqlite_integer(next_offset, "rollout byte offset")?)
     .bind(next_ordinal)
+    .bind(serde_json::to_string(&origins).map_err(thread_history_error)?)
     .execute(&mut *transaction)
     .await
     .map_err(thread_history_error)?;
@@ -263,6 +294,11 @@ pub(super) async fn delete_thread(
         .await
         .map_err(thread_history_delete_error)?;
     sqlx::query("DELETE FROM thread_realtime_items WHERE thread_id = ?")
+        .bind(thread_id.as_str())
+        .execute(&mut *transaction)
+        .await
+        .map_err(thread_history_delete_error)?;
+    sqlx::query("DELETE FROM thread_workflow_events WHERE thread_id = ?")
         .bind(thread_id.as_str())
         .execute(&mut *transaction)
         .await

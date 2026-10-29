@@ -6,6 +6,9 @@
 //! together with the replay behavior that consumes them.
 
 use super::*;
+use crate::thread_transcript::hide_private_items_after_voice_handoff;
+use crate::thread_transcript::hide_private_timeline_items;
+use crate::thread_transcript::is_voice_handoff_item;
 use std::borrow::Cow;
 
 #[derive(Debug, Clone)]
@@ -24,24 +27,6 @@ pub(super) enum ThreadBufferedEvent {
     Request(Box<ServerRequest>),
     HistoryEntryResponse(HistoryLookupResponse),
     FeedbackSubmission(FeedbackThreadEvent),
-}
-
-fn is_voice_handoff_item(item: &ThreadItem) -> bool {
-    matches!(item, ThreadItem::UserMessage { content, .. }
-        if crate::chatwidget::realtime_delegation_input(content).is_some())
-}
-
-fn hide_private_items_after_voice_handoff(items: &mut Vec<ThreadItem>, delegated: bool) {
-    let has_marker = items.iter().any(is_voice_handoff_item);
-    // An evicted marker leaves no reliable order, so hide private items
-    // conservatively. A present marker lets earlier typed output survive.
-    let mut voice_started = delegated && !has_marker;
-    items.retain(|item| {
-        if is_voice_handoff_item(item) {
-            voice_started = true;
-        }
-        !voice_started || !crate::chatwidget::is_private_realtime_agent_item(item)
-    });
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,7 +60,9 @@ pub(super) struct ThreadEventStore {
     pub(super) capacity: usize,
     pub(super) active: bool,
     pub(super) buffered_agent_message_delta_bytes: usize,
-    delegated_turns: VecDeque<String>,
+    pub(super) timeline_revision: u64,
+    pub(super) timeline_loaded_revision: u64,
+    pub(super) delegated_turns: VecDeque<String>,
     recap_progress: recap::RecapProgress,
 }
 
@@ -101,6 +88,7 @@ impl ThreadEventStore {
                     | ServerNotification::HookCompleted(_)
                     | ServerNotification::McpServerStatusUpdated(_)
                     | ServerNotification::McpServerOauthLoginCompleted(_)
+                    | ServerNotification::WorkflowLifecycleChanged(_)
             ),
             ThreadBufferedEvent::HistoryEntryResponse(_) => false,
         }
@@ -120,6 +108,8 @@ impl ThreadEventStore {
             capacity,
             active: false,
             buffered_agent_message_delta_bytes: 0,
+            timeline_revision: 0,
+            timeline_loaded_revision: 0,
             delegated_turns: VecDeque::new(),
             recap_progress: recap::RecapProgress::default(),
         }
@@ -140,6 +130,7 @@ impl ThreadEventStore {
     pub(super) fn set_session(&mut self, session: ThreadSessionState, turns: Vec<Turn>) {
         self.session = Some(session);
         self.set_turns(turns);
+        self.timeline_loaded_revision = self.timeline_revision;
     }
 
     pub(super) fn rebase_buffer_after_session_refresh(&mut self) {
@@ -181,6 +172,10 @@ impl ThreadEventStore {
     }
 
     fn push_notification_inner(&mut self, notification: Cow<'_, ServerNotification>) {
+        let covered = self.timeline_notification_covered(notification.as_ref());
+        if !covered {
+            self.note_timeline_notification(notification.as_ref());
+        }
         if (matches!(
             notification.as_ref(),
             ServerNotification::ThreadClosed(_) | ServerNotification::ThreadDeleted(_)
@@ -212,6 +207,9 @@ impl ThreadEventStore {
         }
         self.pending_interactive_replay
             .note_server_notification(notification.as_ref());
+        if covered {
+            return;
+        }
         match notification.as_ref() {
             ServerNotification::TurnStarted(turn) => {
                 self.set_active_turn_id(turn.turn.id.clone());
@@ -410,6 +408,13 @@ impl ThreadEventStore {
             .collect::<std::collections::HashSet<_>>();
         for turn in &mut snapshot.turns {
             hide_private_items_after_voice_handoff(&mut turn.items, delegated.contains(&turn.id));
+        }
+        if let Some(crate::session_state::TimelineHistorySnapshot::Available(entries)) = snapshot
+            .session
+            .as_mut()
+            .and_then(|session| session.timeline.as_mut())
+        {
+            hide_private_timeline_items(entries, &snapshot.turns, &snapshot.delegated_turns);
         }
         let buffered_markers = snapshot
             .events
@@ -679,6 +684,7 @@ mod tests {
 
     fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
         ThreadSessionState {
+            timeline: None,
             daybreak_enabled: false,
             long_context: false,
             wake_state: None,
@@ -1021,7 +1027,7 @@ mod tests {
                 "threadId": "thread", "turnId": "turn", "completedAtMs": 0,
                 "item": {
                     "type": "agentMessage", "id": "question", "text": "already in the snapshot",
-                    "phase": null, "memoryCitation": null, "delivery": null,
+                    "phase": null, "memoryCitation": null, "delivery": null, "workflow": null,
                     "questions": [{"title": "Which way?", "options": null}]
                 }
             }

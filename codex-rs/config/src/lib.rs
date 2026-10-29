@@ -15,6 +15,7 @@ pub mod config_toml;
 mod constraint;
 mod debloat;
 mod diagnostics;
+mod dynamic_workflows;
 mod filesystem_constraints;
 mod fingerprint;
 mod guardian;
@@ -55,6 +56,7 @@ mod tui_rendering;
 pub mod types;
 
 pub const CONFIG_TOML_FILE: &str = "config.toml";
+pub use dynamic_workflows::DynamicWorkflowsConfig;
 
 pub use application_requirements::ApplicationNetworkRequirementsToml;
 pub use application_requirements::ApplicationRequirementsToml;

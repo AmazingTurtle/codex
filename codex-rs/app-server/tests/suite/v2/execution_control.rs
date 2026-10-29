@@ -1,4 +1,4 @@
-//! Conversation inference controls reflect actual work across pause and resume.
+//! Conversation inference controls remain available with dynamic workflows disabled.
 
 use anyhow::Result;
 use app_test_support::MockResponsesConfig;
@@ -16,6 +16,7 @@ use codex_app_server_protocol::ThreadUnpauseResponse;
 use codex_app_server_protocol::TurnCompletedNotification;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::TurnStatus;
+use codex_features::Feature;
 use codex_protocol::protocol::ExecutionControlState;
 use core_test_support::responses;
 use core_test_support::streaming_sse::StreamingSseChunk;
@@ -64,7 +65,9 @@ async fn execution_control_pause_read_unpause_and_human_message_resume() -> Resu
         }],
     ])
     .await;
-    MockResponsesConfig::new(server.uri()).write(home.path())?;
+    MockResponsesConfig::new(server.uri())
+        .disable_feature(Feature::DynamicWorkflows)
+        .write(home.path())?;
     let mut app = TestAppServer::builder()
         .with_codex_home(home.path())
         .without_managed_config()
@@ -230,7 +233,9 @@ async fn execution_control_idle_actions_are_noops_and_missing_capability_default
 -> Result<()> {
     let home = TempDir::new()?;
     let server = responses::start_mock_server().await;
-    MockResponsesConfig::new(&server.uri()).write(home.path())?;
+    MockResponsesConfig::new(&server.uri())
+        .disable_feature(Feature::DynamicWorkflows)
+        .write(home.path())?;
     let mut app = TestAppServer::builder()
         .with_codex_home(home.path())
         .without_managed_config()

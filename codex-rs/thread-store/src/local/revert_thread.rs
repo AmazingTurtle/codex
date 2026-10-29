@@ -98,6 +98,7 @@ pub(super) async fn revert(
         super::thread_history_materialization::materialize_to_sqlite(
             store,
             segment.rollout_id(),
+            segment.owner_thread_id,
             segment.rollout_path.as_path(),
         )
         .await?;

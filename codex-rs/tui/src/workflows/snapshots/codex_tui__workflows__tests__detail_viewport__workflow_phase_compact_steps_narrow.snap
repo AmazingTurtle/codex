@@ -1,0 +1,24 @@
+---
+source: tui/src/workflows/detail_viewport_tests.rs
+expression: "render(&center, 42, 20)"
+---
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 1     ›
+  ──────────────────────────────────────
+   1 Overview   2 Transcript   3 Source
+  Review
+  Status: Active
+
+  Inspect source · Running
+  gpt-review · high
+  Inspect source and report a concise a…
+
+  Check tests · Discovered
+  Model unknown · Reasoning unknown
+  Check the changed tests
+
+
+
+
+  Esc list · 1/2/3 view · Space Actions
+  j↑ k↓ scroll · PgUp/PgDn ends · ? help

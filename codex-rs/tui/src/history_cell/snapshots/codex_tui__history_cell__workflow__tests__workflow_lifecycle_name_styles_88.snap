@@ -1,0 +1,318 @@
+---
+source: tui/src/history_cell/workflow_tests.rs
+expression: "serde_json::to_string_pretty(&rendered).unwrap()"
+---
+[
+  {
+    "event": "started",
+    "lines": [
+      {
+        "text": "• Started workflow review-change",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Started workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "event": "task completed",
+    "lines": [
+      {
+        "text": "• Completed task Review 日本語 in workflow review-change after 3m 40s",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Completed task ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "Review 日本語",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          },
+          {
+            "text": " in workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          },
+          {
+            "text": " after ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "3m 40s",
+            "accent": false,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "event": "task failed",
+    "lines": [
+      {
+        "text": "• Failed task Review 日本語 in workflow review-change after 3m 40s",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Failed task ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "Review 日本語",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          },
+          {
+            "text": " in workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          },
+          {
+            "text": " after ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "3m 40s",
+            "accent": false,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "event": "task stopped",
+    "lines": [
+      {
+        "text": "• Stopped task Review 日本語 in workflow review-change after 3m 40s",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Stopped task ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "Review 日本語",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          },
+          {
+            "text": " in workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          },
+          {
+            "text": " after ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "3m 40s",
+            "accent": false,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "event": "task skipped",
+    "lines": [
+      {
+        "text": "• Skipped task Review 日本語 in workflow review-change",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Skipped task ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "Review 日本語",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          },
+          {
+            "text": " in workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "event": "completed",
+    "lines": [
+      {
+        "text": "• Completed workflow review-change",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Completed workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "event": "interrupted",
+    "lines": [
+      {
+        "text": "• Interrupted workflow review-change",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Interrupted workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      },
+      {
+        "text": "",
+        "spans": []
+      }
+    ]
+  },
+  {
+    "event": "result",
+    "lines": [
+      {
+        "text": "• Result of workflow review-change",
+        "spans": [
+          {
+            "text": "• ",
+            "accent": false,
+            "bold": false,
+            "clears_bold": false
+          },
+          {
+            "text": "Result of workflow ",
+            "accent": false,
+            "bold": true,
+            "clears_bold": false
+          },
+          {
+            "text": "review-change",
+            "accent": true,
+            "bold": false,
+            "clears_bold": true
+          }
+        ]
+      }
+    ]
+  }
+]

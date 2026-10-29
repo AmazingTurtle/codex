@@ -2,7 +2,8 @@
 source: tui/src/chatwidget/tests/worktree_picker_tests.rs
 expression: popup
 ---
-› /worktree  start or continue a conversation in a new worktree
+  /worktree   start or continue a conversation in a new worktree
+› /workflows  open the workflow command center
 
 › /work
 

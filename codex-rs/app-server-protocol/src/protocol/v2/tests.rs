@@ -3230,6 +3230,7 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
             memory_citation: None,
             delivery: None,
             questions: None,
+            workflow: None,
         }
     );
 
@@ -3269,6 +3270,7 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
             }),
             delivery: None,
             questions: None,
+            workflow: None,
         }
     );
 
@@ -3289,7 +3291,8 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
         serde_json::to_value(&async_item).unwrap(),
         json!({
             "type": "agentMessage", "id": "async-1", "text": "Which?", "phase": "final_answer",
-            "memoryCitation": null, "delivery": "async", "questions": [{"title": "Which?", "options": null}]
+            "memoryCitation": null, "delivery": "async", "questions": [{"title": "Which?", "options": null}],
+            "workflow": null
         })
     );
     let old_item: ThreadItem = serde_json::from_value(json!({

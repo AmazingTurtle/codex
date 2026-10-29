@@ -38,6 +38,7 @@ impl ChatWidget {
             ) => false,
             InputResult::Command(_)
             | InputResult::ServiceTierCommand(_)
+            | InputResult::WorkflowCommand { .. }
             | InputResult::CommandWithArgs(..) => true,
             InputResult::Submitted { .. }
             | InputResult::Queued { .. }
@@ -105,6 +106,9 @@ impl ChatWidget {
             }
             InputResult::ServiceTierCommand(command) => {
                 self.handle_service_tier_command_dispatch(command);
+            }
+            InputResult::WorkflowCommand { command, arguments } => {
+                self.handle_saved_workflow_command(command, arguments);
             }
             InputResult::CommandWithArgs(cmd, args, text_elements) => {
                 self.handle_slash_command_with_args_dispatch(cmd, args, text_elements);

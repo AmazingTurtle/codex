@@ -16,8 +16,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=16a612befa16469e):
-        - namespace/functions; hash=87342dcf2568bbe2
+00:additional_tools/developer (3; hash=bc4d3fa775c6b909):
+        - namespace/functions; hash=b7dd97d5bade5f31
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -33,9 +33,15 @@ Settings:
           - function/wait_agent
 01:message/developer:
     <MODEL_INSTRUCTIONS>
-02:message/developer[2]:
-    [01] <PERMISSIONS_INSTRUCTIONS>
-    [02] <COLLABORATION_MODE>
+02:message/developer[3]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <PERMISSIONS_INSTRUCTIONS>
+    [03] <COLLABORATION_MODE>
 03:message/developer:
     <MULTI_AGENT_ROLE>
 04:message/developer:
@@ -54,8 +60,8 @@ Settings:
 ## Window 2 (after request 3: input diverged at item 00)
 Settings: same as window 1
 -- request 4 (turn) --
-00:additional_tools/developer (3; hash=6759c2b6d491d1ed):
-        - namespace/functions; hash=ee4ea3e38bfccda1
+00:additional_tools/developer (3; hash=5afce2ed66ebe6ce):
+        - namespace/functions; hash=546480037c716316
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -70,9 +76,15 @@ Settings: same as window 1
           - function/wait_agent
 01:message/developer:
     <MODEL_INSTRUCTIONS>
-02:message/developer[2]:
-    [01] <PERMISSIONS_INSTRUCTIONS>
-    [02] <COLLABORATION_MODE>
+02:message/developer[3]:
+    [01] <dynamic_workflows>
+        Mode: auto. You may choose scripted coordination when useful and permitted.
+        Workflow management tools are available. Use the advertised tool schemas.
+        User and repository delegation restrictions always apply; this mode grants no additional permission. Wor...vailability does not enable ordinary JavaScript exec. [hash=64ec8c0c5981fe4e]
+        Use workflows for useful, authorized agent coordination. Read $dynamic-workflow for authoring and recove... repeat them automatically. Legacy work is read-only. [hash=ccf4e59f913c1264]
+        </dynamic_workflows>
+    [02] <PERMISSIONS_INSTRUCTIONS>
+    [03] <COLLABORATION_MODE>
 03:message/developer:
     <MULTI_AGENT_ROLE>
 04:message/developer:

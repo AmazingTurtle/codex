@@ -66,6 +66,8 @@ mod pagination_completion_tests;
 mod patch_approval_tests;
 #[path = "tests/permission_selection_tests.rs"]
 mod permission_selection_tests;
+#[path = "workflows/persisted_workflow_fixture.rs"]
+mod persisted_workflow_fixture;
 #[path = "tests/projectless_auto_review_tests.rs"]
 mod projectless_auto_review_tests;
 #[path = "tests/projectless_tests.rs"]
@@ -76,6 +78,20 @@ mod quick_dials_tests;
 mod security_setup_dismissal_tests;
 #[path = "tests/unavailable_commands_tests.rs"]
 mod unavailable_commands;
+#[path = "tests/workflow_actions.rs"]
+mod workflow_actions;
+#[path = "workflows/child_input_tests.rs"]
+mod workflow_child_input_tests;
+#[path = "tests/workflow_history.rs"]
+mod workflow_history;
+#[path = "workflows/workflow_integration_tests.rs"]
+mod workflow_integration_tests;
+#[path = "workflows/overview_tests.rs"]
+mod workflow_overview_tests;
+#[path = "workflows/saved/integration_tests.rs"]
+mod workflow_saved_integration_tests;
+#[path = "workflows/transcript_tests.rs"]
+mod workflow_transcript_tests;
 
 #[path = "tests/backend_sessions_tests.rs"]
 mod backend_sessions;
@@ -4637,6 +4653,7 @@ async fn active_thread_file_change_approval_recovers_buffered_changes() {
             turn_id: "turn-active-approval".to_string(),
             completed_at_ms: 0,
             item: ThreadItem::AgentMessage {
+                workflow: None,
                 id: "agent-1".to_string(),
                 text: "streaming".to_string(),
                 phase: None,
@@ -6249,6 +6266,7 @@ async fn render_clear_ui_header_after_long_transcript_for_snapshot() -> String {
     };
     let make_header = |is_first| -> Arc<dyn HistoryCell> {
         let session = ThreadSessionState {
+            timeline: None,
             daybreak_enabled: false,
             long_context: false,
             wake_state: None,
@@ -6490,6 +6508,7 @@ async fn make_test_app() -> Box<App> {
         agent_navigation: AgentNavigationState::default(),
         pending_server_profiles: HashMap::new(),
         agents_overview: Default::default(),
+        workflows: Default::default(),
         side_threads: HashMap::new(),
         abandoned_side_threads: HashSet::new(),
         active_thread_id: None,
@@ -6616,6 +6635,7 @@ pub(super) async fn make_test_app_with_channels() -> (
             agent_navigation: AgentNavigationState::default(),
             pending_server_profiles: HashMap::new(),
             agents_overview: Default::default(),
+            workflows: Default::default(),
             side_threads: HashMap::new(),
             abandoned_side_threads: HashSet::new(),
             active_thread_id: None,
@@ -6875,6 +6895,7 @@ async fn replace_goal_confirmation_snapshot() {
 
 pub(super) fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
     ThreadSessionState {
+        timeline: None,
         daybreak_enabled: false,
         long_context: false,
         wake_state: None,
@@ -7373,7 +7394,7 @@ async fn directive_only_completion_removes_streamed_directive() -> Result<()> {
     let mut tui = crate::tui::test_support::make_test_tui()?;
     app.handle_consolidate_agent_message(
         &mut tui,
-        AgentMarkdownCell::new(String::new(), Path::new("/tmp")),
+        Arc::new(AgentMarkdownCell::new(String::new(), Path::new("/tmp"))),
         ConsolidationScrollbackReflow::Required,
         /*deferred_history_cell*/ None,
     )?;
@@ -7416,11 +7437,11 @@ async fn required_stream_reflow_during_capped_initial_replay_survives_transcript
     let mut tui = crate::tui::test_support::make_test_tui()?;
     app.handle_consolidate_agent_message(
         &mut tui,
-        AgentMarkdownCell::new(
+        Arc::new(AgentMarkdownCell::new(
             "Final answer:\n\n| Pattern | Outcome |\n| --- | --- |\n| Table tail | Preserved |"
                 .into(),
             Path::new("/tmp"),
-        ),
+        )),
         ConsolidationScrollbackReflow::Required,
         /*deferred_history_cell*/ None,
     )?;
@@ -7978,6 +7999,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
 
     let make_header = |is_first| {
         let session = ThreadSessionState {
+            timeline: None,
             daybreak_enabled: false,
             long_context: false,
             wake_state: None,
@@ -8053,6 +8075,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
     let base_id = ThreadId::new();
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
+            timeline: None,
             daybreak_enabled: false,
             long_context: false,
             wake_state: None,
@@ -8954,7 +8977,33 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         Ok(page),
     )
     .await?;
+    let stale_timeline = app_server.begin_older_timeline_page(source_thread_id);
     let control = Box::pin(app.handle_event(&mut tui, &mut app_server, selection)).await?;
+    if let Some((cursor, request_id)) = stale_timeline {
+        assert!(
+            !app_server.is_older_timeline_page_pending(
+                source_thread_id,
+                cursor.as_deref(),
+                request_id
+            ),
+            "revert must invalidate an older canonical page already in flight"
+        );
+        assert!(
+            app_server
+                .finish_older_timeline_page(
+                    source_thread_id,
+                    cursor.as_deref(),
+                    request_id,
+                    codex_app_server_protocol::ThreadTimelineListResponse {
+                        data: Vec::new(),
+                        next_cursor: None,
+                        active_realtime_session_at_page_start: None,
+                    }
+                )
+                .is_none(),
+            "a stale older page cannot replace the refreshed canonical cursor"
+        );
+    }
 
     while let Ok(event) = app_event_rx.try_recv() {
         match event {
@@ -9003,6 +9052,20 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         .thread_id()
         .expect("prompt edit should keep the current thread");
     assert_eq!(reverted_thread_id, source_thread_id);
+    let canonical = app_server
+        .timeline_entries(reverted_thread_id)
+        .expect("successful revert refreshes canonical history");
+    assert!(
+        canonical.iter().all(|entry| match entry {
+            codex_app_server_protocol::ThreadTimelineEntry::Item { turn_id, .. }
+            | codex_app_server_protocol::ThreadTimelineEntry::TurnStarted { turn_id, .. }
+            | codex_app_server_protocol::ThreadTimelineEntry::TurnCompleted { turn_id, .. } =>
+                ["turn-0", "turn-1", "turn-2"].contains(&turn_id.as_str()),
+            codex_app_server_protocol::ThreadTimelineEntry::Workflow { .. }
+            | codex_app_server_protocol::ThreadTimelineEntry::Realtime { .. } => true,
+        }),
+        "replaying or paging after prompt editing must not restore removed turns"
+    );
     assert_eq!(app.chat_widget.composer_text_with_pending(), prompt.text);
     assert_eq!(
         app.chat_widget.remote_image_urls(),
@@ -9040,6 +9103,15 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             .iter()
             .any(|line| line.contains("Thread forked from"))
     );
+    let first_reverted_path = app_server
+        .thread_read(source_thread_id, /*include_turns*/ false)
+        .await?
+        .path
+        .expect("the first revert selects a durable replacement");
+    let first_rollout_id = codex_rollout::rollout_id_from_path(&first_reverted_path)
+        .expect("the replacement has a physical rollout identity");
+    assert_ne!(first_rollout_id, source_thread_id);
+    let first_reverted_bytes = std::fs::read(&first_reverted_path)?;
     // Editing the first visible prompt also discards search state from the removed window.
     app.transcript_view.begin_search();
     assert!(app.transcript_view.is_search_editing());
@@ -9061,11 +9133,28 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         },
     ))
     .await?;
+    let mut second_revert_finished = false;
+    let mut second_revert_messages = Vec::new();
     while let Ok(event) = app_event_rx.try_recv() {
-        if matches!(event, AppEvent::FinishPromptRevert { .. }) {
-            Box::pin(app.handle_event(&mut tui, &mut app_server, event)).await?;
+        match event {
+            event @ AppEvent::FinishPromptRevert { .. } => {
+                second_revert_finished = true;
+                Box::pin(app.handle_event(&mut tui, &mut app_server, event)).await?;
+            }
+            AppEvent::InsertHistoryCell(cell) => {
+                second_revert_messages
+                    .push(lines_to_single_string(&cell.display_lines(/*width*/ 120)));
+            }
+            _ => {}
         }
     }
+    assert!(
+        second_revert_finished,
+        "the first-visible-prompt revert must finish before resetting search; emitted history: {second_revert_messages:?}; displayed thread: {:?}; offline: {}; pending profile: {}",
+        app.chat_widget.thread_id(),
+        app.reconnect.offline,
+        app.pending_server_profiles.contains_key(&source_thread_id)
+    );
     assert!(!app.transcript_view.is_search_editing());
     assert!(app.transcript_view.is_following());
     assert_eq!(app.chat_widget.thread_id(), Some(source_thread_id));
@@ -9074,6 +9163,26 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         "retained prompt"
     );
     assert_eq!(crate::app_backtrack::user_count(&app.transcript_cells), 0);
+    let second_reverted = app_server
+        .thread_read(source_thread_id, /*include_turns*/ false)
+        .await?;
+    assert_eq!(second_reverted.id, source_thread_id.to_string());
+    let second_reverted_path = second_reverted
+        .path
+        .expect("the second revert selects another replacement");
+    assert_ne!(
+        codex_rollout::rollout_id_from_path(&second_reverted_path),
+        Some(first_rollout_id)
+    );
+    assert_ne!(
+        codex_rollout::rollout_id_from_path(&second_reverted_path),
+        Some(source_thread_id)
+    );
+    assert_eq!(
+        std::fs::read(&first_reverted_path)?,
+        first_reverted_bytes,
+        "a second prompt edit must preserve the first immutable replacement"
+    );
     assert_eq!(
         app_server
             .thread_read(source_thread_id, /*include_turns*/ true)
@@ -9093,7 +9202,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
     );
     loop {
         let event = app_event_rx.recv().await.expect("older history page");
-        if let AppEvent::OlderThreadHistoryLoaded { .. } = event {
+        if let AppEvent::OlderWorkflowTimelineLoaded { .. } = event {
             Box::pin(app.handle_event(&mut tui, &mut app_server, event)).await?;
             break;
         }
@@ -9164,6 +9273,7 @@ async fn replay_thread_snapshot_replays_turn_history_in_order() {
                             }],
                         },
                         ThreadItem::AgentMessage {
+                            workflow: None,
                             id: "assistant-2".to_string(),
                             text: "done".to_string(),
                             phase: None,
@@ -9408,6 +9518,7 @@ async fn new_session_requests_shutdown_for_previous_conversation() {
 
         let thread_id = ThreadId::new();
         let event = crate::session_state::ThreadSessionState {
+            timeline: None,
             daybreak_enabled: false,
             long_context: false,
             wake_state: None,
@@ -10189,6 +10300,7 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
     let thread_id = ThreadId::new();
     app.chat_widget
         .handle_thread_session(crate::session_state::ThreadSessionState {
+            timeline: None,
             daybreak_enabled: false,
             long_context: false,
             wake_state: None,

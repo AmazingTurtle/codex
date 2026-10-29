@@ -42,6 +42,7 @@ async fn blocked_copy_allows_overlay_exit_rejects_backlog_and_wakes_completion()
                 turn_id: "turn-1".into(),
                 completed_at_ms: 0,
                 item: codex_app_server_protocol::ThreadItem::AgentMessage {
+                    workflow: None,
                     id: "msg-1".into(),
                     text: "café\nsecond line".into(),
                     phase: None,

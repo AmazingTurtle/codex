@@ -418,6 +418,18 @@ impl ChatWidget {
             SlashCommand::Agents => {
                 self.app_event_tx.send(AppEvent::OpenAgentsOverview);
             }
+            SlashCommand::Workflows => self
+                .app_event_tx
+                .send(AppEvent::Workflow(crate::workflows::WorkflowEvent::Open)),
+            SlashCommand::DynamicWorkflows => self.app_event_tx.send(AppEvent::Workflow(
+                crate::workflows::WorkflowEvent::ChooseMode,
+            )),
+            SlashCommand::Pause => self
+                .app_event_tx
+                .send(AppEvent::Workflow(crate::workflows::WorkflowEvent::Pause)),
+            SlashCommand::Unpause => self
+                .app_event_tx
+                .send(AppEvent::Workflow(crate::workflows::WorkflowEvent::Unpause)),
             SlashCommand::MultiAgents => {
                 self.app_event_tx.send(AppEvent::OpenAgentPicker);
             }
@@ -1265,7 +1277,12 @@ impl ChatWidget {
 
         let service_tier_commands = self.current_model_service_tier_commands();
         let Some(command) =
-            find_slash_command(name, self.builtin_command_flags(), &service_tier_commands)
+            find_slash_command(name, self.builtin_command_flags(), &service_tier_commands).or_else(
+                || {
+                    self.saved_workflow_command(name)
+                        .map(SlashCommandItem::Workflow)
+                },
+            )
         else {
             self.add_info_message(
                 format!(
@@ -1286,6 +1303,10 @@ impl ChatWidget {
                     self.handle_service_tier_command_dispatch(command);
                     QueueDrain::Continue
                 }
+                SlashCommandItem::Workflow(command) => {
+                    self.dispatch_saved_workflow(command, /*arguments*/ None);
+                    QueueDrain::Continue
+                }
             };
         }
 
@@ -1298,6 +1319,10 @@ impl ChatWidget {
                 mention_bindings,
             });
             return QueueDrain::Stop;
+        }
+        if let SlashCommandItem::Workflow(command) = command {
+            self.dispatch_saved_workflow(command, Some(rest));
+            return QueueDrain::Continue;
         }
         let SlashCommandItem::Builtin(cmd) = command else {
             self.submit_user_message(UserMessage {
@@ -1353,6 +1378,11 @@ impl ChatWidget {
             plugins_command_enabled: self.config.features.enabled(Feature::Plugins),
             token_activity_command_enabled: self.has_codex_backend_auth,
             goal_command_enabled: self.config.features.enabled(Feature::Goals),
+            pause_command_visible: self.status_state.can_pause
+                && self.status_state.execution
+                    == Some(codex_protocol::protocol::ExecutionControlState::Running),
+            unpause_command_visible: self.status_state.execution
+                == Some(codex_protocol::protocol::ExecutionControlState::Paused),
             service_tier_commands_enabled: !self.current_model_service_tier_commands().is_empty(),
             daybreak_command_description: self.daybreak_command_description(),
             voice_command_enabled: self.realtime_conversation_available_for_thread,
@@ -1432,6 +1462,10 @@ impl ChatWidget {
             | SlashCommand::Btw
             | SlashCommand::Keymap
             | SlashCommand::Agents
+            | SlashCommand::Workflows
+            | SlashCommand::DynamicWorkflows
+            | SlashCommand::Pause
+            | SlashCommand::Unpause
             | SlashCommand::MultiAgents
             | SlashCommand::Permissions
             | SlashCommand::ElevateSandbox

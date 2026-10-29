@@ -44,6 +44,12 @@ impl ChatWidget {
             self.restore_retry_status_header_if_present();
         }
         match notification {
+            ServerNotification::WorkflowLifecycleChanged(notification) => {
+                if let Some(proof) = notification.final_message {
+                    self.remember_workflow_final(proof);
+                }
+                self.on_workflow_lifecycle(notification.event);
+            }
             ServerNotification::McpServerOauthLoginCompleted(notification) => {
                 if notification.success {
                     self.add_info_message(
@@ -406,6 +412,8 @@ impl ChatWidget {
             | ServerNotification::FuzzyFileSearchSessionUpdated(_)
             | ServerNotification::FuzzyFileSearchSessionCompleted(_)
             | ServerNotification::ThreadRealtimeItemAdded(_)
+            | ServerNotification::WorkflowUpdated(_)
+            | ServerNotification::WorkflowProgress(_)
             | ServerNotification::ThreadExecutionControlChanged(_)
             | ServerNotification::ThreadRealtimeItemStarted(_)
             | ServerNotification::ThreadRealtimeItemTranscriptDelta(_)
@@ -571,6 +579,7 @@ impl ChatWidget {
         notification: ItemStartedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        self.finish_workflow_task_group();
         self.restore_realtime_transcripts_before_turn(&notification.turn_id);
         match notification.item {
             ThreadItem::UserMessage { content, .. } if replay_kind.is_none() => {
@@ -661,6 +670,7 @@ impl ChatWidget {
         notification: ItemCompletedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        self.finish_workflow_task_group();
         self.restore_realtime_transcripts_before_turn(&notification.turn_id);
         if replay_kind.is_none()
             && self.is_realtime_delegated_reasoning_turn(&notification.turn_id)

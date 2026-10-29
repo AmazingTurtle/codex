@@ -16,6 +16,8 @@ use crate::ThreadStoreResult;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct RolloutLineageSegment {
     pub(super) rollout_id: ThreadId,
+    /// Canonical owner verified while resolving this physical rollout's lineage.
+    pub(super) owner_thread_id: ThreadId,
     pub(super) rollout_path: PathBuf,
     pub(super) start_ordinal: u64,
     pub(super) end: Option<HistoryPosition>,
@@ -162,7 +164,16 @@ impl LocalThreadStore {
                         rollout_path.display()
                     ),
                 })?;
-            if next_rollout_id.is_none() && meta.meta.id != requested_thread_id {
+            let owner_thread_id =
+                codex_rollout::thread_id_from_path(&rollout_path).ok_or_else(|| {
+                    malformed_lineage(
+                        requested_thread_id,
+                        "source rollout has no canonical owner identity",
+                    )
+                })?;
+            if meta.meta.id != owner_thread_id
+                || (next_rollout_id.is_none() && owner_thread_id != requested_thread_id)
+            {
                 return Err(malformed_lineage(
                     requested_thread_id,
                     "source rollout belongs to another thread",
@@ -207,6 +218,7 @@ impl LocalThreadStore {
             };
             segments.push(RolloutLineageSegment {
                 rollout_id,
+                owner_thread_id,
                 rollout_path,
                 start_ordinal,
                 end,

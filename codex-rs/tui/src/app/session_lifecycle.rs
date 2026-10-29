@@ -474,6 +474,8 @@ impl App {
             }
         }
         let mut store = channel.store.lock().await;
+        let mut session = session;
+        session.timeline = app_server.timeline_snapshot(thread_id);
         store.set_session(session, turns);
         store.merge_recap_progress(recap_progress);
         store.rebase_buffer_after_session_refresh();
@@ -614,6 +616,15 @@ impl App {
                     return Ok(());
                 }
             }
+        }
+        if let Err(error) = self
+            .refresh_cached_thread_timeline(app_server, thread_id)
+            .await
+        {
+            self.add_agents_overview_error(format!(
+                "Failed to refresh conversation history: {error}"
+            ));
+            return Ok(());
         }
         let previous_thread_id = self.active_thread_id;
         // Notifications already routed to the active channel must reach the old
@@ -961,6 +972,7 @@ impl App {
                 let recovery_was_pending = self.chat_widget.hold_rate_limit_recovery();
                 self.enqueue_primary_thread_session(started.session, started.turns)
                     .await?;
+                self.discover_workflows_after_attach(app_server);
                 self.apply_backend_banner_fallback(app_server).await;
                 if let Some(notice) = self.pending_server_version_notice.take() {
                     self.chat_widget.add_server_version_warning(notice);
@@ -1442,6 +1454,7 @@ impl App {
             .await
         {
             Ok(()) => {
+                self.discover_workflows_after_attach(app_server);
                 if let Some(input) = retained_input {
                     self.chat_widget.restore_thread_input_state(
                         Some(input),

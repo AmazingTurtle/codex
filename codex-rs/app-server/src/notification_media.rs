@@ -56,6 +56,9 @@ pub(crate) fn without_notification_media(notification: ServerNotification) -> Se
             ServerNotification::RawResponseItemCompleted(notification)
         }
         ServerNotification::Error(_)
+        | ServerNotification::WorkflowUpdated(_)
+        | ServerNotification::WorkflowProgress(_)
+        | ServerNotification::WorkflowLifecycleChanged(_)
         | ServerNotification::ThreadExecutionControlChanged(_)
         | ServerNotification::ThreadStarted(_)
         | ServerNotification::ThreadStatusChanged(_)

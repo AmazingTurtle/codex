@@ -1,0 +1,24 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: history
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                                       Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt               │  1 Overview   2 Transcript   3 Source
+  Current conversation                    │ review · Attempt 1
+    Review changes · Running              │ Status: Failed
+      review · Running                    │ Attempt: 1
+  ›   review · Attempt 1 · Failed         │
+                                          │ Error
+                                          │ Review tool failed before producing a result.
+                                          │
+                                          │ Prompt
+                                          │ Review source
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+  Esc close · ↑/↓ select · Enter chat · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

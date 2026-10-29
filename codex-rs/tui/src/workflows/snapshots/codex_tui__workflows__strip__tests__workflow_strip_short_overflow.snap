@@ -1,0 +1,6 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "short.join(\"\\n\")"
+---
+  Paused audit · 1/2p · Paused · I 312K/O 86K · 28m 57s
+  … +4 workflows · ↓ open

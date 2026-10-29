@@ -1,0 +1,9 @@
+---
+source: tui/src/workflows/strip_tests.rs
+expression: "render_height(&strip, 32, 5).1.join(\"\\n\")"
+---
+  研究… · I 312K/O 86K · 28m 57s
+  Result 2 · Completed
+  Result 3 · Completed
+  Result 4 · Completed
+  … +2 workflows · ↓ open

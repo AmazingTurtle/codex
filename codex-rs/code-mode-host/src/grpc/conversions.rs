@@ -20,6 +20,15 @@ pub(super) fn session_limits(
 ) -> Result<CodeModeSessionCellExecutionLimits, Status> {
     let limits = limits.unwrap_or_default();
     Ok(CodeModeSessionCellExecutionLimits {
+        profile: match proto::CellExecutionProfile::try_from(limits.profile) {
+            Ok(proto::CellExecutionProfile::General) => {
+                codex_code_mode_protocol::CodeModeCellExecutionProfile::General
+            }
+            Ok(proto::CellExecutionProfile::Workflow) => {
+                codex_code_mode_protocol::CodeModeCellExecutionProfile::Workflow
+            }
+            Err(_) => return Err(Status::invalid_argument("unknown cell execution profile")),
+        },
         max_yield_time_ms: limits.max_yield_time_ms,
         max_heap_size_bytes: limits
             .max_heap_size_bytes

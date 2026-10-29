@@ -1,0 +1,22 @@
+---
+source: tui/src/workflows/command_center_tests.rs
+expression: screen
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                   Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt         │  1 Overview   2 Transcript   3 Source
+  Conversation · 00000008           │ Open the owning conversation before controlling this workflow.
+  › Review changes · Running        │ Review changes
+      review · Running              │ Status: Running
+                                    │ Review project changes
+                                    │
+                                    │ Input
+                                    │ • target: src
+                                    │
+                                    │ Result
+                                    │ • summary: ## Findings ⏎  ⏎ - **One** issue found ⏎ - Check `src/main.rs`
+                                    │
+                                    │
+                                    │
+  Esc close · ↑/↓ select · Enter Main · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

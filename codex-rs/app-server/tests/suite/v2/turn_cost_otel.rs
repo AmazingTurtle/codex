@@ -143,6 +143,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
     };
     let mut client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
+        code_mode_session_provider: None,
         config,
         cli_overrides: Vec::new(),
         loader_overrides,

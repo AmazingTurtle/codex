@@ -1,7 +1,7 @@
 //! Prompt browsing pages past a partial answer without losing its selection or exit origin.
 
 use super::pagination_completion_tests::completed_history_app;
-use super::session_lifecycle_requests::start_recording_app_server;
+use super::session_lifecycle_requests::start_recording_item_pagination_app_server;
 use super::*;
 use crate::history_cell::PlainHistoryCell;
 use crate::pager_overlay::TranscriptHistoryState;
@@ -12,12 +12,8 @@ async fn browsing_loads_before_the_oldest_prompt_after_a_partial_answer() -> Res
     for cancel_before_completion in [false, true] {
         let (mut app, _codex_home, thread_id) =
             completed_history_app(&["Oldest", "Middle", "Newest"]).await?;
-        let (mut app_server, _requests, proxy) = start_recording_app_server(
-            &app.config,
-            /*blocked_thread_list*/ None,
-            /*failed_thread_name*/ None,
-        )
-        .await?;
+        let (mut app_server, _requests, proxy) =
+            start_recording_item_pagination_app_server(&app.config).await?;
         let started = app_server
             .resume_thread(
                 &app.local_settings,
@@ -26,6 +22,10 @@ async fn browsing_loads_before_the_oldest_prompt_after_a_partial_answer() -> Res
                 crate::app_server_session::ResumeModelSettings::RestoreFromThread,
             )
             .await?;
+        assert!(
+            app_server.timeline_entries(thread_id).is_none(),
+            "this regression must exercise item-only paging"
+        );
         // A transport page may begin inside the preceding answer, well before its first prompt.
         app.transcript_cells = (0..30)
             .map(|index| {

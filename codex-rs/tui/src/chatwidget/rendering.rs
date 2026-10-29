@@ -146,10 +146,17 @@ impl ChatWidget {
             .bottom_pane
             .selected_index_for_active_view(crate::app::AGENTS_OVERVIEW_VIEW_ID)
             .is_some()
+            || self.bottom_pane.active_view_id() == Some(crate::workflows::CENTER_ID)
+            || self.bottom_pane.active_view_id() == Some(crate::workflows::actions::INSPECTION_ID)
             || (self.bottom_pane.has_centered_view()
                 && self
                     .bottom_pane
                     .selected_index_for_present_view(crate::app::AGENTS_OVERVIEW_VIEW_ID)
+                    .is_some())
+            || (self.bottom_pane.has_centered_view()
+                && self
+                    .bottom_pane
+                    .selected_index_for_present_view(crate::workflows::CENTER_ID)
                     .is_some())
         {
             return self

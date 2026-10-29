@@ -1026,6 +1026,15 @@ impl ChatWidget {
     ///
     /// Startup takes precedence; live runtime waits distinguish waiting from ready.
     pub(super) fn run_state_status_text(&self) -> String {
+        match self.status_state.execution {
+            Some(codex_protocol::protocol::ExecutionControlState::Pausing) => {
+                return "Pausing".into();
+            }
+            Some(codex_protocol::protocol::ExecutionControlState::Paused) => {
+                return "Paused".into();
+            }
+            Some(codex_protocol::protocol::ExecutionControlState::Running) | None => {}
+        }
         if self.mcp_startup_status.is_some() {
             return "Starting".to_string();
         }
@@ -1091,6 +1100,15 @@ impl ChatWidget {
     }
 
     fn terminal_title_has_active_progress(&self) -> bool {
+        if matches!(
+            self.status_state.execution,
+            Some(
+                codex_protocol::protocol::ExecutionControlState::Pausing
+                    | codex_protocol::protocol::ExecutionControlState::Paused
+            )
+        ) {
+            return false;
+        }
         if self.terminal_title_shows_action_required() {
             return false;
         }

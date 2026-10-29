@@ -928,6 +928,7 @@ async fn thread_turns_list_reads_store_history_without_rollout_path() -> Result<
         .await?;
     let client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
+        code_mode_session_provider: None,
         config: Arc::new(config),
         cli_overrides: Vec::new(),
         loader_overrides,
@@ -999,6 +1000,7 @@ async fn thread_read_loaded_include_turns_reads_store_history_without_rollout_pa
         .await?;
     let client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
+        code_mode_session_provider: None,
         config: Arc::new(config),
         cli_overrides: Vec::new(),
         loader_overrides,
@@ -1108,6 +1110,7 @@ async fn thread_list_includes_store_thread_without_rollout_path() -> Result<()> 
         .await?;
     let client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
+        code_mode_session_provider: None,
         config: Arc::new(config),
         cli_overrides: Vec::new(),
         loader_overrides,
@@ -1851,6 +1854,7 @@ async fn paginated_history_lists_and_legacy_reads_use_projected_turns_and_items(
                 memory_citation: None,
                 delivery: None,
                 questions: None,
+                workflow: None,
             },
         ],
         items_view: TurnItemsView::Full,
@@ -2041,6 +2045,7 @@ async fn paginated_history_lists_and_legacy_reads_use_projected_turns_and_items(
                     memory_citation: None,
                     delivery: None,
                     questions: None,
+                    workflow: None,
                 },
             ],
             items_view: TurnItemsView::Summary,
@@ -2249,6 +2254,7 @@ async fn paginated_history_lists_and_legacy_reads_use_projected_turns_and_items(
                     memory_citation: None,
                     delivery: None,
                     questions: None,
+                    workflow: None,
                 },
                 started_at_ms: Some(0),
                 completed_at_ms: Some(1),

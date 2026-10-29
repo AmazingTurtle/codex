@@ -1,0 +1,17 @@
+---
+source: tui/src/app/workflows/transcript_live_tests.rs
+expression: "crate::chatwidget::tests::helpers::normalize_snapshot_paths(rendered(&app,\n&target))"
+---
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Reviewer · actual · high
+
+› Full native task prompt
+
+• Response
+
+  • ok: true
+• Ran printf ACTUAL_TOOL
+  └ ACTUAL_TOOL
+
+Outcome
+• ok: true

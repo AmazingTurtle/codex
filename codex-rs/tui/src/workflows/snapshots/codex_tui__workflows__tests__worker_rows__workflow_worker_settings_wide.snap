@@ -1,0 +1,20 @@
+---
+source: tui/src/workflows/worker_rows_tests.rs
+expression: wide
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0                                                                                                                                                                                                                                           Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt                 Model             Reasoning  Status       Updated   │  1 Overview   2 Transcript   3 Source
+  Current conversation                                                                          │ review
+    Review changes                                                       Running      -         │
+  ›   review                                gpt-6.1-sol       high       Running      -         │ Prompt
+      review · Attempt 1                    Unknown           Unknown    Failed       -         │ Review source
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+  Esc close · ↑/↓ select · Enter chat · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions · ? help

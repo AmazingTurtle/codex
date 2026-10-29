@@ -1,0 +1,19 @@
+---
+source: tui/src/workflows/actions/actions_tests.rs
+expression: "render(&picker, 42, 16)"
+---
+
+  Actions · Review source
+  Control revision 9 · 2 / 8 starts ·
+  14K / 100K tokens
+
+
+› 1. Guide active agent
+      Edit queued prompt (disabled)
+  2. Skip step
+  3. Interrupt selected work
+  4. Revise workflow
+  5. Apply revision after accepted work
+  6. Interrupt and apply revision
+  7. Resume workflow
+↓

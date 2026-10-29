@@ -1230,6 +1230,7 @@ mod tests {
         let mut auth_config = config.auth_config();
         let client = InProcessAppServerClient::start(InProcessClientStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
+            code_mode_session_provider: None,
             config: Arc::new(config),
             cli_overrides: Vec::new(),
             loader_overrides: Default::default(),

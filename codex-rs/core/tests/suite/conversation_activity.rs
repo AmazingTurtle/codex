@@ -40,6 +40,7 @@ async fn idle_pause_and_unpause_do_not_activate_storage_or_emit_transitions() ->
         assert_eq!(test.codex.unpause_execution().await?, running);
     }
     assert!(!test.home.path().join("execution-control").exists());
+    assert!(!test.home.path().join("workflow-runs").exists());
     assert!(
         tokio::time::timeout(
             Duration::from_millis(150),

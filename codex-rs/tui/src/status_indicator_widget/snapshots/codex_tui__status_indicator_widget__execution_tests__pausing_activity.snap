@@ -1,0 +1,6 @@
+---
+source: tui/src/status_indicator_widget/execution_tests.rs
+expression: render(&row)
+---
+Pausing 
+  (12s)

@@ -35,6 +35,7 @@ pub(in crate::app) fn user_cell(message: &str) -> Arc<dyn HistoryCell> {
 
 pub(in crate::app) fn attach_thread(app: &mut App, thread_id: ThreadId) {
     app.chat_widget.handle_thread_session(ThreadSessionState {
+        timeline: None,
         daybreak_enabled: false,
         long_context: false,
         wake_state: None,
@@ -180,10 +181,10 @@ async fn list_spacing_completion_preserves_the_scrolled_reader() -> Result<()> {
     assert!(buffer_text(&before).contains("• c"));
     app.handle_consolidate_agent_message(
         &mut tui,
-        crate::history_cell::AgentMarkdownCell::new(
+        Arc::new(crate::history_cell::AgentMarkdownCell::new(
             "- First item wraps onto a second row\n- b\n- c".into(),
             &app.config.cwd,
-        ),
+        )),
         ConsolidationScrollbackReflow::Required,
         /*deferred_history_cell*/ None,
     )?;

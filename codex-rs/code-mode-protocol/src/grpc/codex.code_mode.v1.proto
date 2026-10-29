@@ -50,6 +50,12 @@ message OpenSessionRequest {
 message SessionCellExecutionLimits {
   optional uint64 max_yield_time_ms = 1;
   optional uint64 max_heap_size_bytes = 2;
+  CellExecutionProfile profile = 3;
+}
+
+enum CellExecutionProfile {
+  GENERAL = 0;
+  WORKFLOW = 1;
 }
 
 message SessionEvent {

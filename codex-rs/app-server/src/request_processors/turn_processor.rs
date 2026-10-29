@@ -85,6 +85,7 @@ pub(crate) struct TurnRequestProcessor {
     agent_runner: AgentRunner,
     auth_manager: Arc<AuthManager>,
     thread_manager: Arc<ThreadManager>,
+    thread_store: Arc<dyn ThreadStore>,
     outgoing: Arc<OutgoingMessageSender>,
     analytics_events_client: AnalyticsEventsClient,
     config: Arc<Config>,
@@ -148,6 +149,7 @@ impl TurnRequestProcessor {
     pub(crate) fn new(
         auth_manager: Arc<AuthManager>,
         thread_manager: Arc<ThreadManager>,
+        thread_store: Arc<dyn ThreadStore>,
         outgoing: Arc<OutgoingMessageSender>,
         analytics_events_client: AnalyticsEventsClient,
         config: Arc<Config>,
@@ -163,6 +165,7 @@ impl TurnRequestProcessor {
             agent_runner,
             auth_manager,
             thread_manager,
+            thread_store,
             outgoing,
             analytics_events_client,
             config,
@@ -536,8 +539,10 @@ impl TurnRequestProcessor {
                 .inspect_err(|error| {
                     self.track_error_response(&request_id, error, /*error_type*/ None);
                 })?;
-        self.ensure_direct_input_allowed(&request_id, thread.as_ref())
-            .await?;
+        super::thread_input::ensure_user_input_allowed(thread.as_ref()).await?;
+        if thread.is_workflow_owned_child().await {
+            super::thread_input::ensure_workflow_start_preserves_config(&params)?;
+        }
         self.config_manager
             .check_thread_model_provider(thread.config().await.as_ref())
             .await
@@ -1062,8 +1067,12 @@ impl TurnRequestProcessor {
             .inspect_err(|error| {
                 self.track_error_response(request_id, error, /*error_type*/ None);
             })?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        super::thread_input::ensure_user_input_allowed(thread.as_ref()).await?;
+        if thread.is_workflow_owned_child().await && params.additional_context.is_some() {
+            return Err(invalid_request(
+                "workflow worker input must preserve its tool context",
+            ));
+        }
         self.config_manager
             .check_thread_model_provider(thread.config().await.as_ref())
             .await
@@ -1698,6 +1707,7 @@ impl TurnRequestProcessor {
     fn listener_task_context(&self) -> ListenerTaskContext {
         ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
+            thread_store: Arc::clone(&self.thread_store),
             thread_state_manager: self.thread_state_manager.clone(),
             outgoing: Arc::clone(&self.outgoing),
             pending_thread_unloads: Arc::clone(&self.pending_thread_unloads),

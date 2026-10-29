@@ -621,6 +621,18 @@ pub(crate) struct AgentMarkdownCell {
 }
 
 impl AgentMarkdownCell {
+    /// Change a proven message's display Markdown while retaining its original copy source.
+    pub(crate) fn with_display_markdown(&self, markdown: String) -> Self {
+        let mut cell = Self::new_with_inline_visualizations(
+            markdown,
+            &self.cwd,
+            self.inline_visualization_context.clone(),
+        )
+        .with_copy_source(self.copy_source().map(str::to_owned));
+        cell.spoken_artifacts = self.spoken_artifacts;
+        cell
+    }
+
     pub(crate) fn with_copy_source(mut self, source: Option<String>) -> Self {
         self.copy_source = source;
         self

@@ -1,0 +1,14 @@
+---
+source: tui/src/workflows/worker_rows_tests.rs
+expression: narrow
+---
+  Workflows · Scope: Current conversati…
+   All 1   Needs you 0   Working 1     ›
+  ──────────────────────────────────────
+  Workflow / step / attempt
+  Current conversation
+    Review changes · Running
+  ›   review · Running
+      review · Attempt 1 · Failed
+  ? help · Esc back · ↑/↓ move
+  Enter chat · 1/2/3 view

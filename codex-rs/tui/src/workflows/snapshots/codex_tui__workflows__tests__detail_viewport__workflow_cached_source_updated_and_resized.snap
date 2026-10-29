@@ -1,0 +1,24 @@
+---
+source: tui/src/workflows/detail_viewport_tests.rs
+expression: narrow
+---
+  Workflow command center  Group: Conversation g  Scope: Current conversation f
+   All 1   Needs you 0   Working 1   Completed 0   Inactive 0               Tab / Shift+Tab filter
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+  Workflow / step / attempt    │  1 Overview   2 Transcript   3 Source
+  Current conversation         │ const value_00 = 'modified payload';
+  › Review changes · Running   │ const value_01 = 'modified payload';
+      review · Running         │ const value_02 = 'modified payload';
+                               │ const value_03 = 'modified payload';
+                               │ const value_04 = 'modified payload';
+                               │ const value_05 = 'modified payload';
+                               │ const value_06 = 'modified payload';
+                               │ const value_07 = 'modified payload';
+                               │ const value_08 = 'modified payload';
+                               │ const value_09 = 'modified payload';
+                               │ const value_10 = 'modified payload';
+                               │ const value_11 = 'modified payload';
+                               │ const value_12 = 'modified payload';
+                               │ const value_13 = 'modified payload';
+                               │ const value_14 = 'modified payload';
+  Esc close · ↑/↓ select · Enter Main · j↑ k↓ scroll · PgUp/PgDn ends · 1/2/3 view · Space Actions
